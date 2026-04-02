@@ -37,6 +37,7 @@ export function makeBundle(params: {
   warnings?: string[];
   confidenceOverride?: number[];
   tokenIndexMap?: number[];
+  syntheticPae?: boolean;
 }): PredictionBundle {
   const polymerResidues = params.parsedStructure.residues.filter((residue) => residue.moleculeType !== 'ligand');
   const residues: PolymerResidue[] = polymerResidues.map((residue, index) => {
@@ -76,6 +77,7 @@ export function makeBundle(params: {
     metadata: {
       warnings: params.warnings ?? [],
       matchedFiles: params.matchedFiles,
+      syntheticPae: params.syntheticPae,
     },
   };
 }

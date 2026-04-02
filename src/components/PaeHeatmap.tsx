@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport } from '../lib/types';
 import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { clamp } from '../lib/utils';
@@ -6,10 +7,12 @@ import { clamp } from '../lib/utils';
 interface PaeHeatmapProps {
   matrix: number[][];
   maxValue: number;
+  syntheticPae: boolean;
   hoveredCell: { x: number; y: number } | null;
   pinnedResidues: number[];
   pinnedCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
+  interactionPerformance: PaeInteractionPerformanceSettings;
   hoverSyncEnabled: boolean;
   pairSelectionEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
@@ -282,6 +285,9 @@ function mapClientToCell(
 export function PaeHeatmap(props: PaeHeatmapProps) {
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const hoverFrameRef = useRef<number | null>(null);
+  const pendingHoverCellRef = useRef<{ x: number; y: number } | null>(null);
+  const lastHoverCellKeyRef = useRef('none');
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
   const [frameDrag, setFrameDrag] = useState<{
@@ -311,6 +317,43 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
           max: Math.max(props.pinnedCell.x, props.pinnedCell.y),
         }
       : null;
+
+  useEffect(() => {
+    return () => {
+      if (hoverFrameRef.current !== null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+      }
+    };
+  }, []);
+
+  const commitHoverCell = (cell: { x: number; y: number } | null) => {
+    const key = cell ? `${cell.x}:${cell.y}` : 'none';
+    if (key === lastHoverCellKeyRef.current) return;
+    lastHoverCellKeyRef.current = key;
+    props.onHoverCell(cell);
+  };
+
+  const scheduleHoverCell = (cell: { x: number; y: number } | null) => {
+    if (props.interactionPerformance.heatmapHoverScheduling === 'sync') {
+      if (hoverFrameRef.current !== null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+        hoverFrameRef.current = null;
+      }
+      pendingHoverCellRef.current = null;
+      commitHoverCell(cell);
+      return;
+    }
+
+    pendingHoverCellRef.current = cell;
+    if (hoverFrameRef.current !== null) return;
+
+    hoverFrameRef.current = requestAnimationFrame(() => {
+      hoverFrameRef.current = null;
+      const next = pendingHoverCellRef.current;
+      pendingHoverCellRef.current = null;
+      commitHoverCell(next);
+    });
+  };
 
   useEffect(() => {
     const canvas = matrixCanvasRef.current;
@@ -515,6 +558,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
               })}
             </div>
             <div className="heatmap-canvas-wrap">
+              {props.syntheticPae && (
+                <div className="heatmap-overlay-notice" aria-live="polite">
+                  <strong>Empty pAE</strong>
+                  <span>This model did not include predicted aligned error data.</span>
+                </div>
+              )}
               <canvas
                 ref={matrixCanvasRef}
                 className="heatmap-matrix-canvas"
@@ -524,16 +573,22 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 ref={overlayCanvasRef}
                 className="heatmap-canvas"
                 onMouseMove={(event) => {
+                  if (props.interactionPerformance.suppressHoverWhileInteracting && (dragStart || frameDrag)) {
+                    return;
+                  }
                   const cell = mapPointer(event.clientX, event.clientY);
                   if (!cell) return;
-                  props.onHoverCell({ x: cell.x, y: cell.y });
+                  scheduleHoverCell({ x: cell.x, y: cell.y });
                 }}
                 onMouseLeave={() => {
-                  props.onHoverCell(null);
+                  scheduleHoverCell(null);
                 }}
                 onMouseDown={(event) => {
                   const cell = mapPointer(event.clientX, event.clientY);
                   if (!cell) return;
+                  if (props.interactionPerformance.suppressHoverWhileInteracting) {
+                    scheduleHoverCell(null);
+                  }
                   setDragStart({ x: cell.localX, y: cell.localY });
                   setDragCurrent({ x: cell.localX, y: cell.localY });
                 }}
@@ -551,6 +606,9 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                     onMouseDown={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
+                      if (props.interactionPerformance.suppressHoverWhileInteracting) {
+                        scheduleHoverCell(null);
+                      }
                       setFrameDrag({
                         startClientX: event.clientX,
                         startClientY: event.clientY,
@@ -659,12 +717,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
             </div>
             <div className="heatmap-actions">
               <label className="switch-field">
-                <span className="switch-label">hover</span>
+                <span className="switch-label">pair hover</span>
                 <span className="switch-control">
                   <input
                     type="checkbox"
                     role="switch"
-                    aria-label="hover"
+                    aria-label="pair hover"
                     checked={props.hoverSyncEnabled}
                     onChange={props.onToggleHoverSync}
                   />
@@ -674,12 +732,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 </span>
               </label>
               <label className="switch-field">
-                <span className="switch-label">pairs</span>
+                <span className="switch-label">pair click</span>
                 <span className="switch-control">
                   <input
                     type="checkbox"
                     role="switch"
-                    aria-label="pairs"
+                    aria-label="pair click"
                     checked={props.pairSelectionEnabled}
                     onChange={props.onTogglePairSelection}
                   />

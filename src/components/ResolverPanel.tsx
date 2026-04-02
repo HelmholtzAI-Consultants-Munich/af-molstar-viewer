@@ -35,8 +35,7 @@ export function ResolverPanel(props: ResolverPanelProps) {
   return (
     <section className="panel resolver-panel">
       <div className="resolver-header">
-        <p className="eyebrow">Resolver</p>
-        <h2>Ambiguous bundle matches</h2>
+        <h2>Resolver: Ambiguous bundle matches</h2>
       </div>
       <div className="resolver-grid">
         {props.groups.map((group) => {

@@ -3,6 +3,9 @@ import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 
+const DEFAULT_FOCUS_COMPONENTS = ['target', 'surroundings', 'interactions'] as const;
+const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
+
 const MOLSTAR_RENDER_OPTIONS = {
   alphafoldView: true,
   visualStyle: 'cartoon' as const,
@@ -103,6 +106,28 @@ async function applyPinnedPairSelection(
       themeStrength: 1,
     },
   });
+}
+
+async function setStructureFocusComponents(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  components: readonly string[],
+) {
+  const plugin = viewer.plugin;
+  if (!plugin?.state?.behaviors?.build || !plugin.runTask) return;
+  const { StructureFocusRepresentation } = await import('molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation.js');
+  const current = plugin.state.behaviors.cells.get(StructureFocusRepresentation.id)?.params?.values;
+  if (current && Array.isArray(current.components) && current.components.join('|') === components.join('|')) {
+    return;
+  }
+
+  const update = plugin.state.behaviors.build().to(StructureFocusRepresentation.id).update(StructureFocusRepresentation, (old: any) => {
+    old.components = [...components];
+  });
+  await plugin.runTask(plugin.state.behaviors.updateTree(update, { doNotUpdateCurrent: true, doNotLogTiming: true }));
+}
+
+async function clearStructureFocus(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
+  viewer.plugin?.managers?.structure?.focus?.clear?.();
 }
 
 async function applyBrushColoring(
@@ -312,21 +337,31 @@ export function MolstarPanel(props: MolstarPanelProps) {
     if (!viewer) return;
 
     if (props.brushSelection) {
+      void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+      void clearStructureFocus(viewer);
       void applyBrushColoring(viewer, props.bundle.residues, props.brushSelection);
       return;
     }
 
     if (props.pinnedResidues.length === 0) {
+      void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+      void clearStructureFocus(viewer);
       void viewer.visual.clearSelection();
       void applyDefaultSequenceTheme(viewer);
       return;
     }
 
     if (props.pinnedCell) {
-      void applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
+      const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
+      void (async () => {
+        await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
+        await viewer.visual.interactivityFocus({ data: queries });
+        await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
+      })();
       return;
     }
 
+    void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
     const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
     void viewer.visual.select({ data: queries });
     void applyDefaultSequenceTheme(viewer);

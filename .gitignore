@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# most examples
+example/
+
 # Build output
 dist/
 

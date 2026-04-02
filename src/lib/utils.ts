@@ -43,16 +43,11 @@ export function normalizeStem(name: string): string {
   return name
     .replace(/\.[^.]+$/, '')
     .replace(/(?:[-_])summary_confidences$/i, '')
-    .replace(/(?:[-_])predicted_aligned_error(?:_v\d+)?$/i, '')
+    .replace(/(?:[-_])predicted_aligned_error(?:_v\d+)?(?:[-_].*)?$/i, '')
     .replace(/(?:[-_])model(?:_v\d+)?$/i, '')
-    .replace(/(?:[-_])scores$/i, '')
     .replace(/(?:[-_])confidences$/i, '')
-    .replace(/(?:[-_])unrelaxed(?:_rank_\d+)?(?:_model_\d+)?(?:_seed_\d+)?$/i, '')
-    .replace(/(?:[-_])relaxed(?:_rank_\d+)?(?:_model_\d+)?(?:_seed_\d+)?$/i, '')
+    .replace(/(?:[-_])(?:scores?|unrelaxed|relaxed|result_model_\d+|full_data_\d+|data_\d+)(?:[-_].*)?$/i, '')
     .replace(/(?:[-_])ranked_\d+$/i, '')
-    .replace(/(?:[-_])result_model_\d+$/i, '')
-    .replace(/(?:[-_])full_data_\d+$/i, '')
-    .replace(/(?:[-_])data_\d+$/i, '')
     .replace(/(?:[-_])pae$/i, '');
 }
 

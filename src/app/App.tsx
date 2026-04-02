@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileImportPanel } from '../components/FileImportPanel';
 import { ResolverPanel } from '../components/ResolverPanel';
 import { Workspace } from '../components/Workspace';
+import { resolvePaeInteractionPerformance } from '../lib/performance';
 import type {
   BundleChoice,
   DiscoveryGroup,
@@ -11,7 +12,7 @@ import type {
 
 const worker = new Worker(new URL('../lib/worker/parse-worker.ts', import.meta.url), { type: 'module' });
 const STORAGE_KEY = 'af-molstar-viewer:selected-group';
-const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 400;
+const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
 
 async function filesToWorkerInputs(files: File[]): Promise<WorkerInputFile[]> {
   return Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));
@@ -35,6 +36,10 @@ export function App() {
 
   const fileMap = useMemo(() => new Map(files.map((file) => [file.name, file.text])), [files]);
   const unresolvedGroups = useMemo(() => groups.filter((group) => group.unresolved), [groups]);
+  const interactionPerformance = useMemo(
+    () => resolvePaeInteractionPerformance(bundle?.residues.length ?? 0),
+    [bundle?.residues.length],
+  );
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -143,6 +148,7 @@ export function App() {
           pinnedCell={pinnedCell}
           hoveredCell={hoveredCell}
           brushSelection={brushSelection}
+          interactionPerformance={interactionPerformance}
           paeHoverSyncEnabled={paeHoverSyncEnabled}
           paePairSelectionEnabled={paePairSelectionEnabled}
           onHoverResidues={(indices) => setHoveredResidues(indices)}
@@ -169,10 +175,13 @@ export function App() {
               return next;
             });
           }}
+          onClearPairSelection={() => {
+            setPinnedCell(null);
+            setPinnedResidues([]);
+          }}
         />
       ) : (
         <section className="panel empty-panel">
-          <p className="eyebrow">Workspace</p>
           <h2>No prediction loaded yet</h2>
           <p>Load a bundle to see the linked sequence, PAE, and Mol* views.</p>
         </section>

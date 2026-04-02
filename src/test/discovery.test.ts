@@ -84,6 +84,134 @@ describe('discovery and adapter loading', () => {
     expect(bundle.paeMax).toBeCloseTo(30.609375);
   });
 
+  it('matches ranked ColabFold score and structure files by shared prediction stem', () => {
+    const files = [
+      {
+        name: 'l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          'utf8',
+        ),
+      },
+      {
+        name: 'l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          'utf8',
+        ),
+      },
+    ];
+
+    const groups = discoverGroups(files);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].id).toBe('l77_s858427_mpnn2');
+    expect(groups[0].suggestedSource).toBe('colabfold');
+    expect(groups[0].unresolved).toBe(false);
+
+    const bundle = loadBundle(files, groups[0]);
+    expect(bundle.source).toBe('colabfold');
+    expect(bundle.residues).toHaveLength(77);
+    expect(bundle.summary.pTM).toBeCloseTo(0.73);
+  });
+
+  it('matches corresponding ColabFold structure and score files by content even with unrelated names', () => {
+    const files = [
+      {
+        name: 'totally-different-structure-name.pdb',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          'utf8',
+        ),
+      },
+      {
+        name: 'nothing-like-the-structure-name.json',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          'utf8',
+        ),
+      },
+    ];
+
+    const groups = discoverGroups(files);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].suggestedSource).toBe('colabfold');
+    expect(groups[0].unresolved).toBe(false);
+    expect(groups[0].structureOptions).toEqual(['totally-different-structure-name.pdb']);
+    expect(groups[0].scoreJsonOptions).toEqual(['nothing-like-the-structure-name.json']);
+
+    const bundle = loadBundle(files, groups[0]);
+    expect(bundle.source).toBe('colabfold');
+    expect(bundle.structure.fileName).toBe('totally-different-structure-name.pdb');
+    expect(bundle.summary.pTM).toBeCloseTo(0.73);
+  });
+
+  it('loads a lone confidence-carrying structure with a synthetic PAE matrix', () => {
+    const files = [
+      {
+        name: 'l73.pdb',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l73.pdb'),
+          'utf8',
+        ),
+      },
+    ];
+
+    const groups = discoverGroups(files);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].suggestedSource).toBe('structure');
+    expect(groups[0].unresolved).toBe(false);
+
+    const bundle = loadBundle(files, groups[0]);
+    expect(bundle.source).toBe('structure');
+    expect(bundle.metadata.syntheticPae).toBe(true);
+    expect(bundle.paeMatrix).toHaveLength(bundle.residues.length);
+    expect(bundle.paeMatrix[0][0]).toBe(0);
+    expect(bundle.paeMatrix[0][1]).toBe(30);
+  });
+
+  it('accepts a valid ColabFold pair even when another nearby structure without scores is present', () => {
+    const files = [
+      {
+        name: 'random-structure-name.pdb',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          'utf8',
+        ),
+      },
+      {
+        name: 'completely-different-scores-name.json',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          'utf8',
+        ),
+      },
+      {
+        name: 'extra-neighboring-output.pdb',
+        text: readFileSync(
+          resolve(process.cwd(), 'example/l77_s858427_mpnn1_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_000.pdb'),
+          'utf8',
+        ),
+      },
+    ];
+
+    const groups = discoverGroups(files);
+    const resolvedGroup = groups.find((group) => group.structureOptions.includes('random-structure-name.pdb'));
+    const loneStructure = groups.find((group) => group.structureOptions.includes('extra-neighboring-output.pdb'));
+
+    expect(resolvedGroup).toBeDefined();
+    expect(resolvedGroup?.suggestedSource).toBe('colabfold');
+    expect(resolvedGroup?.unresolved).toBe(false);
+    expect(resolvedGroup?.scoreJsonOptions).toEqual(['completely-different-scores-name.json']);
+
+    expect(loneStructure).toBeDefined();
+    expect(loneStructure?.suggestedSource).toBe('structure');
+    expect(loneStructure?.unresolved).toBe(false);
+
+    const bundle = loadBundle(files, resolvedGroup!);
+    expect(bundle.source).toBe('colabfold');
+    expect(bundle.summary.pTM).toBeCloseTo(0.73);
+  });
+
   it('projects AF3 token-level confidence down to polymer residues only', () => {
     const files = [
       fixture('./fixtures/af3/toy_model.cif'),
@@ -103,7 +231,7 @@ describe('discovery and adapter loading', () => {
     expect(bundle.residues[0].confidence).toBeCloseTo(91);
   });
 
-  it('marks ambiguous file groups as unresolved', () => {
+  it('keeps unrelated structures separate instead of creating filename-only ambiguity', () => {
     const files = [
       fixture('./fixtures/colabfold/toy_ranked_0.pdb'),
       fixture('./fixtures/colabfold/toy_scores.json'),
@@ -113,7 +241,12 @@ describe('discovery and adapter loading', () => {
       },
     ];
     const groups = discoverGroups(files);
-    expect(groups[0].unresolved).toBe(true);
-    expect(groups[0].reasons).toContain('Multiple structure files');
+    expect(groups).toHaveLength(2);
+    const resolvedColabFold = groups.find((group) => group.suggestedSource === 'colabfold');
+    const loneStructure = groups.find((group) => group.structureOptions.includes('toy_model.cif'));
+    expect(resolvedColabFold?.unresolved).toBe(false);
+    expect(resolvedColabFold?.structureOptions).toEqual(['toy_ranked_0.pdb']);
+    expect(loneStructure?.unresolved).toBe(false);
+    expect(loneStructure?.suggestedSource).toBe('structure');
   });
 });

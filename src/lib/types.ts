@@ -1,4 +1,4 @@
-export type PredictionSource = 'af2' | 'colabfold' | 'af3';
+export type PredictionSource = 'af2' | 'colabfold' | 'af3' | 'structure';
 export type MoleculeType = 'protein' | 'dna' | 'rna' | 'ligand' | 'unknown';
 export type ConfidenceCategory = 'very-high' | 'high' | 'low' | 'very-low';
 export type StructureFormat = 'cif' | 'mmcif' | 'pdb';
@@ -51,6 +51,7 @@ export interface PredictionBundle {
   metadata: {
     warnings: string[];
     matchedFiles: string[];
+    syntheticPae?: boolean;
   };
 }
 

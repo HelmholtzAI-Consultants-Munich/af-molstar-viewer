@@ -79,7 +79,6 @@ export function SequenceStrip(props: SequenceStripProps) {
   return (
     <section className="panel sequence-panel">
       <div className="panel-heading">
-        <p className="eyebrow">Sequence</p>
         <h2>Residue confidence track</h2>
       </div>
       <canvas

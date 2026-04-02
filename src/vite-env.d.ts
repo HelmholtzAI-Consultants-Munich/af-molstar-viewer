@@ -35,6 +35,11 @@ declare module 'pdbe-molstar/lib/viewer.js' {
     visual: {
       highlight(params: { data: Array<Record<string, unknown>>; focus?: boolean; color?: unknown }): Promise<void>;
       clearHighlight(): Promise<void>;
+      interactivityFocus(params: {
+        data: Array<Record<string, unknown>>;
+        structureId?: string;
+        structureNumber?: number;
+      }): Promise<void>;
       select(params: {
         data: Array<Record<string, unknown> & { focus?: boolean; color?: unknown }>;
         nonSelectedColor?: unknown;

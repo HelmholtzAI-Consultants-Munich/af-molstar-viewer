@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Workspace } from '../components/Workspace';
+import { SYNC_PAE_INTERACTION_PERFORMANCE } from '../lib/performance';
 import { createToyBundle } from './helpers';
 
 const viewerSpy = vi.fn();
@@ -32,6 +33,7 @@ function Harness() {
       pinnedCell={pinnedCell}
       hoveredCell={hoveredCell}
       brushSelection={brushSelection}
+      interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
       paeHoverSyncEnabled={paeHoverSyncEnabled}
       paePairSelectionEnabled={paePairSelectionEnabled}
       onHoverResidues={setHoveredResidues}
@@ -114,14 +116,14 @@ describe('workspace interactions', () => {
       value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
     });
 
-    fireEvent.click(screen.getAllByRole('switch', { name: /3d hover/i })[0]);
+    fireEvent.click(screen.getAllByRole('switch', { name: /pair hover/i })[0]);
     fireEvent.mouseMove(heatmap, { clientX: 150, clientY: 0 });
 
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { hoveredResidues: number[] };
     expect(lastCall.hoveredResidues).toEqual([]);
   });
 
-  it('still allows pair selection clicks when 3D hover is off', () => {
+  it('still allows pair selection clicks when pair hover is off', () => {
     render(<Harness />);
     const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
     Object.defineProperty(heatmap, 'getBoundingClientRect', {
@@ -129,7 +131,7 @@ describe('workspace interactions', () => {
       value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
     });
 
-    fireEvent.click(screen.getAllByRole('switch', { name: /3d hover/i })[0]);
+    fireEvent.click(screen.getAllByRole('switch', { name: /pair hover/i })[0]);
     fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
     fireEvent.mouseUp(window, { clientX: 0, clientY: 150 });
 
@@ -145,7 +147,7 @@ describe('workspace interactions', () => {
       value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
     });
 
-    fireEvent.click(screen.getAllByRole('switch', { name: /pair selection/i })[0]);
+    fireEvent.click(screen.getAllByRole('switch', { name: /pair click/i })[0]);
     fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
     fireEvent.mouseUp(window, { clientX: 150, clientY: 0 });
 
