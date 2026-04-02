@@ -89,8 +89,6 @@ export function FileImportPanel(props: FileImportPanelProps) {
         onDrop={handleDrop}
       >
         <div>
-          <p className="eyebrow">Local-first import</p>
-          <h1>AlphaFold Confidence Workspace</h1>
           <p className="lede">
             Drop AlphaFold, ColabFold, or AlphaFold 3 result files here, or load one of the bundled examples.
           </p>

@@ -13,7 +13,7 @@ const MOLSTAR_RENDER_OPTIONS = {
   sequencePanel: false,
   hideControls: false,
   selectInteraction: false,
-  hideCanvasControls: ['controlToggle', 'animation', 'trajectory', 'selection', 'screenshot', 'expand', 'controlInfo'],
+  hideCanvasControls: [],
 };
 
 const MOLSTAR_ILLUSTRATIVE_STYLE = {

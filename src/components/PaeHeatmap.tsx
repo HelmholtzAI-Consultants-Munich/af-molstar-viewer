@@ -221,73 +221,76 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 );
               })}
             </div>
-            <div className="heatmap-plot-column">
-              <canvas
-                ref={canvasRef}
-                className="heatmap-canvas"
-                onMouseMove={(event) => {
-                  const cell = mapPointer(event.clientX, event.clientY);
-                  if (!cell) return;
-                  props.onHoverCell({ x: cell.x, y: cell.y });
-                  if (dragStart) {
-                    setDragCurrent({ x: cell.localX, y: cell.localY });
-                    props.onBrushSelectionChange({
-                      xStart: Math.min(dragStart.x, cell.localX),
-                      xEnd: Math.max(dragStart.x, cell.localX),
-                      yStart: Math.min(dragStart.y, cell.localY),
-                      yEnd: Math.max(dragStart.y, cell.localY),
-                    });
-                  }
-                }}
-                onMouseLeave={() => {
-                  props.onHoverCell(null);
-                }}
-                onMouseDown={(event) => {
-                  const cell = mapPointer(event.clientX, event.clientY);
-                  if (!cell) return;
-                  setDragStart({ x: cell.localX, y: cell.localY });
+            <canvas
+              ref={canvasRef}
+              className="heatmap-canvas"
+              onMouseMove={(event) => {
+                const cell = mapPointer(event.clientX, event.clientY);
+                if (!cell) return;
+                props.onHoverCell({ x: cell.x, y: cell.y });
+                if (dragStart) {
                   setDragCurrent({ x: cell.localX, y: cell.localY });
-                }}
-                onMouseUp={(event) => {
-                  const cell = mapPointer(event.clientX, event.clientY);
-                  if (!cell || !dragStart) return;
-                  const minX = Math.min(dragStart.x, cell.localX);
-                  const maxX = Math.max(dragStart.x, cell.localX);
-                  const minY = Math.min(dragStart.y, cell.localY);
-                  const maxY = Math.max(dragStart.y, cell.localY);
-                  if (maxX === minX && maxY === minY) {
-                    props.onClickCell({ x: cell.x, y: cell.y });
-                    props.onBrushSelectionChange(null);
-                  } else {
-                    props.onBrushSelectionChange({
-                      xStart: minX,
-                      xEnd: maxX,
-                      yStart: minY,
-                      yEnd: maxY,
-                    });
-                  }
-                  setDragStart(null);
-                  setDragCurrent(null);
-                }}
-              />
-              <div className="heatmap-x-ticks" aria-hidden="true">
-                {axisLabelTicks.map((tick, index) => {
-                  const anchor = tickAnchor(index, axisLabelTicks.length);
-                  return (
-                    <span
-                      key={`x-${tick.value}`}
-                      className={`heatmap-tick heatmap-tick-${anchor}`}
-                      style={{ left: `${tick.ratio * 100}%` }}
-                    >
-                      {tick.value}
-                    </span>
-                  );
-                })}
-              </div>
+                  props.onBrushSelectionChange({
+                    xStart: Math.min(dragStart.x, cell.localX),
+                    xEnd: Math.max(dragStart.x, cell.localX),
+                    yStart: Math.min(dragStart.y, cell.localY),
+                    yEnd: Math.max(dragStart.y, cell.localY),
+                  });
+                }
+              }}
+              onMouseLeave={() => {
+                props.onHoverCell(null);
+              }}
+              onMouseDown={(event) => {
+                const cell = mapPointer(event.clientX, event.clientY);
+                if (!cell) return;
+                setDragStart({ x: cell.localX, y: cell.localY });
+                setDragCurrent({ x: cell.localX, y: cell.localY });
+              }}
+              onMouseUp={(event) => {
+                const cell = mapPointer(event.clientX, event.clientY);
+                if (!cell || !dragStart) return;
+                const minX = Math.min(dragStart.x, cell.localX);
+                const maxX = Math.max(dragStart.x, cell.localX);
+                const minY = Math.min(dragStart.y, cell.localY);
+                const maxY = Math.max(dragStart.y, cell.localY);
+                if (maxX === minX && maxY === minY) {
+                  props.onClickCell({ x: cell.x, y: cell.y });
+                  props.onBrushSelectionChange(null);
+                } else {
+                  props.onBrushSelectionChange({
+                    xStart: minX,
+                    xEnd: maxX,
+                    yStart: minY,
+                    yEnd: maxY,
+                  });
+                }
+                setDragStart(null);
+                setDragCurrent(null);
+              }}
+            />
+          </div>
+          <div className="heatmap-x-axis-row">
+            <div className="heatmap-axis-spacer" aria-hidden="true" />
+            <div className="heatmap-y-ticks-spacer" aria-hidden="true" />
+            <div className="heatmap-x-ticks" aria-hidden="true">
+              {axisLabelTicks.map((tick, index) => {
+                const anchor = tickAnchor(index, axisLabelTicks.length);
+                return (
+                  <span
+                    key={`x-${tick.value}`}
+                    className={`heatmap-tick heatmap-tick-${anchor}`}
+                    style={{ left: `${tick.ratio * 100}%` }}
+                  >
+                    {tick.value}
+                  </span>
+                );
+              })}
             </div>
           </div>
           <div className="heatmap-x-label">Scored residue</div>
           <div className="heatmap-colorbar-row">
+            <div className="heatmap-axis-spacer" aria-hidden="true" />
             <div className="heatmap-y-ticks-spacer" aria-hidden="true" />
             <div className="heatmap-colorbar-group">
               <div className="heatmap-gradient" />
@@ -314,13 +317,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
               <p>
                 pAE measures the confidence in the relative position of two residues -{' '}
                 <strong>
-                  see{' '}
                   <a
                     href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/pae-a-measure-of-global-confidence-in-alphafold-predictions/"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    guides
+                    see&nbsp;guides
                   </a>
                 </strong>{' '}
                 for more information.

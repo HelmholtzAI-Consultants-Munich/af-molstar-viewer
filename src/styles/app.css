@@ -183,6 +183,8 @@ select {
   grid-area: sequence;
   padding: 0;
   overflow: hidden;
+  border: 0;
+  background: #f3f3f3;
 }
 
 .heatmap-panel {
@@ -198,12 +200,14 @@ select {
   grid-area: viewer;
   padding: 0;
   overflow: hidden;
+  border: 0;
 }
 
 .legend-panel {
   grid-area: legend;
   padding: 0;
   overflow: hidden;
+  border: 0;
 }
 
 .panel-heading {
@@ -226,18 +230,15 @@ select {
 .heatmap-plot-row {
   display: grid;
   grid-template-columns: 56px 44px minmax(0, 1fr);
-  gap: 0.6rem;
+  column-gap: 0;
   align-items: stretch;
-}
-
-.heatmap-plot-column {
-  min-width: 0;
 }
 
 .heatmap-y-label {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-right: 0.25rem;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   font-size: 1.1rem;
@@ -257,8 +258,19 @@ select {
 }
 
 .heatmap-x-ticks {
-  height: 28px;
-  margin-top: 0.25rem;
+  height: 32px;
+  margin-top: 0;
+}
+
+.heatmap-x-axis-row {
+  display: grid;
+  grid-template-columns: 56px 44px minmax(0, 1fr);
+  column-gap: 0;
+  align-items: start;
+}
+
+.heatmap-axis-spacer {
+  width: 56px;
 }
 
 .heatmap-y-ticks-spacer {
@@ -275,11 +287,14 @@ select {
 }
 
 .heatmap-y-ticks .heatmap-tick {
-  right: 0;
-  padding-right: 12px;
+  right: 10px;
+  padding-right: 4px;
 }
 
-.heatmap-x-ticks .heatmap-tick,
+.heatmap-x-ticks .heatmap-tick {
+  top: 0;
+}
+
 .heatmap-colorbar-ticks .heatmap-tick {
   top: 0;
 }
@@ -324,8 +339,8 @@ select {
 
 .heatmap-y-ticks .heatmap-tick::after {
   top: 50%;
-  right: 0;
-  width: 8px;
+  right: -10px;
+  width: 10px;
   height: 1px;
   transform: translateY(-50%);
 }
@@ -344,7 +359,7 @@ select {
 
 .heatmap-x-label,
 .heatmap-colorbar-label {
-  margin-left: 44px;
+  margin-left: 100px;
   text-align: center;
   color: #111;
 }
@@ -356,14 +371,14 @@ select {
 }
 
 .heatmap-colorbar-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 56px 44px minmax(0, 1fr);
+  column-gap: 0;
   align-items: start;
-  gap: 0.6rem;
   margin-top: 1rem;
 }
 
 .heatmap-colorbar-group {
-  flex: 1;
   min-width: 0;
 }
 
@@ -391,7 +406,7 @@ select {
 }
 
 .heatmap-footer {
-  margin-left: 44px;
+  margin-left: 100px;
   margin-top: 1.4rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -445,7 +460,9 @@ select {
   min-height: 138px;
   width: 100%;
   overflow: hidden;
-  background: #fff;
+  background: #f3f3f3;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-host {
@@ -456,10 +473,21 @@ select {
   overflow: hidden;
   background: #fff;
   isolation: isolate;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-sequence-host .msp-plugin,
-.molstar-sequence-host .msp-plugin-content,
+.molstar-sequence-host .msp-plugin-content {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: #f3f3f3 !important;
+  color: #222 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 .molstar-host .msp-plugin,
 .molstar-host .msp-plugin-content {
   position: relative !important;
@@ -467,23 +495,56 @@ select {
   height: 100% !important;
   background: #fff !important;
   color: #222 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.molstar-host .msp-layout-standard,
+.molstar-host .msp-layout-static,
+.molstar-host .msp-viewport,
+.molstar-host .msp-viewport-content,
+.molstar-host .msp-viewport-container,
+.molstar-host .msp-scrollable-container,
+.molstar-host .msp-scrollable-offset,
+.molstar-host .msp-control-offset,
+.molstar-host .msp-control-group,
+.molstar-host .msp-control-group-header {
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-sequence-host .msp-sequence {
-  background: #fff !important;
+  background: #f3f3f3 !important;
   color: #222 !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-sequence-host .msp-sequence-select {
   min-height: 46px;
   padding: 0.35rem 0.75rem !important;
-  border-bottom: 1px solid var(--panel-border) !important;
-  background: #f7f5ef !important;
+  background: #f3f3f3 !important;
   color: #222 !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-sequence-host .msp-sequence-wrapper {
   padding: 0.45rem 0.75rem 0.65rem !important;
+  background: #f3f3f3 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.molstar-sequence-host .msp-scrollable-container,
+.molstar-sequence-host .msp-scrollable-offset,
+.molstar-sequence-host .msp-control-offset,
+.molstar-sequence-host .msp-control-group,
+.molstar-sequence-host .msp-layout-standard,
+.molstar-sequence-host .msp-control-group-header {
+  background: #f3f3f3 !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .molstar-sequence-host .msp-form-control,

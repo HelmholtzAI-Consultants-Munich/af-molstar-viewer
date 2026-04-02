@@ -40,8 +40,8 @@ export function LegendPanel(props: LegendPanelProps) {
       <div className="legend-description">
         <h3>Model Confidence (pLDDT)</h3>
         <p>
-          The predicted local distance difference test (pLDDT) is a per-residue measure of local confidence scaled
-          from 0&nbsp;to&nbsp;100.{' '}
+          The predicted local distance difference test (pLDDT) is a per-residue measure of local confidence
+          from&nbsp;0&nbsp;to&nbsp;100.{' '}
           <strong>
             <a
               href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/"
