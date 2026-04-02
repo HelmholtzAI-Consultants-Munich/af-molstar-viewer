@@ -289,36 +289,38 @@ select {
 .heatmap-y-ticks .heatmap-tick {
   right: 10px;
   padding-right: 4px;
+  transform: translateY(-50%);
 }
 
 .heatmap-x-ticks .heatmap-tick {
   top: 0;
+  transform: none;
 }
 
 .heatmap-colorbar-ticks .heatmap-tick {
   top: 0;
-}
-
-.heatmap-tick-start {
   transform: none;
 }
 
-.heatmap-y-ticks .heatmap-tick-middle {
-  transform: translateY(-50%);
+.heatmap-tick-label {
+  display: block;
+  padding-top: 11px;
+  white-space: nowrap;
 }
 
-.heatmap-y-ticks .heatmap-tick-end {
-  transform: translateY(-100%);
+.heatmap-x-ticks .heatmap-tick-label-start,
+.heatmap-colorbar-ticks .heatmap-tick-label-start {
+  transform: translateX(-2px);
 }
 
-.heatmap-x-ticks .heatmap-tick-middle,
-.heatmap-colorbar-ticks .heatmap-tick-middle {
-  transform: translateX(-50%);
+.heatmap-x-ticks .heatmap-tick-label-middle,
+.heatmap-colorbar-ticks .heatmap-tick-label-middle {
+  transform: translateX(calc(-50% - 2px));
 }
 
-.heatmap-x-ticks .heatmap-tick-end,
-.heatmap-colorbar-ticks .heatmap-tick-end {
-  transform: translateX(-100%);
+.heatmap-x-ticks .heatmap-tick-label-end,
+.heatmap-colorbar-ticks .heatmap-tick-label-end {
+  transform: translateX(calc(-100% - 2px));
 }
 
 .heatmap-x-ticks .heatmap-tick::before,
@@ -332,7 +334,7 @@ select {
 .heatmap-x-ticks .heatmap-tick::before,
 .heatmap-colorbar-ticks .heatmap-tick::before {
   left: 0;
-  top: -10px;
+  top: 0;
   width: 1px;
   height: 8px;
 }
@@ -345,6 +347,17 @@ select {
   transform: translateY(-50%);
 }
 
+.heatmap-axis-end-label {
+  position: absolute;
+  top: 11px;
+  left: 100%;
+  transform: translateX(-100%);
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #222;
+  white-space: nowrap;
+}
+
 .heatmap-canvas {
   aspect-ratio: 1;
   width: 100%;
@@ -354,6 +367,43 @@ select {
   align-self: stretch;
   display: block;
   border: 1px solid #7f8d73;
+  background: #fff;
+}
+
+.heatmap-canvas-wrap {
+  position: relative;
+}
+
+.heatmap-frame-drag-handle {
+  position: absolute;
+  z-index: 1;
+  cursor: move;
+}
+
+.heatmap-frame-drag-handle.dragging {
+  cursor: grabbing;
+}
+
+.heatmap-close-button {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #222;
+  font-size: 1.45rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.heatmap-close-button:hover {
   background: #fff;
 }
 
@@ -391,7 +441,7 @@ select {
 
 .heatmap-colorbar-ticks {
   height: 24px;
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 .heatmap-colorbar-label {
@@ -447,7 +497,73 @@ select {
 .heatmap-actions {
   margin: 0;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch-label {
+  font-size: 0.92rem;
+}
+
+.switch-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.switch-control input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-track {
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 24px;
+  padding: 3px;
+  border: 1px solid #c7c7c7;
+  border-radius: 999px;
+  background: #e7e7e7;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform 120ms ease;
+}
+
+.switch-control input:checked + .switch-track {
+  background: #2f6fb0;
+  border-color: #2f6fb0;
+}
+
+.switch-control input:checked + .switch-track .switch-thumb {
+  transform: translateX(16px);
+}
+
+.switch-control input:focus-visible + .switch-track {
+  outline: 2px solid rgba(47, 111, 176, 0.35);
+  outline-offset: 2px;
 }
 
 .molstar-shell {
@@ -456,8 +572,8 @@ select {
 
 .molstar-sequence-host {
   position: relative;
-  height: 138px;
-  min-height: 138px;
+  height: 90px;
+  min-height: 90px;
   width: 100%;
   overflow: hidden;
   background: #f3f3f3;

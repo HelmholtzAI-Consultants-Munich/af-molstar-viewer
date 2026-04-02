@@ -19,6 +19,7 @@ function Harness() {
   const [pinnedResidues, setPinnedResidues] = useState<number[]>([]);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
+  const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(true);
 
   return (
     <Workspace
@@ -28,10 +29,18 @@ function Harness() {
       pinnedResidues={pinnedResidues}
       hoveredCell={hoveredCell}
       brushSelection={brushSelection}
+      paeHoverSyncEnabled={paeHoverSyncEnabled}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
       onPinResidues={setPinnedResidues}
       onBrushSelectionChange={setBrushSelection}
+      onTogglePaeHoverSync={() =>
+        setPaeHoverSyncEnabled((value) => {
+          const next = !value;
+          if (!next) setHoveredResidues([]);
+          return next;
+        })
+      }
     />
   );
 }
@@ -70,5 +79,20 @@ describe('workspace interactions', () => {
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { brushSelection: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null };
     expect(lastCall.brushSelection).toEqual({ xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 });
     expect(screen.queryByText(/Zoomed to residues/i)).not.toBeInTheDocument();
+  });
+
+  it('can disable PAE-to-Molstar hover syncing', () => {
+    render(<Harness />);
+    const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
+    Object.defineProperty(heatmap, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+
+    fireEvent.click(screen.getAllByRole('switch', { name: /3d hover/i })[0]);
+    fireEvent.mouseMove(heatmap, { clientX: 150, clientY: 0 });
+
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { hoveredResidues: number[] };
+    expect(lastCall.hoveredResidues).toEqual([]);
   });
 });

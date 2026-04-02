@@ -97,9 +97,9 @@ async function applyBrushColoring(
   const yOnly = difference(yResidues, overlapSet);
 
   const coloredQueries = [
-    ...queriesWithColor(residues, xOnly, PAE_SELECTION_COLORS.xRange),
-    ...queriesWithColor(residues, yOnly, PAE_SELECTION_COLORS.yRange),
-    ...queriesWithColor(residues, overlap, PAE_SELECTION_COLORS.overlap),
+    ...queriesWithColor(residues, xOnly, PAE_SELECTION_COLORS.yRange),
+    ...queriesWithColor(residues, yOnly, PAE_SELECTION_COLORS.overlap),
+    ...queriesWithColor(residues, overlap, PAE_SELECTION_COLORS.xRange),
   ];
 
   await viewer.visual.select({

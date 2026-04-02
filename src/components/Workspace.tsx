@@ -11,10 +11,12 @@ interface WorkspaceProps {
   pinnedResidues: number[];
   hoveredCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
+  paeHoverSyncEnabled: boolean;
   onHoverResidues: (indices: number[]) => void;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onPinResidues: (indices: number[]) => void;
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
+  onTogglePaeHoverSync: () => void;
 }
 
 export function Workspace(props: WorkspaceProps) {
@@ -26,12 +28,16 @@ export function Workspace(props: WorkspaceProps) {
         hoveredCell={props.hoveredCell}
         pinnedResidues={props.pinnedResidues}
         brushSelection={props.brushSelection}
+        hoverSyncEnabled={props.paeHoverSyncEnabled}
         onHoverCell={(cell) => {
           props.onHoverCell(cell);
-          props.onHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
+          if (props.paeHoverSyncEnabled) {
+            props.onHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
+          }
         }}
         onClickCell={(cell) => props.onPinResidues(summarizeResidueSelection([cell.x, cell.y]))}
         onBrushSelectionChange={props.onBrushSelectionChange}
+        onToggleHoverSync={props.onTogglePaeHoverSync}
       />
       <MolstarPanel
         bundle={props.bundle}

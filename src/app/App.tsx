@@ -11,6 +11,7 @@ import type {
 
 const worker = new Worker(new URL('../lib/worker/parse-worker.ts', import.meta.url), { type: 'module' });
 const STORAGE_KEY = 'af-molstar-viewer:selected-group';
+const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 400;
 
 async function filesToWorkerInputs(files: File[]): Promise<WorkerInputFile[]> {
   return Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));
@@ -27,6 +28,7 @@ export function App() {
   const [pinnedResidues, setPinnedResidues] = useState<number[]>([]);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
+  const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(false);
   const pendingResolver = useRef<((payload: unknown) => void) | null>(null);
 
   const fileMap = useMemo(() => new Map(files.map((file) => [file.name, file.text])), [files]);
@@ -59,6 +61,7 @@ export function App() {
     setPinnedResidues([]);
     setHoveredCell(null);
     setBrushSelection(null);
+    setPaeHoverSyncEnabled(_nextBundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD);
   };
 
   const loadGroup = async (groupId: string, choice?: BundleChoice, sourceFiles = files) => {
@@ -135,10 +138,18 @@ export function App() {
           pinnedResidues={pinnedResidues}
           hoveredCell={hoveredCell}
           brushSelection={brushSelection}
+          paeHoverSyncEnabled={paeHoverSyncEnabled}
           onHoverResidues={(indices) => setHoveredResidues(indices)}
           onHoverCell={setHoveredCell}
           onPinResidues={(indices) => setPinnedResidues(indices)}
           onBrushSelectionChange={setBrushSelection}
+          onTogglePaeHoverSync={() => {
+            setPaeHoverSyncEnabled((enabled) => {
+              const next = !enabled;
+              if (!next) setHoveredResidues([]);
+              return next;
+            });
+          }}
         />
       ) : (
         <section className="panel empty-panel">

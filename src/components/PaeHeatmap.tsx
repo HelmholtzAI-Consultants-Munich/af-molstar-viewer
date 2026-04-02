@@ -9,9 +9,11 @@ interface PaeHeatmapProps {
   hoveredCell: { x: number; y: number } | null;
   pinnedResidues: number[];
   brushSelection: MatrixViewport | null;
+  hoverSyncEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onClickCell: (cell: { x: number; y: number }) => void;
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
+  onToggleHoverSync: () => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -26,6 +28,8 @@ interface Tick {
   value: number;
   ratio: number;
 }
+
+const SHOW_PINNED_SELECTION_OUTLINE = false;
 
 function colorForPae(value: number, maxValue: number): string {
   const ratio = Math.min(1, Math.max(0, value / Math.max(maxValue, 1)));
@@ -64,6 +68,19 @@ function buildAxisTicks(size: number): Tick[] {
   }));
 }
 
+function buildRegularAxisTicks(size: number): Tick[] {
+  if (size <= 0) return [];
+  const step = niceStep(size, 6);
+  const ticks: number[] = [0];
+  for (let value = step; value <= size; value += step) {
+    ticks.push(value);
+  }
+  return ticks.map((value) => ({
+    value,
+    ratio: size === 0 ? 0 : value / size,
+  }));
+}
+
 function buildLegendTicks(maxValue: number): Tick[] {
   if (maxValue <= 0) return [{ value: 0, ratio: 0 }];
   const roundedMax = Math.max(1, Math.round(maxValue / 5) * 5);
@@ -94,21 +111,176 @@ function filterAxisLabelTicks(ticks: Tick[]): Tick[] {
   return filtered;
 }
 
+function filterXAxisTickLabels(ticks: Tick[]): Tick[] {
+  if (ticks.length === 0) return ticks;
+  const last = ticks[ticks.length - 1];
+  if (1 - last.ratio < 0.08) {
+    return ticks.slice(0, -1);
+  }
+  return ticks;
+}
+
 function tickAnchor(index: number, total: number) {
   if (index === 0) return 'start';
   if (index === total - 1) return 'end';
   return 'middle';
 }
 
+function drawDiagonalSegment(
+  context: CanvasRenderingContext2D,
+  start: number,
+  end: number,
+  cellWidth: number,
+  cellHeight: number,
+  color: string,
+) {
+  if (end < start) return;
+  if (typeof context.save === 'function') context.save();
+  context.strokeStyle = color;
+  context.lineWidth = 2.25;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo((start + 0.5) * cellWidth, (start + 0.5) * cellHeight);
+  context.lineTo((end + 0.5) * cellWidth, (end + 0.5) * cellHeight);
+  context.stroke();
+  if (typeof context.restore === 'function') context.restore();
+}
+
+function drawBrushDiagonalHighlights(
+  context: CanvasRenderingContext2D,
+  selection: MatrixViewport,
+  size: number,
+  cellWidth: number,
+  cellHeight: number,
+) {
+  type SegmentKind = 'inside' | 'aboveBelow' | 'leftRight' | null;
+
+  let segmentStart = -1;
+  let segmentKind: SegmentKind = null;
+
+  const flushSegment = (endIndex: number) => {
+    if (segmentKind === null || segmentStart < 0) return;
+    const color =
+      segmentKind === 'inside'
+        ? PAE_SELECTION_COLORS.xRange
+        : segmentKind === 'aboveBelow'
+          ? PAE_SELECTION_COLORS.yRange
+          : PAE_SELECTION_COLORS.overlap;
+    drawDiagonalSegment(context, segmentStart, endIndex, cellWidth, cellHeight, color);
+    segmentStart = -1;
+    segmentKind = null;
+  };
+
+  for (let index = 0; index < size; index += 1) {
+    const xIn = index >= selection.xStart && index <= selection.xEnd;
+    const yIn = index >= selection.yStart && index <= selection.yEnd;
+    const kind: SegmentKind = xIn && yIn ? 'inside' : xIn ? 'aboveBelow' : yIn ? 'leftRight' : null;
+
+    if (kind === segmentKind) continue;
+    flushSegment(index - 1);
+    if (kind !== null) {
+      segmentStart = index;
+      segmentKind = kind;
+    }
+  }
+
+  flushSegment(size - 1);
+}
+
+function drawBrushCornerGuides(
+  context: CanvasRenderingContext2D,
+  selection: MatrixViewport,
+  cellWidth: number,
+  cellHeight: number,
+) {
+  const frameLeft = selection.xStart * cellWidth;
+  const frameTop = selection.yStart * cellHeight;
+  const frameRight = (selection.xEnd + 1) * cellWidth;
+  const frameBottom = (selection.yEnd + 1) * cellHeight;
+  const corners = [
+    { x: frameLeft, y: frameTop },
+    { x: frameRight, y: frameTop },
+    { x: frameLeft, y: frameBottom },
+    { x: frameRight, y: frameBottom },
+  ];
+
+  if (typeof context.save === 'function') context.save();
+  context.strokeStyle = 'rgba(255, 255, 255, 0.98)';
+  context.lineWidth = 1;
+  if (typeof context.setLineDash === 'function') context.setLineDash([4, 4]);
+  context.beginPath();
+  for (const corner of corners) {
+    if (Math.abs(corner.x - corner.y) < 0.5) continue;
+    context.moveTo(corner.x, corner.y);
+    context.lineTo(corner.x, corner.x);
+    context.moveTo(corner.x, corner.y);
+    context.lineTo(corner.y, corner.y);
+  }
+  context.stroke();
+  if (typeof context.restore === 'function') context.restore();
+}
+
 export function PaeHeatmap(props: PaeHeatmapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [frameDrag, setFrameDrag] = useState<{
+    startClientX: number;
+    startClientY: number;
+    selection: MatrixViewport;
+  } | null>(null);
   const size = props.matrix.length;
   const pinnedSet = useMemo(() => new Set(props.pinnedResidues), [props.pinnedResidues]);
-  const axisTicks = useMemo(() => buildAxisTicks(size), [size]);
-  const axisLabelTicks = useMemo(() => filterAxisLabelTicks(axisTicks), [axisTicks]);
+  const yAxisTicks = useMemo(() => buildAxisTicks(size), [size]);
+  const yAxisLabelTicks = useMemo(() => filterAxisLabelTicks(yAxisTicks), [yAxisTicks]);
+  const xAxisTicks = useMemo(() => buildRegularAxisTicks(size), [size]);
+  const xAxisLabelTickValues = useMemo(() => new Set(filterXAxisTickLabels(xAxisTicks).map((tick) => tick.value)), [xAxisTicks]);
   const legendTicks = useMemo(() => buildLegendTicks(props.maxValue), [props.maxValue]);
+  const activeBrush =
+    dragStart && dragCurrent
+      ? {
+          xStart: Math.min(dragStart.x, dragCurrent.x),
+          xEnd: Math.max(dragStart.x, dragCurrent.x),
+          yStart: Math.min(dragStart.y, dragCurrent.y),
+          yEnd: Math.max(dragStart.y, dragCurrent.y),
+        }
+      : props.brushSelection;
+
+  useEffect(() => {
+    if (!frameDrag) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas || size <= 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const cellWidth = rect.width / size;
+      const cellHeight = rect.height / size;
+      const deltaX = Math.round((event.clientX - frameDrag.startClientX) / Math.max(cellWidth, 1));
+      const deltaY = Math.round((event.clientY - frameDrag.startClientY) / Math.max(cellHeight, 1));
+      const width = frameDrag.selection.xEnd - frameDrag.selection.xStart;
+      const height = frameDrag.selection.yEnd - frameDrag.selection.yStart;
+      const xStart = clamp(frameDrag.selection.xStart + deltaX, 0, size - width - 1);
+      const yStart = clamp(frameDrag.selection.yStart + deltaY, 0, size - height - 1);
+
+      props.onBrushSelectionChange({
+        xStart,
+        xEnd: xStart + width,
+        yStart,
+        yEnd: yStart + height,
+      });
+    };
+
+    const handleUp = () => {
+      setFrameDrag(null);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [frameDrag, props, size]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -132,7 +304,7 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       }
     }
 
-    if (props.hoveredCell) {
+    if (props.hoveredCell && !frameDrag) {
       context.strokeStyle = '#fff36a';
       context.lineWidth = 2;
       const x = props.hoveredCell.x * cellWidth;
@@ -146,24 +318,17 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       context.strokeRect(x, y, cellWidth, cellHeight);
     }
 
-    if (pinnedSet.size > 0) {
+    if (SHOW_PINNED_SELECTION_OUTLINE && pinnedSet.size > 0 && !activeBrush) {
       const values = [...pinnedSet];
       const min = Math.min(...values);
       const max = Math.max(...values);
-      context.strokeStyle = '#ff9a3c';
+      if (typeof context.save === 'function') context.save();
+      context.strokeStyle = '#ff6699';
       context.lineWidth = 2;
+      if (typeof context.setLineDash === 'function') context.setLineDash([9, 6]);
       context.strokeRect(min * cellWidth, min * cellHeight, (max - min + 1) * cellWidth, (max - min + 1) * cellHeight);
+      if (typeof context.restore === 'function') context.restore();
     }
-
-    const activeBrush =
-      dragStart && dragCurrent
-        ? {
-            xStart: Math.min(dragStart.x, dragCurrent.x),
-            xEnd: Math.max(dragStart.x, dragCurrent.x),
-            yStart: Math.min(dragStart.y, dragCurrent.y),
-            yEnd: Math.max(dragStart.y, dragCurrent.y),
-          }
-        : props.brushSelection;
 
     if (activeBrush) {
       const x = activeBrush.xStart * cellWidth;
@@ -171,21 +336,19 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       const brushWidth = (activeBrush.xEnd - activeBrush.xStart + 1) * cellWidth;
       const brushHeight = (activeBrush.yEnd - activeBrush.yStart + 1) * cellHeight;
 
+      if (typeof context.save === 'function') context.save();
+      context.fillStyle = 'rgba(139, 143, 148, 0.32)';
+      context.fillRect(x, y, brushWidth, brushHeight);
+      if (typeof context.restore === 'function') context.restore();
+      drawBrushCornerGuides(context, activeBrush, cellWidth, cellHeight);
+      if (typeof context.save === 'function') context.save();
       context.strokeStyle = '#ffffff';
-      context.lineWidth = 2;
+      context.lineWidth = 1.25;
       context.strokeRect(x, y, brushWidth, brushHeight);
-
-      const diagonal = context.createLinearGradient(x, y, x + brushWidth, y + brushHeight);
-      diagonal.addColorStop(0, PAE_SELECTION_COLORS.xRange);
-      diagonal.addColorStop(1, PAE_SELECTION_COLORS.yRange);
-      context.strokeStyle = diagonal;
-      context.lineWidth = 4;
-      context.beginPath();
-      context.moveTo(x, y);
-      context.lineTo(x + brushWidth, y + brushHeight);
-      context.stroke();
+      if (typeof context.restore === 'function') context.restore();
+      drawBrushDiagonalHighlights(context, activeBrush, size, cellWidth, cellHeight);
     }
-  }, [dragCurrent, dragStart, pinnedSet, props.brushSelection, props.hoveredCell, props.matrix, props.maxValue, size]);
+  }, [activeBrush, dragCurrent, dragStart, frameDrag, pinnedSet, props.hoveredCell, props.matrix, props.maxValue, size]);
 
   const mapPointer = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -208,8 +371,8 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
           <div className="heatmap-plot-row">
             <div className="heatmap-y-label">Aligned residue</div>
             <div className="heatmap-y-ticks" aria-hidden="true">
-              {axisLabelTicks.map((tick, index) => {
-                const anchor = tickAnchor(index, axisLabelTicks.length);
+              {yAxisLabelTicks.map((tick, index) => {
+                const anchor = tickAnchor(index, yAxisLabelTicks.length);
                 return (
                   <span
                     key={`y-${tick.value}`}
@@ -221,71 +384,115 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 );
               })}
             </div>
-            <canvas
-              ref={canvasRef}
-              className="heatmap-canvas"
-              onMouseMove={(event) => {
-                const cell = mapPointer(event.clientX, event.clientY);
-                if (!cell) return;
-                props.onHoverCell({ x: cell.x, y: cell.y });
-                if (dragStart) {
+            <div className="heatmap-canvas-wrap">
+              <canvas
+                ref={canvasRef}
+                className="heatmap-canvas"
+                onMouseMove={(event) => {
+                  const cell = mapPointer(event.clientX, event.clientY);
+                  if (!cell) return;
+                  props.onHoverCell({ x: cell.x, y: cell.y });
+                  if (dragStart) {
+                    setDragCurrent({ x: cell.localX, y: cell.localY });
+                    props.onBrushSelectionChange({
+                      xStart: Math.min(dragStart.x, cell.localX),
+                      xEnd: Math.max(dragStart.x, cell.localX),
+                      yStart: Math.min(dragStart.y, cell.localY),
+                      yEnd: Math.max(dragStart.y, cell.localY),
+                    });
+                  }
+                }}
+                onMouseLeave={() => {
+                  props.onHoverCell(null);
+                }}
+                onMouseDown={(event) => {
+                  const cell = mapPointer(event.clientX, event.clientY);
+                  if (!cell) return;
+                  setDragStart({ x: cell.localX, y: cell.localY });
                   setDragCurrent({ x: cell.localX, y: cell.localY });
-                  props.onBrushSelectionChange({
-                    xStart: Math.min(dragStart.x, cell.localX),
-                    xEnd: Math.max(dragStart.x, cell.localX),
-                    yStart: Math.min(dragStart.y, cell.localY),
-                    yEnd: Math.max(dragStart.y, cell.localY),
-                  });
-                }
-              }}
-              onMouseLeave={() => {
-                props.onHoverCell(null);
-              }}
-              onMouseDown={(event) => {
-                const cell = mapPointer(event.clientX, event.clientY);
-                if (!cell) return;
-                setDragStart({ x: cell.localX, y: cell.localY });
-                setDragCurrent({ x: cell.localX, y: cell.localY });
-              }}
-              onMouseUp={(event) => {
-                const cell = mapPointer(event.clientX, event.clientY);
-                if (!cell || !dragStart) return;
-                const minX = Math.min(dragStart.x, cell.localX);
-                const maxX = Math.max(dragStart.x, cell.localX);
-                const minY = Math.min(dragStart.y, cell.localY);
-                const maxY = Math.max(dragStart.y, cell.localY);
-                if (maxX === minX && maxY === minY) {
-                  props.onClickCell({ x: cell.x, y: cell.y });
-                  props.onBrushSelectionChange(null);
-                } else {
-                  props.onBrushSelectionChange({
-                    xStart: minX,
-                    xEnd: maxX,
-                    yStart: minY,
-                    yEnd: maxY,
-                  });
-                }
-                setDragStart(null);
-                setDragCurrent(null);
-              }}
-            />
+                }}
+                onMouseUp={(event) => {
+                  const cell = mapPointer(event.clientX, event.clientY);
+                  if (!cell || !dragStart) return;
+                  const minX = Math.min(dragStart.x, cell.localX);
+                  const maxX = Math.max(dragStart.x, cell.localX);
+                  const minY = Math.min(dragStart.y, cell.localY);
+                  const maxY = Math.max(dragStart.y, cell.localY);
+                  if (maxX === minX && maxY === minY) {
+                    props.onClickCell({ x: cell.x, y: cell.y });
+                    props.onBrushSelectionChange(null);
+                  } else {
+                    props.onBrushSelectionChange({
+                      xStart: minX,
+                      xEnd: maxX,
+                      yStart: minY,
+                      yEnd: maxY,
+                    });
+                  }
+                  setDragStart(null);
+                  setDragCurrent(null);
+                }}
+              />
+              {props.brushSelection && size > 0 && (
+                <>
+                  <div
+                    className={`heatmap-frame-drag-handle${frameDrag ? ' dragging' : ''}`}
+                    style={{
+                      left: `${(props.brushSelection.xStart / size) * 100}%`,
+                      top: `${(props.brushSelection.yStart / size) * 100}%`,
+                      width: `${((props.brushSelection.xEnd - props.brushSelection.xStart + 1) / size) * 100}%`,
+                      height: `${((props.brushSelection.yEnd - props.brushSelection.yStart + 1) / size) * 100}%`,
+                    }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setFrameDrag({
+                        startClientX: event.clientX,
+                        startClientY: event.clientY,
+                        selection: props.brushSelection!,
+                      });
+                    }}
+                  />
+                  {!frameDrag && (
+                    <button
+                      type="button"
+                      className="heatmap-close-button"
+                      style={{
+                        left: `${((props.brushSelection.xEnd + 1) / size) * 100}%`,
+                        top: `${(props.brushSelection.yStart / size) * 100}%`,
+                      }}
+                      aria-label="Clear selection"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onBrushSelectionChange(null);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div className="heatmap-x-axis-row">
             <div className="heatmap-axis-spacer" aria-hidden="true" />
             <div className="heatmap-y-ticks-spacer" aria-hidden="true" />
             <div className="heatmap-x-ticks" aria-hidden="true">
-              {axisLabelTicks.map((tick, index) => {
-                const anchor = tickAnchor(index, axisLabelTicks.length);
+              {xAxisTicks.map((tick, index) => {
+                const anchor = tickAnchor(index, xAxisTicks.length);
                 return (
                   <span
                     key={`x-${tick.value}`}
                     className={`heatmap-tick heatmap-tick-${anchor}`}
                     style={{ left: `${tick.ratio * 100}%` }}
                   >
-                    {tick.value}
+                    {xAxisLabelTickValues.has(tick.value) && (
+                      <span className={`heatmap-tick-label heatmap-tick-label-${anchor}`}>{tick.value}</span>
+                    )}
                   </span>
                 );
               })}
+              <span className="heatmap-axis-end-label">{size}</span>
             </div>
           </div>
           <div className="heatmap-x-label">Scored residue</div>
@@ -303,7 +510,7 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                       className={`heatmap-tick heatmap-tick-${anchor}`}
                       style={{ left: `${tick.ratio * 100}%` }}
                     >
-                      {tick.value}
+                      <span className={`heatmap-tick-label heatmap-tick-label-${anchor}`}>{tick.value}</span>
                     </span>
                   );
                 })}
@@ -315,23 +522,35 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
             <div className="heatmap-description">
               <h3>Predicted Aligned Error (pAE)</h3>
               <p>
-                pAE measures the confidence in the relative position of two residues -{' '}
+                pAE measures the confidence in the relative position of two residues&nbsp;&ndash;{' '}
                 <strong>
                   <a
                     href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/pae-a-measure-of-global-confidence-in-alphafold-predictions/"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    see&nbsp;guides
+                    see&nbsp;guide
                   </a>
                 </strong>{' '}
                 for more information.
               </p>
             </div>
             <div className="heatmap-actions">
-              <button type="button" className="secondary-button" onClick={() => props.onBrushSelectionChange(null)}>
-                Clear selection
-              </button>
+              <label className="switch-field">
+                <span className="switch-control">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="3D hover"
+                    checked={props.hoverSyncEnabled}
+                    onChange={props.onToggleHoverSync}
+                  />
+                  <span className="switch-track" aria-hidden="true">
+                    <span className="switch-thumb" />
+                  </span>
+                </span>
+                <span className="switch-label">3D hover</span>
+              </label>
             </div>
           </div>
         </div>
