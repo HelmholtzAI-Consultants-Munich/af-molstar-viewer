@@ -7,6 +7,18 @@ interface ResolverPanelProps {
   loading: boolean;
 }
 
+function displayGroupTitle(group: DiscoveryGroup): string {
+  return group.name || group.matchedFiles[0] || 'Unresolved import';
+}
+
+function canResolveGroup(group: DiscoveryGroup): boolean {
+  if (group.suggestedSource === 'structure') return group.structureOptions.length > 0;
+  if (group.suggestedSource === 'af2') return group.structureOptions.length > 0 && group.paeJsonOptions.length > 0;
+  if (group.suggestedSource === 'colabfold') return group.structureOptions.length > 0 && group.scoreJsonOptions.length > 0;
+  if (group.suggestedSource === 'af3') return group.structureOptions.length > 0 && group.confidenceJsonOptions.length > 0;
+  return false;
+}
+
 export function ResolverPanel(props: ResolverPanelProps) {
   const initialChoiceState = useMemo(
     () =>
@@ -40,12 +52,23 @@ export function ResolverPanel(props: ResolverPanelProps) {
       <div className="resolver-grid">
         {props.groups.map((group) => {
           const choice = choices[group.id] ?? initialChoiceState[group.id];
+          const canResolve = canResolveGroup(group);
           const updateChoice = (field: keyof BundleChoice, value: string) =>
             setChoices((current) => ({ ...current, [group.id]: { ...current[group.id], [field]: value } }));
           return (
             <article key={group.id} className="resolver-card">
-              <h3>{group.name}</h3>
+              <h3>{displayGroupTitle(group)}</h3>
               {group.reasons.length > 0 && <p className="resolver-reason">{group.reasons.join(' · ')}</p>}
+              {group.matchedFiles.length > 0 && (
+                <div className="resolver-files">
+                  <p className="resolver-files-label">Files in this unresolved set</p>
+                  <ul className="resolver-file-list">
+                    {group.matchedFiles.map((fileName) => (
+                      <li key={fileName}>{fileName}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {group.structureOptions.length > 0 && (
                 <label>
                   Structure
@@ -106,7 +129,13 @@ export function ResolverPanel(props: ResolverPanelProps) {
                   </select>
                 </label>
               )}
-              <button type="button" className="secondary-button" disabled={props.loading} onClick={() => void props.onResolve(group.id, choice)}>
+              {!canResolve && <p className="resolver-note">This set cannot be loaded yet. Add a matching structure or metadata file.</p>}
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={props.loading || !canResolve}
+                onClick={() => void props.onResolve(group.id, choice)}
+              >
                 Resolve and load
               </button>
             </article>

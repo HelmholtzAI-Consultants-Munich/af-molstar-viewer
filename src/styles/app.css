@@ -36,6 +36,17 @@ select {
   padding: 1rem;
 }
 
+.top-controls-shell {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.top-controls-shell.with-resolver {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+}
+
 .panel {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -50,10 +61,7 @@ select {
 }
 
 .dropzone {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  justify-content: space-between;
+  display: grid;
   gap: 1rem;
   padding: 1rem 1.25rem;
   border: 1px dashed var(--button-border);
@@ -88,10 +96,38 @@ select {
   color: #4f4f4f;
 }
 
-.control-row {
-  display: flex;
-  flex-wrap: wrap;
+.dropzone-copy {
+  min-width: 0;
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(320px, 1fr);
+  grid-template-areas:
+    'choose-files load-example'
+    'choose-folder select-prediction';
   gap: 0.75rem;
+  align-items: stretch;
+}
+
+.control-grid > * {
+  width: 100%;
+}
+
+.control-choose-files {
+  grid-area: choose-files;
+}
+
+.control-choose-folder {
+  grid-area: choose-folder;
+}
+
+.control-load-example {
+  grid-area: load-example;
+}
+
+.control-select-prediction {
+  grid-area: select-prediction;
 }
 
 .primary-button,
@@ -126,7 +162,8 @@ select {
 
 .select-input,
 .resolver-card select {
-  min-width: 13rem;
+  width: 100%;
+  min-width: 0;
   border-radius: 3px;
   border: 1px solid var(--button-border);
   background: #fff;
@@ -137,12 +174,13 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 1rem 1.25rem;
 }
 
 .resolver-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .resolver-card {
@@ -168,6 +206,56 @@ select {
 .resolver-reason {
   margin: 0;
   color: #8a4c1d;
+}
+
+.resolver-files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  background: #fafafa;
+  border: 1px solid #ececec;
+}
+
+.resolver-files-label {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #5e5e5e;
+}
+
+.resolver-file-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #333;
+  font-size: 0.93rem;
+}
+
+.resolver-file-list li + li {
+  margin-top: 0.2rem;
+}
+
+.resolver-note {
+  margin: 0;
+  color: #666;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 1080px) {
+  .top-controls-shell.with-resolver {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .control-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'choose-files'
+      'choose-folder'
+      'load-example'
+      'select-prediction';
+  }
 }
 
 .workspace-grid {

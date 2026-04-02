@@ -88,21 +88,23 @@ export function FileImportPanel(props: FileImportPanelProps) {
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
       >
-        <div>
+        <div className="dropzone-copy">
           <p className="lede">
-            Drop AlphaFold, ColabFold, or AlphaFold 3 result files here, or load one of the bundled examples.
+            Drop AlphaFold or ColabFold result files here, or load one of the bundled examples.
           </p>
         </div>
-        <div className="control-row">
-          <button type="button" className="primary-button" onClick={() => fileInputRef.current?.click()} disabled={props.loading}>
+        <div className="control-grid">
+          <button
+            type="button"
+            className="primary-button control-choose-files"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={props.loading}
+          >
             Choose files
-          </button>
-          <button type="button" className="secondary-button" onClick={openDirectory} disabled={props.loading}>
-            Choose folder
           </button>
           <select
             aria-label="Load example"
-            className="select-input"
+            className="select-input control-load-example"
             onChange={(event) => {
               if (event.target.value) void loadExample(event.target.value);
               event.target.value = '';
@@ -118,9 +120,12 @@ export function FileImportPanel(props: FileImportPanelProps) {
               </option>
             ))}
           </select>
+          <button type="button" className="secondary-button control-choose-folder" onClick={openDirectory} disabled={props.loading}>
+            Choose folder
+          </button>
           <select
             aria-label="Prediction chooser"
-            className="select-input"
+            className="select-input control-select-prediction"
             value={props.currentGroupId ?? ''}
             onChange={(event) => props.onSelectGroup(event.target.value)}
             disabled={resolvedGroups.length === 0}

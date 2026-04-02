@@ -124,18 +124,20 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <FileImportPanel
-        groups={groups}
-        currentGroupId={currentGroupId}
-        onLoadFiles={async (incoming) => discover(await filesToWorkerInputs(incoming))}
-        onLoadExample={discover}
-        onSelectGroup={(groupId) => void loadGroup(groupId)}
-        loading={loading}
-      />
+      <div className={`top-controls-shell${unresolvedGroups.length > 0 ? ' with-resolver' : ''}`}>
+        <FileImportPanel
+          groups={groups}
+          currentGroupId={currentGroupId}
+          onLoadFiles={async (incoming) => discover(await filesToWorkerInputs(incoming))}
+          onLoadExample={discover}
+          onSelectGroup={(groupId) => void loadGroup(groupId)}
+          loading={loading}
+        />
 
-      {unresolvedGroups.length > 0 && (
-        <ResolverPanel groups={unresolvedGroups} loading={loading} onResolve={async (groupId, choice) => loadGroup(groupId, choice)} />
-      )}
+        {unresolvedGroups.length > 0 && (
+          <ResolverPanel groups={unresolvedGroups} loading={loading} onResolve={async (groupId, choice) => loadGroup(groupId, choice)} />
+        )}
+      </div>
 
       {error && <div className="panel error-panel">{error}</div>}
 
