@@ -1,93 +1,49 @@
-# AF Mol* Viewer
+# AFDB-style Mol* Viewer
 
-Local-first web app for visualizing AlphaFold2, ColabFold, and AlphaFold3 predictions with Mol* and an AlphaFold DB-style PAE workspace.
+Prototype local-first _all-vibe-coded_ web app for inspecting self-generated protein structure predictions just like in the AlphaFold database.  
 
-## What This Repo Should Track
+uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 
-Track these files and folders:
+## Features
 
-- `src/`
-- `example/`
-- `index.html`
-- `package.json`
-- `package-lock.json`
-- `tsconfig.json`
-- `tsconfig.node.json`
-- `vite.config.ts`
-- `vitest.config.ts`
-- `README.md`
-- `.gitignore`
+- load local prediction files directly in the browser
+- PDBe Mol* viewer with light UI and AFDB-like illustrative cartoon rendering
+- native Mol* sequence panel with pLDDT coloring
+- linked pAE heatmap, sequence, and 3D structure interactions
+- some content-based pairing of structure and JSON files, even when filenames do not match
+- when folder import is ambiguous or missing, resolver gives clear errors
+- structure-only loading for lone `.pdb` / `.cif` files that already contain pLDDTs
+- if no real pAE is present, the app uses a placeholder pAE matrix
+- examples included
 
-Do not track generated or machine-local artifacts:
+## supported Inputs
 
-- `node_modules/`
-- `dist/`
-- `*.tsbuildinfo`
-- generated config outputs like `vite.config.js`, `vite.config.d.ts`, `vitest.config.js`, `vitest.config.d.ts`
-- local `.env*` overrides
-- OS/editor files like `.DS_Store` and swap files
+The app currently understands:
 
-Why:
+- AlphaFold DB / AF2:
+  - structure `.pdb`, `.cif`, or `.mmcif`
+  - `predicted_aligned_error` JSON
+- ColabFold:
+  - structure `.pdb`
+  - scores JSON with `plddt`, optional `pae`, `ptm`, and `iptm`
+- Structure-only:
+  - a lone `.pdb` / `.cif` / `.mmcif` with confidence values embedded in the structure
 
-- source, config, lockfiles, and example fixtures make the app reproducible
-- dependencies and build output can be recreated from the lockfile
-- incremental caches and generated JS typings are local build artifacts
+## setup
 
-## Requirements
-
-- Node.js 18+ recommended
-- npm
-
-## Setup
-
-Install dependencies:
+install dependencies and run the dev server
 
 ```bash
 npm install
-```
-
-Start the dev server:
-
-```bash
 npm run dev
 ```
 
-Build the production bundle:
 
+production build:
 ```bash
 npm run build
-```
-
-Run tests:
-
-```bash
+# run tests
 npm test
-```
-
-Preview the production build locally:
-
-```bash
+# preview locally
 npm run preview
 ```
-
-## Using The App
-
-The app supports:
-
-- AlphaFold DB / AF2-style structure files with `predicted_aligned_error` JSON
-- ColabFold outputs with `scores.json`-style confidence data
-- AlphaFold3 outputs with `*_model.cif` and `*_confidences.json`
-
-You can:
-
-- drag and drop files into the app
-- load the bundled example files from `example/`
-- inspect structures in Mol*
-- use the PAE panel to brush-select residue blocks
-- see linked structure and sequence coloring
-
-## Notes
-
-- The viewer is client-side and static-hostable.
-- Large Mol* bundles are expected during production builds.
-- The app currently uses PDBe Mol* with a light UI skin and a cartoon-based illustrative style tuned to resemble AlphaFold DB.
