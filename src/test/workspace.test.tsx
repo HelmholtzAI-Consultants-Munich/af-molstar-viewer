@@ -17,9 +17,11 @@ function Harness() {
   const bundle = createToyBundle();
   const [hoveredResidues, setHoveredResidues] = useState<number[]>([]);
   const [pinnedResidues, setPinnedResidues] = useState<number[]>([]);
+  const [pinnedCell, setPinnedCell] = useState<{ x: number; y: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
   const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(true);
+  const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
 
   return (
     <Workspace
@@ -27,17 +29,32 @@ function Harness() {
       structureText="ATOM"
       hoveredResidues={hoveredResidues}
       pinnedResidues={pinnedResidues}
+      pinnedCell={pinnedCell}
       hoveredCell={hoveredCell}
       brushSelection={brushSelection}
       paeHoverSyncEnabled={paeHoverSyncEnabled}
+      paePairSelectionEnabled={paePairSelectionEnabled}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
       onPinResidues={setPinnedResidues}
+      onPinCell={setPinnedCell}
       onBrushSelectionChange={setBrushSelection}
       onTogglePaeHoverSync={() =>
         setPaeHoverSyncEnabled((value) => {
           const next = !value;
           if (!next) setHoveredResidues([]);
+          return next;
+        })
+      }
+      onTogglePaePairSelection={() =>
+        setPaePairSelectionEnabled((value) => {
+          const next = !value;
+          if (!next) {
+            setPinnedCell((currentPinnedCell) => {
+              if (currentPinnedCell) setPinnedResidues([]);
+              return null;
+            });
+          }
           return next;
         })
       }
@@ -94,5 +111,21 @@ describe('workspace interactions', () => {
 
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { hoveredResidues: number[] };
     expect(lastCall.hoveredResidues).toEqual([]);
+  });
+
+  it('can disable PAE pair selection clicks', () => {
+    render(<Harness />);
+    const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
+    Object.defineProperty(heatmap, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+
+    fireEvent.click(screen.getAllByRole('switch', { name: /pair selection/i })[0]);
+    fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
+    fireEvent.mouseUp(window, { clientX: 150, clientY: 0 });
+
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { pinnedResidues: number[] };
+    expect(lastCall.pinnedResidues).toEqual([]);
   });
 });

@@ -8,12 +8,15 @@ interface PaeHeatmapProps {
   maxValue: number;
   hoveredCell: { x: number; y: number } | null;
   pinnedResidues: number[];
+  pinnedCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
   hoverSyncEnabled: boolean;
+  pairSelectionEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onClickCell: (cell: { x: number; y: number }) => void;
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
   onToggleHoverSync: () => void;
+  onTogglePairSelection: () => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -28,8 +31,6 @@ interface Tick {
   value: number;
   ratio: number;
 }
-
-const SHOW_PINNED_SELECTION_OUTLINE = false;
 
 function colorForPae(value: number, maxValue: number): string {
   const ratio = Math.min(1, Math.max(0, value / Math.max(maxValue, 1)));
@@ -220,8 +221,66 @@ function drawBrushCornerGuides(
   if (typeof context.restore === 'function') context.restore();
 }
 
+function drawPinnedPairMarker(
+  context: CanvasRenderingContext2D,
+  pinnedCell: { x: number; y: number },
+  cellWidth: number,
+  cellHeight: number,
+) {
+  const min = Math.min(pinnedCell.x, pinnedCell.y);
+  const max = Math.max(pinnedCell.x, pinnedCell.y);
+  const left = min * cellWidth;
+  const top = min * cellHeight;
+  const right = (max + 1) * cellWidth;
+  const bottom = (max + 1) * cellHeight;
+
+  if (typeof context.save === 'function') context.save();
+  context.strokeStyle = '#ff6699';
+  context.lineWidth = 1.5;
+  if (typeof context.setLineDash === 'function') context.setLineDash([7, 5]);
+
+  if (pinnedCell.x === pinnedCell.y) {
+    context.strokeRect(pinnedCell.x * cellWidth, pinnedCell.y * cellHeight, cellWidth, cellHeight);
+    if (typeof context.restore === 'function') context.restore();
+    return;
+  }
+
+  context.beginPath();
+  if (pinnedCell.y < pinnedCell.x) {
+    context.moveTo(left, top);
+    context.lineTo(right, top);
+    context.moveTo(right, top);
+    context.lineTo(right, bottom);
+  } else {
+    context.moveTo(left, top);
+    context.lineTo(left, bottom);
+    context.moveTo(left, bottom);
+    context.lineTo(right, bottom);
+  }
+  context.stroke();
+  if (typeof context.restore === 'function') context.restore();
+}
+
+function mapClientToCell(
+  canvas: HTMLCanvasElement,
+  size: number,
+  clientX: number,
+  clientY: number,
+) {
+  const rect = canvas.getBoundingClientRect();
+  const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * size), 0, size - 1);
+  const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * size), 0, size - 1);
+  return {
+    x,
+    y,
+    localX: x,
+    localY: y,
+  };
+}
+
 export function PaeHeatmap(props: PaeHeatmapProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
   const [frameDrag, setFrameDrag] = useState<{
@@ -230,7 +289,6 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     selection: MatrixViewport;
   } | null>(null);
   const size = props.matrix.length;
-  const pinnedSet = useMemo(() => new Set(props.pinnedResidues), [props.pinnedResidues]);
   const yAxisTicks = useMemo(() => buildAxisTicks(size), [size]);
   const yAxisLabelTicks = useMemo(() => filterAxisLabelTicks(yAxisTicks), [yAxisTicks]);
   const xAxisTicks = useMemo(() => buildRegularAxisTicks(size), [size]);
@@ -247,10 +305,34 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       : props.brushSelection;
 
   useEffect(() => {
+    const canvas = matrixCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) return;
+    canvas.width = width * window.devicePixelRatio;
+    canvas.height = height * window.devicePixelRatio;
+    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    const cellWidth = width / Math.max(size, 1);
+    const cellHeight = height / Math.max(size, 1);
+
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        context.fillStyle = colorForPae(props.matrix[y][x], props.maxValue);
+        context.fillRect(x * cellWidth, y * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+      }
+    }
+  }, [props.matrix, props.maxValue, size]);
+
+  useEffect(() => {
     if (!frameDrag) return;
 
     const handleMove = (event: MouseEvent) => {
-      const canvas = canvasRef.current;
+      const canvas = overlayCanvasRef.current;
       if (!canvas || size <= 0) return;
       const rect = canvas.getBoundingClientRect();
       const cellWidth = rect.width / size;
@@ -283,30 +365,75 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
   }, [frameDrag, props, size]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    if (!dragStart) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const canvas = overlayCanvasRef.current;
+      if (!canvas) return;
+      const cell = mapClientToCell(canvas, size, event.clientX, event.clientY);
+      setDragCurrent({ x: cell.localX, y: cell.localY });
+      props.onBrushSelectionChange({
+        xStart: Math.min(dragStart.x, cell.localX),
+        xEnd: Math.max(dragStart.x, cell.localX),
+        yStart: Math.min(dragStart.y, cell.localY),
+        yEnd: Math.max(dragStart.y, cell.localY),
+      });
+    };
+
+    const handleUp = (event: MouseEvent) => {
+      const canvas = overlayCanvasRef.current;
+      if (!canvas) return;
+      const cell = mapClientToCell(canvas, size, event.clientX, event.clientY);
+      const minX = Math.min(dragStart.x, cell.localX);
+      const maxX = Math.max(dragStart.x, cell.localX);
+      const minY = Math.min(dragStart.y, cell.localY);
+      const maxY = Math.max(dragStart.y, cell.localY);
+      if (maxX === minX && maxY === minY) {
+        if (props.pairSelectionEnabled) {
+          props.onClickCell({ x: cell.x, y: cell.y });
+        }
+        props.onBrushSelectionChange(null);
+      } else {
+        props.onBrushSelectionChange({
+          xStart: minX,
+          xEnd: maxX,
+          yStart: minY,
+          yEnd: maxY,
+        });
+      }
+      setDragStart(null);
+      setDragCurrent(null);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [dragStart, props, size]);
+
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext('2d');
     if (!context) return;
     const width = canvas.clientWidth;
-    const height = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) return;
     canvas.width = width * window.devicePixelRatio;
     canvas.height = height * window.devicePixelRatio;
-    context.scale(window.devicePixelRatio, window.devicePixelRatio);
+    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
     context.clearRect(0, 0, width, height);
 
     const cellWidth = width / Math.max(size, 1);
     const cellHeight = height / Math.max(size, 1);
 
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        context.fillStyle = colorForPae(props.matrix[y][x], props.maxValue);
-        context.fillRect(x * cellWidth, y * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
-      }
-    }
-
     if (props.hoveredCell && !frameDrag) {
-      context.strokeStyle = '#fff36a';
-      context.lineWidth = 2;
+      if (typeof context.save === 'function') context.save();
+      context.strokeStyle = '#111111';
+      context.lineWidth = 1;
+      if (typeof context.setLineDash === 'function') context.setLineDash([4, 4]);
       const x = props.hoveredCell.x * cellWidth;
       const y = props.hoveredCell.y * cellHeight;
       context.beginPath();
@@ -316,18 +443,11 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       context.lineTo(x + cellWidth / 2, height);
       context.stroke();
       context.strokeRect(x, y, cellWidth, cellHeight);
+      if (typeof context.restore === 'function') context.restore();
     }
 
-    if (SHOW_PINNED_SELECTION_OUTLINE && pinnedSet.size > 0 && !activeBrush) {
-      const values = [...pinnedSet];
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      if (typeof context.save === 'function') context.save();
-      context.strokeStyle = '#ff6699';
-      context.lineWidth = 2;
-      if (typeof context.setLineDash === 'function') context.setLineDash([9, 6]);
-      context.strokeRect(min * cellWidth, min * cellHeight, (max - min + 1) * cellWidth, (max - min + 1) * cellHeight);
-      if (typeof context.restore === 'function') context.restore();
+    if (props.pairSelectionEnabled && props.pinnedCell && props.pinnedResidues.length > 1 && !activeBrush) {
+      drawPinnedPairMarker(context, props.pinnedCell, cellWidth, cellHeight);
     }
 
     if (activeBrush) {
@@ -348,20 +468,22 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       if (typeof context.restore === 'function') context.restore();
       drawBrushDiagonalHighlights(context, activeBrush, size, cellWidth, cellHeight);
     }
-  }, [activeBrush, dragCurrent, dragStart, frameDrag, pinnedSet, props.hoveredCell, props.matrix, props.maxValue, size]);
+  }, [
+    activeBrush,
+    dragCurrent,
+    dragStart,
+    frameDrag,
+    props.hoveredCell,
+    props.pairSelectionEnabled,
+    props.pinnedCell,
+    props.pinnedResidues.length,
+    size,
+  ]);
 
   const mapPointer = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
+    const canvas = overlayCanvasRef.current;
     if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * size), 0, size - 1);
-    const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * size), 0, size - 1);
-    return {
-      x,
-      y,
-      localX: x,
-      localY: y,
-    };
+    return mapClientToCell(canvas, size, clientX, clientY);
   };
 
   return (
@@ -386,21 +508,17 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
             </div>
             <div className="heatmap-canvas-wrap">
               <canvas
-                ref={canvasRef}
+                ref={matrixCanvasRef}
+                className="heatmap-matrix-canvas"
+                aria-hidden="true"
+              />
+              <canvas
+                ref={overlayCanvasRef}
                 className="heatmap-canvas"
                 onMouseMove={(event) => {
                   const cell = mapPointer(event.clientX, event.clientY);
                   if (!cell) return;
                   props.onHoverCell({ x: cell.x, y: cell.y });
-                  if (dragStart) {
-                    setDragCurrent({ x: cell.localX, y: cell.localY });
-                    props.onBrushSelectionChange({
-                      xStart: Math.min(dragStart.x, cell.localX),
-                      xEnd: Math.max(dragStart.x, cell.localX),
-                      yStart: Math.min(dragStart.y, cell.localY),
-                      yEnd: Math.max(dragStart.y, cell.localY),
-                    });
-                  }
                 }}
                 onMouseLeave={() => {
                   props.onHoverCell(null);
@@ -410,27 +528,6 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   if (!cell) return;
                   setDragStart({ x: cell.localX, y: cell.localY });
                   setDragCurrent({ x: cell.localX, y: cell.localY });
-                }}
-                onMouseUp={(event) => {
-                  const cell = mapPointer(event.clientX, event.clientY);
-                  if (!cell || !dragStart) return;
-                  const minX = Math.min(dragStart.x, cell.localX);
-                  const maxX = Math.max(dragStart.x, cell.localX);
-                  const minY = Math.min(dragStart.y, cell.localY);
-                  const maxY = Math.max(dragStart.y, cell.localY);
-                  if (maxX === minX && maxY === minY) {
-                    props.onClickCell({ x: cell.x, y: cell.y });
-                    props.onBrushSelectionChange(null);
-                  } else {
-                    props.onBrushSelectionChange({
-                      xStart: minX,
-                      xEnd: maxX,
-                      yStart: minY,
-                      yEnd: maxY,
-                    });
-                  }
-                  setDragStart(null);
-                  setDragCurrent(null);
                 }}
               />
               {props.brushSelection && size > 0 && (
@@ -550,6 +647,21 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   </span>
                 </span>
                 <span className="switch-label">3D hover</span>
+              </label>
+              <label className="switch-field">
+                <span className="switch-control">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="Pair selection"
+                    checked={props.pairSelectionEnabled}
+                    onChange={props.onTogglePairSelection}
+                  />
+                  <span className="switch-track" aria-hidden="true">
+                    <span className="switch-thumb" />
+                  </span>
+                </span>
+                <span className="switch-label">Pair selection</span>
               </label>
             </div>
           </div>

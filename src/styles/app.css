@@ -358,6 +358,7 @@ select {
   white-space: nowrap;
 }
 
+.heatmap-matrix-canvas,
 .heatmap-canvas {
   aspect-ratio: 1;
   width: 100%;
@@ -366,8 +367,20 @@ select {
   justify-self: stretch;
   align-self: stretch;
   display: block;
+}
+
+.heatmap-matrix-canvas {
   border: 1px solid #7f8d73;
   background: #fff;
+  position: relative;
+}
+
+.heatmap-canvas {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: crosshair;
 }
 
 .heatmap-canvas-wrap {

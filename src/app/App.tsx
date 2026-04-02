@@ -26,9 +26,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [hoveredResidues, setHoveredResidues] = useState<number[]>([]);
   const [pinnedResidues, setPinnedResidues] = useState<number[]>([]);
+  const [pinnedCell, setPinnedCell] = useState<{ x: number; y: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
   const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(false);
+  const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
   const pendingResolver = useRef<((payload: unknown) => void) | null>(null);
 
   const fileMap = useMemo(() => new Map(files.map((file) => [file.name, file.text])), [files]);
@@ -59,9 +61,11 @@ export function App() {
   const resetSelection = (_nextBundle: PredictionBundle) => {
     setHoveredResidues([]);
     setPinnedResidues([]);
+    setPinnedCell(null);
     setHoveredCell(null);
     setBrushSelection(null);
     setPaeHoverSyncEnabled(_nextBundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD);
+    setPaePairSelectionEnabled(true);
   };
 
   const loadGroup = async (groupId: string, choice?: BundleChoice, sourceFiles = files) => {
@@ -136,17 +140,32 @@ export function App() {
           structureText={currentStructureText}
           hoveredResidues={hoveredResidues}
           pinnedResidues={pinnedResidues}
+          pinnedCell={pinnedCell}
           hoveredCell={hoveredCell}
           brushSelection={brushSelection}
           paeHoverSyncEnabled={paeHoverSyncEnabled}
+          paePairSelectionEnabled={paePairSelectionEnabled}
           onHoverResidues={(indices) => setHoveredResidues(indices)}
           onHoverCell={setHoveredCell}
           onPinResidues={(indices) => setPinnedResidues(indices)}
+          onPinCell={setPinnedCell}
           onBrushSelectionChange={setBrushSelection}
           onTogglePaeHoverSync={() => {
             setPaeHoverSyncEnabled((enabled) => {
               const next = !enabled;
               if (!next) setHoveredResidues([]);
+              return next;
+            });
+          }}
+          onTogglePaePairSelection={() => {
+            setPaePairSelectionEnabled((enabled) => {
+              const next = !enabled;
+              if (!next) {
+                setPinnedCell((currentPinnedCell) => {
+                  if (currentPinnedCell) setPinnedResidues([]);
+                  return null;
+                });
+              }
               return next;
             });
           }}
