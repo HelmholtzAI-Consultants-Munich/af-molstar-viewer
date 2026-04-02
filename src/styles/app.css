@@ -173,7 +173,7 @@ select {
 .workspace-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(360px, 1.05fr) minmax(420px, 1fr) 300px;
+  grid-template-columns: clamp(320px, 31vw, 620px) minmax(420px, 1fr) 300px;
   grid-template-areas:
     'sequence sequence sequence'
     'heatmap viewer legend';
@@ -187,6 +187,11 @@ select {
 
 .heatmap-panel {
   grid-area: heatmap;
+  justify-self: start;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .viewer-panel {
@@ -209,31 +214,123 @@ select {
   margin-bottom: 0.75rem;
 }
 
-.heatmap-shell {
-  display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  grid-template-rows: 24px minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: stretch;
+.heatmap-chart {
   width: 100%;
+  max-width: 620px;
 }
 
-.heatmap-axis {
+.heatmap-chart-main {
+  min-width: 0;
+}
+
+.heatmap-plot-row {
+  display: grid;
+  grid-template-columns: 56px 44px minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: stretch;
+}
+
+.heatmap-plot-column {
+  min-width: 0;
+}
+
+.heatmap-y-label {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #444;
-  font-size: 0.9rem;
-}
-
-.heatmap-axis-left {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #111;
+}
+
+.heatmap-y-ticks,
+.heatmap-x-ticks,
+.heatmap-colorbar-ticks {
+  position: relative;
+}
+
+.heatmap-y-ticks {
+  height: 100%;
+  min-height: 0;
+}
+
+.heatmap-x-ticks {
+  height: 28px;
+  margin-top: 0.25rem;
+}
+
+.heatmap-y-ticks-spacer {
+  width: 44px;
+  flex: 0 0 44px;
+}
+
+.heatmap-tick {
+  position: absolute;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #222;
+  white-space: nowrap;
+}
+
+.heatmap-y-ticks .heatmap-tick {
+  right: 0;
+  padding-right: 12px;
+}
+
+.heatmap-x-ticks .heatmap-tick,
+.heatmap-colorbar-ticks .heatmap-tick {
+  top: 0;
+}
+
+.heatmap-tick-start {
+  transform: none;
+}
+
+.heatmap-y-ticks .heatmap-tick-middle {
+  transform: translateY(-50%);
+}
+
+.heatmap-y-ticks .heatmap-tick-end {
+  transform: translateY(-100%);
+}
+
+.heatmap-x-ticks .heatmap-tick-middle,
+.heatmap-colorbar-ticks .heatmap-tick-middle {
+  transform: translateX(-50%);
+}
+
+.heatmap-x-ticks .heatmap-tick-end,
+.heatmap-colorbar-ticks .heatmap-tick-end {
+  transform: translateX(-100%);
+}
+
+.heatmap-x-ticks .heatmap-tick::before,
+.heatmap-colorbar-ticks .heatmap-tick::before,
+.heatmap-y-ticks .heatmap-tick::after {
+  content: '';
+  position: absolute;
+  background: #222;
+}
+
+.heatmap-x-ticks .heatmap-tick::before,
+.heatmap-colorbar-ticks .heatmap-tick::before {
+  left: 0;
+  top: -10px;
+  width: 1px;
+  height: 8px;
+}
+
+.heatmap-y-ticks .heatmap-tick::after {
+  top: 50%;
+  right: 0;
+  width: 8px;
+  height: 1px;
+  transform: translateY(-50%);
 }
 
 .heatmap-canvas {
-  grid-column: 2;
-  grid-row: 2;
   aspect-ratio: 1;
   width: 100%;
   max-width: 100%;
@@ -245,18 +342,97 @@ select {
   background: #fff;
 }
 
-.heatmap-scale {
+.heatmap-x-label,
+.heatmap-colorbar-label {
+  margin-left: 44px;
+  text-align: center;
+  color: #111;
+}
+
+.heatmap-x-label {
+  margin-top: 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.heatmap-colorbar-row {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.85rem;
+  align-items: start;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.heatmap-colorbar-group {
+  flex: 1;
+  min-width: 0;
 }
 
 .heatmap-gradient {
-  flex: 1;
+  width: 100%;
   height: 18px;
-  border: 1px solid #7f8d73;
-  background: linear-gradient(90deg, #0d5b24 0%, #2f8e43 35%, #8cc68f 70%, #edf4eb 100%);
+  border: 1px solid #8b8f8a;
+  background: linear-gradient(90deg, #165c2a 0%, #2d8b40 26%, #57aa5e 54%, #9fd29e 78%, #f3f7ef 100%);
+}
+
+.heatmap-colorbar-ticks {
+  height: 24px;
+  margin-top: 0.35rem;
+}
+
+.heatmap-colorbar-label {
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.heatmap-description,
+.legend-description {
+  color: #222;
+}
+
+.heatmap-footer {
+  margin-left: 44px;
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.heatmap-description {
+  margin: 0;
+}
+
+.heatmap-description h3,
+.legend-description h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.heatmap-description p,
+.legend-description p {
+  margin: 0;
+  font-size: 0.97rem;
+  line-height: 1.55;
+  color: #333;
+}
+
+.heatmap-description a,
+.legend-description a {
+  color: #2a67a0;
+  text-decoration: none;
+}
+
+.heatmap-description a:hover,
+.legend-description a:hover {
+  text-decoration: underline;
+}
+
+.heatmap-actions {
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .molstar-shell {
@@ -340,14 +516,6 @@ select {
   color: #222 !important;
 }
 
-.legend-header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--accent-blue);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
 .legend-list {
   list-style: none;
   padding: 1rem;
@@ -394,12 +562,17 @@ select {
 .metric-list dt {
   padding-top: 0.85rem;
   color: #555;
+  font-weight: 600;
 }
 
 .metric-list dd {
   margin: 0;
   padding-top: 0.85rem;
   font-weight: 600;
+}
+
+.legend-description {
+  padding: 0 1rem 1rem;
 }
 
 .warning-box {
@@ -440,5 +613,13 @@ select {
   .molstar-host {
     height: 480px;
     min-height: 480px;
+  }
+
+  .heatmap-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .heatmap-actions {
+    justify-content: flex-start;
   }
 }

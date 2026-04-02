@@ -11,7 +11,7 @@ const MOLSTAR_RENDER_OPTIONS = {
   rightPanel: false,
   logPanel: false,
   sequencePanel: false,
-  hideControls: true,
+  hideControls: false,
   selectInteraction: false,
   hideCanvasControls: ['controlToggle', 'animation', 'trajectory', 'selection', 'screenshot', 'expand', 'controlInfo'],
 };

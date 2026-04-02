@@ -6,9 +6,13 @@ interface LegendPanelProps {
 }
 
 export function LegendPanel(props: LegendPanelProps) {
+  const meanConfidence =
+    props.bundle.residues.length > 0
+      ? props.bundle.residues.reduce((total, residue) => total + residue.confidence, 0) / props.bundle.residues.length
+      : 0;
+
   return (
     <aside className="panel legend-panel">
-      <div className="legend-header">Model Confidence</div>
       <ul className="legend-list">
         <li>
           <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS['very-high'] }} />
@@ -27,15 +31,29 @@ export function LegendPanel(props: LegendPanelProps) {
           Very low (pLDDT &lt; 50)
         </li>
       </ul>
-      <p className="legend-copy">pLDDT is a per-residue measure of local confidence.</p>
       <dl className="metric-list">
-        {Object.entries(props.bundle.summary).map(([key, value]) => (
-          <div key={key}>
-            <dt>{key}</dt>
-            <dd>{value.toFixed(2)}</dd>
-          </div>
-        ))}
+        <div>
+          <dt>Mean confidence</dt>
+          <dd>{meanConfidence.toFixed(1)}</dd>
+        </div>
       </dl>
+      <div className="legend-description">
+        <h3>Model Confidence (pLDDT)</h3>
+        <p>
+          The predicted local distance difference test (pLDDT) is a per-residue measure of local confidence scaled
+          from 0&nbsp;to&nbsp;100.{' '}
+          <strong>
+            <a
+              href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Learn more
+            </a>
+          </strong>
+          .
+        </p>
+      </div>
       {props.bundle.metadata.warnings.length > 0 && (
         <div className="warning-box">
           {props.bundle.metadata.warnings.map((warning) => (

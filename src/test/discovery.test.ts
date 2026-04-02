@@ -59,6 +59,31 @@ describe('discovery and adapter loading', () => {
     expect(multimerBundle.summary.ipTM).toBeCloseTo(0.81);
   });
 
+  it('detects generic ColabFold json basenames by content', () => {
+    const files = [
+      {
+        name: 'l73.pdb',
+        text: readFileSync(resolve(process.cwd(), 'example/l73.pdb'), 'utf8'),
+      },
+      {
+        name: 'l73.json',
+        text: readFileSync(resolve(process.cwd(), 'example/l73.json'), 'utf8'),
+      },
+    ];
+
+    const groups = discoverGroups(files);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].suggestedSource).toBe('colabfold');
+    expect(groups[0].unresolved).toBe(false);
+    expect(groups[0].scoreJsonOptions).toEqual(['l73.json']);
+
+    const bundle = loadBundle(files, groups[0]);
+    expect(bundle.source).toBe('colabfold');
+    expect(bundle.structure.fileName).toBe('l73.pdb');
+    expect(bundle.summary.pTM).toBeCloseTo(0.54);
+    expect(bundle.paeMax).toBeCloseTo(30.609375);
+  });
+
   it('projects AF3 token-level confidence down to polymer residues only', () => {
     const files = [
       fixture('./fixtures/af3/toy_model.cif'),

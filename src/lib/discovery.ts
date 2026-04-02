@@ -31,6 +31,36 @@ function isScoreJson(name: string): boolean {
   return /(scores?|result_model_\d+|full_data_\d+)\.json$/i.test(name) && !isPaeJson(name) && !isConfidenceJson(name);
 }
 
+function tryParseJson(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeAf2PaeJson(json: unknown): boolean {
+  const paeObject = Array.isArray(json) ? json[0] : json;
+  return Boolean(
+    paeObject &&
+      typeof paeObject === 'object' &&
+      'predicted_aligned_error' in paeObject &&
+      Array.isArray((paeObject as { predicted_aligned_error: unknown }).predicted_aligned_error),
+  );
+}
+
+function looksLikeAf3ConfidenceJson(json: unknown): boolean {
+  return Boolean(json && typeof json === 'object' && 'pae' in (json as object) && 'atom_plddts' in (json as object));
+}
+
+function looksLikeColabFoldScoreJson(json: unknown): boolean {
+  return Boolean(
+    json &&
+      typeof json === 'object' &&
+      ('plddt' in (json as object) || 'pae' in (json as object) || 'predicted_aligned_error' in (json as object)),
+  );
+}
+
 export function discoverGroups(files: WorkerInputFile[]): DiscoveryGroup[] {
   const grouped = new Map<string, Omit<DiscoveryGroup, 'suggestedSource' | 'unresolved' | 'reasons'>>();
 
@@ -49,11 +79,22 @@ export function discoverGroups(files: WorkerInputFile[]): DiscoveryGroup[] {
         matchedFiles: [],
       };
     existing.matchedFiles.push(file.name);
-    if (isStructureFile(file.name)) existing.structureOptions.push(file.name);
-    else if (isConfidenceJson(file.name)) existing.confidenceJsonOptions.push(file.name);
-    else if (isSummaryJson(file.name)) existing.summaryJsonOptions.push(file.name);
-    else if (isPaeJson(file.name)) existing.paeJsonOptions.push(file.name);
-    else if (isScoreJson(file.name)) existing.scoreJsonOptions.push(file.name);
+    if (isStructureFile(file.name)) {
+      existing.structureOptions.push(file.name);
+    } else if (isConfidenceJson(file.name)) {
+      existing.confidenceJsonOptions.push(file.name);
+    } else if (isSummaryJson(file.name)) {
+      existing.summaryJsonOptions.push(file.name);
+    } else if (isPaeJson(file.name)) {
+      existing.paeJsonOptions.push(file.name);
+    } else if (isScoreJson(file.name)) {
+      existing.scoreJsonOptions.push(file.name);
+    } else if (/\.json$/i.test(file.name)) {
+      const parsedJson = tryParseJson(file.text);
+      if (looksLikeAf3ConfidenceJson(parsedJson)) existing.confidenceJsonOptions.push(file.name);
+      else if (looksLikeAf2PaeJson(parsedJson)) existing.paeJsonOptions.push(file.name);
+      else if (looksLikeColabFoldScoreJson(parsedJson)) existing.scoreJsonOptions.push(file.name);
+    }
     grouped.set(stem, existing);
   }
 
