@@ -17,6 +17,7 @@ interface PaeHeatmapProps {
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
   onToggleHoverSync: () => void;
   onTogglePairSelection: () => void;
+  onClearPairSelection: () => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -303,6 +304,13 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
           yEnd: Math.max(dragStart.y, dragCurrent.y),
         }
       : props.brushSelection;
+  const pinnedPairBounds =
+    props.pairSelectionEnabled && props.pinnedCell && props.pinnedResidues.length > 1
+      ? {
+          min: Math.min(props.pinnedCell.x, props.pinnedCell.y),
+          max: Math.max(props.pinnedCell.x, props.pinnedCell.y),
+        }
+      : null;
 
   useEffect(() => {
     const canvas = matrixCanvasRef.current;
@@ -569,6 +577,23 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   )}
                 </>
               )}
+              {pinnedPairBounds && !activeBrush && !frameDrag && (
+                <button
+                  type="button"
+                  className="heatmap-close-button heatmap-pair-close-button"
+                  style={{
+                    left: `calc(${((props.pinnedCell!.x + 0.5) / size) * 100}% + 20px)`,
+                    top: `calc(${((props.pinnedCell!.y + 0.5) / size) * 100}% - 20px)`,
+                  }}
+                  aria-label="Clear pair"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    props.onClearPairSelection();
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
           <div className="heatmap-x-axis-row">
@@ -634,11 +659,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
             </div>
             <div className="heatmap-actions">
               <label className="switch-field">
+                <span className="switch-label">hover</span>
                 <span className="switch-control">
                   <input
                     type="checkbox"
                     role="switch"
-                    aria-label="3D hover"
+                    aria-label="hover"
                     checked={props.hoverSyncEnabled}
                     onChange={props.onToggleHoverSync}
                   />
@@ -646,14 +672,14 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                     <span className="switch-thumb" />
                   </span>
                 </span>
-                <span className="switch-label">3D hover</span>
               </label>
               <label className="switch-field">
+                <span className="switch-label">pairs</span>
                 <span className="switch-control">
                   <input
                     type="checkbox"
                     role="switch"
-                    aria-label="Pair selection"
+                    aria-label="pairs"
                     checked={props.pairSelectionEnabled}
                     onChange={props.onTogglePairSelection}
                   />
@@ -661,7 +687,6 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                     <span className="switch-thumb" />
                   </span>
                 </span>
-                <span className="switch-label">Pair selection</span>
               </label>
             </div>
           </div>

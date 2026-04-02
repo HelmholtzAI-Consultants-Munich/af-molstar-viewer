@@ -37,23 +37,29 @@ export function Workspace(props: WorkspaceProps) {
         pairSelectionEnabled={props.paePairSelectionEnabled}
         onHoverCell={(cell) => {
           props.onHoverCell(cell);
-          if (props.paeHoverSyncEnabled) {
+          if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
             props.onHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
           }
         }}
         onClickCell={(cell) => {
           props.onPinCell(cell);
           props.onPinResidues(summarizeResidueSelection([cell.x, cell.y]));
+          props.onHoverResidues([]);
         }}
         onBrushSelectionChange={props.onBrushSelectionChange}
         onToggleHoverSync={props.onTogglePaeHoverSync}
         onTogglePairSelection={props.onTogglePaePairSelection}
+        onClearPairSelection={() => {
+          props.onPinCell(null);
+          props.onPinResidues([]);
+        }}
       />
       <MolstarPanel
         bundle={props.bundle}
         structureText={props.structureText}
         hoveredResidues={props.hoveredResidues}
         pinnedResidues={props.pinnedResidues}
+        pinnedCell={props.pinnedCell}
         brushSelection={props.brushSelection}
         onHoverResidue={(index) => props.onHoverResidues(index === null ? [] : [index])}
         onClickResidue={(index) => {

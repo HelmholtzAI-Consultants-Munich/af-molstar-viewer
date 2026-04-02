@@ -12,9 +12,11 @@ const MOLSTAR_RENDER_OPTIONS = {
   logPanel: false,
   sequencePanel: false,
   hideControls: false,
-  selectInteraction: false,
+  selectInteraction: true,
   hideCanvasControls: [],
 };
+
+const PAE_PAIR_SELECTION_COLOR = '#ff6699';
 
 const MOLSTAR_ILLUSTRATIVE_STYLE = {
   componentOptions: {
@@ -74,6 +76,27 @@ function queriesWithColor(
 async function applyDefaultSequenceTheme(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
   await viewer.visual.sequenceColor({
     data: [],
+    theme: {
+      name: 'plddt-confidence',
+      params: {},
+      themeStrength: 1,
+    },
+  });
+}
+
+async function applyPinnedPairSelection(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+  indices: number[],
+) {
+  const coloredQueries = queriesWithColor(residues, indices, PAE_PAIR_SELECTION_COLOR);
+
+  await viewer.visual.select({
+    data: coloredQueries,
+  });
+
+  await viewer.visual.sequenceColor({
+    data: coloredQueries,
     theme: {
       name: 'plddt-confidence',
       params: {},
@@ -178,6 +201,7 @@ interface MolstarPanelProps {
   structureText: string;
   hoveredResidues: number[];
   pinnedResidues: number[];
+  pinnedCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
   onHoverResidue: (index: number | null) => void;
   onClickResidue: (index: number | null) => void;
@@ -298,10 +322,15 @@ export function MolstarPanel(props: MolstarPanelProps) {
       return;
     }
 
+    if (props.pinnedCell) {
+      void applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
+      return;
+    }
+
     const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
     void viewer.visual.select({ data: queries });
     void applyDefaultSequenceTheme(viewer);
-  }, [props.brushSelection, props.bundle.residues, props.pinnedResidues]);
+  }, [props.brushSelection, props.bundle.residues, props.pinnedCell, props.pinnedResidues]);
 
   return (
     <>

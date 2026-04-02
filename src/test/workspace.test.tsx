@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Workspace } from '../components/Workspace';
 import { createToyBundle } from './helpers';
 
@@ -58,6 +58,10 @@ function Harness() {
           return next;
         })
       }
+      onClearPairSelection={() => {
+        setPinnedCell(null);
+        setPinnedResidues([]);
+      }}
     />
   );
 }
@@ -65,6 +69,10 @@ function Harness() {
 describe('workspace interactions', () => {
   beforeEach(() => {
     viewerSpy.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('links PAE hover into Molstar residue hover props', () => {
@@ -113,6 +121,22 @@ describe('workspace interactions', () => {
     expect(lastCall.hoveredResidues).toEqual([]);
   });
 
+  it('still allows pair selection clicks when 3D hover is off', () => {
+    render(<Harness />);
+    const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
+    Object.defineProperty(heatmap, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+
+    fireEvent.click(screen.getAllByRole('switch', { name: /3d hover/i })[0]);
+    fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
+    fireEvent.mouseUp(window, { clientX: 0, clientY: 150 });
+
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { pinnedResidues: number[] };
+    expect(lastCall.pinnedResidues).toEqual([0, 1]);
+  });
+
   it('can disable PAE pair selection clicks', () => {
     render(<Harness />);
     const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
@@ -124,6 +148,39 @@ describe('workspace interactions', () => {
     fireEvent.click(screen.getAllByRole('switch', { name: /pair selection/i })[0]);
     fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
     fireEvent.mouseUp(window, { clientX: 150, clientY: 0 });
+
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { pinnedResidues: number[] };
+    expect(lastCall.pinnedResidues).toEqual([]);
+  });
+
+  it('does not update Molstar hover while a pair is pinned', () => {
+    render(<Harness />);
+    const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
+    Object.defineProperty(heatmap, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+
+    fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
+    fireEvent.mouseUp(window, { clientX: 0, clientY: 150 });
+    fireEvent.mouseMove(heatmap, { clientX: 300, clientY: 0 });
+
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { hoveredResidues: number[]; pinnedResidues: number[] };
+    expect(lastCall.pinnedResidues).toEqual([0, 1]);
+    expect(lastCall.hoveredResidues).toEqual([]);
+  });
+
+  it('can clear a pinned pair from the floating close button', () => {
+    render(<Harness />);
+    const heatmap = document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
+    Object.defineProperty(heatmap, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+
+    fireEvent.mouseDown(heatmap, { clientX: 0, clientY: 150 });
+    fireEvent.mouseUp(window, { clientX: 0, clientY: 150 });
+    fireEvent.click(screen.getByRole('button', { name: /clear pair/i }));
 
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { pinnedResidues: number[] };
     expect(lastCall.pinnedResidues).toEqual([]);
