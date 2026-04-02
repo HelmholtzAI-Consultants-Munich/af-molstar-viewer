@@ -4,7 +4,7 @@ Prototype local-first _all-vibe-coded_ web app for inspecting self-generated pro
 
 uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 
-<video src="demo.mp4" width="600" controls></video>
+![demo](demo.gif)
 
 ## Features
 
