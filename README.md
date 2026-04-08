@@ -9,12 +9,12 @@ uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 > - There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre-or post-processing and orchestration.
 > - The Web UI should gain functionality to:
 >   - display the structure of the target protein / template pair
->   - enable selecting the interface / hotspots
+>   - enable selecting the interface, i.e. binding hotspots
 >   - enable cropping that protein
 >   - show the generated binders
->   - show the AF2-predictes structures of the binders
+>   - show the AF2-predicted structures of the binders
 >   - allow comparing the binders, maybe in separate connected views or with overlaying
->   - enable saving views as Mol* states
+>   - enable saving/exporting views from viewer panels as Mol* states
 
 ### TODO
 - ask codex to evaluate architecture for this purpose

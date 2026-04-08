@@ -1,95 +1,150 @@
-# Frontend Evolution Plan For AF Mol* Viewer
+# AF Mol* Viewer + FastAPI Contract Plan
 
 ## Summary
 
-### Architecture review
-- High: [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L21) is the current state hub for import state, loaded data, and all interaction state. That works for one loaded prediction, but it will become brittle once the UI needs target/template pairs, binder lists, compare sessions, and saved views.
-- High: [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L35) uses a single `pendingResolver` for worker responses, and [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L97) chains discovery into a fire-and-forget load. Future multi-panel or concurrent loads need request IDs and stale-response protection.
-- High: [types.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/types.ts#L41) models the app around one `PredictionBundle` with one structure and one PAE matrix. That is the main mismatch with the README roadmap.
-- Medium: [MolstarPanel.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/components/MolstarPanel.tsx#L235) embeds viewer lifecycle, event wiring, styling, and selection application in one component. For saved states and synchronized comparison, the viewer needs a thinner panel and a reusable controller layer.
-- Medium: [helpers.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/adapters/helpers.ts#L42) drops ligands and keeps only generic polymer chains. Future interface/hotspot/cropping features need explicit structure roles and chain-level semantics, not just residue arrays.
+The current app is a strong single-prediction prototype, but its main state model is still centered on one loaded `PredictionBundle` and one active workspace. That is the main architectural mismatch with the README roadmap: target/template pairs, crop artifacts, generated binders, AF2 binder predictions, compare sessions, and saved Mol* views all need to coexist in one persistent project/workspace model instead of replacing each other.
 
-### Recommended direction
-Refactor the app from “single loaded bundle with one viewer workspace” into “workspace document with multiple structure entries and reusable viewer sessions.” Keep local-file import as the first data source, but stop letting it define the whole domain model.
+The plan should therefore shift from “extend the viewer” to “introduce a project/workspace domain with backend-backed artifacts and jobs.” Cropping and binder generation should be modeled as asynchronous FastAPI operations that produce new persisted artifacts, not as frontend-only transforms.
 
 ## Key Changes
 
-### 1. Replace the single-bundle app model
-- Keep parsing/adapters as the low-level import layer, but make them output `StructureEntry` records instead of directly defining the whole UI state.
-- Introduce a top-level `WorkspaceDocument` state in `App` that owns:
-  - imported structures and their metadata
-  - semantic roles (`target`, `template`, `binder`, `binder_prediction`)
-  - named selections (`hotspots`, `interface`, `crop`)
-  - open comparison sessions
-  - saved Mol* view states
-- Split UI state into document state vs view state. Document state is persistent and shareable; hover/pin/brush state stays per viewer session.
+### 1. Introduce a backend-backed workspace/project model
+- Replace the frontend’s conceptual center from a single loaded prediction to a `WorkspaceProject`.
+- The project should own:
+  - source structures: target, template, binder, binder prediction
+  - derived artifacts: cropped target variants, generated binder sets, AF2 prediction results
+  - saved residue selections: hotspots and interface selections
+  - viewer state snapshots: saved Mol* states
+  - comparison sessions
+  - job references and job history
+- Keep local file import as an ingestion mode, but treat imported files as the way a project gets seeded, not as the permanent app architecture.
 
-### 2. Add a reusable viewer-session layer
-- Extract a viewer controller from `MolstarPanel` that owns Mol* instance creation, highlight/select/focus application, and save/restore of Mol* state snapshots.
-- Make `Workspace` render one or more viewer sessions from configuration instead of assuming one fixed PAE + one fixed Mol* panel.
-- Use side-by-side synchronized viewers as the primary compare mode:
-  - shared selection bus for residue/chain selections
+### 2. Clarify the FastAPI contract now
+Use an async job model for anything that may touch Python orchestration or SLURM.
+
+Recommended backend resource families:
+- `projects`
+- `structures`
+- `selections`
+- `crop_variants`
+- `binder_runs`
+- `binder_candidates`
+- `prediction_runs`
+- `viewer_states`
+- `jobs`
+
+Recommended contract shape:
+- `POST /projects`
+  - create a project
+- `POST /projects/:projectId/import`
+  - ingest uploaded structure/score/PAE files into canonical backend structures
+- `GET /projects/:projectId`
+  - fetch the project with artifact summaries
+- `GET /projects/:projectId/structures`
+  - list target/template/binder-related structures and derived variants
+- `POST /projects/:projectId/selections`
+  - save a named hotspot/interface selection against a structure or crop variant
+- `POST /projects/:projectId/crops`
+  - start crop creation as an async job
+  - input: source target structure ID, crop definition, optional label
+  - output: job reference
+- `POST /projects/:projectId/binder-runs`
+  - start binder generation as an async job
+  - input: chosen target or crop variant ID, selection IDs, run parameters
+  - output: job reference
+- `POST /projects/:projectId/prediction-runs`
+  - start AF2/ColabFold prediction for selected binders as an async job
+  - input: binder candidate IDs plus prediction settings
+  - output: job reference
+- `GET /jobs/:jobId`
+  - fetch status, progress, timestamps, and produced artifact IDs
+- `GET /projects/:projectId/viewer-states`
+- `POST /projects/:projectId/viewer-states`
+
+Job payload expectations:
+- every async mutation returns `jobId`, `jobType`, `status`
+- job status includes `queued | running | succeeded | failed | cancelled`
+- successful jobs include produced artifact IDs
+- failed jobs include a user-displayable message plus backend detail for debugging
+
+### 3. Define artifact semantics clearly
+- Cropping produces a new persisted `crop_variant`, never an in-place overwrite.
+- Binder generation consumes:
+  - a target structure ID or crop variant ID
+  - saved hotspot/interface selection IDs
+  - run parameters
+- Generated binders become backend artifacts grouped under a `binder_run`.
+- AF2-predicted binder structures are produced by a separate prediction run and linked back to binder candidates.
+- Viewer compare sessions should compare persisted artifacts, not transient local blobs.
+
+### 4. Reorganize the frontend around project state and viewer state
+- Keep `App` as the root composition layer, but move toward a project reducer/store with separate slices for:
+  - project/artifact data
+  - job status
+  - viewer sessions
+  - transient hover/pin/brush interactions
+- Replace the current single active `bundle` model with artifact-aware entities:
+  - `StructureArtifact`
+  - `CropVariant`
+  - `BinderRun`
+  - `BinderCandidate`
+  - `PredictionRun`
+  - `ViewerSession`
+- Keep the worker/import code, but constrain it to local parsing and preview/import preparation.
+- Introduce request IDs for worker messages so frontend local parsing can safely support concurrent actions.
+
+### 5. Make side-by-side comparison the first-class viewer mode
+- Primary comparison UX is connected side-by-side viewers.
+- A comparison session should reference artifact IDs, not raw structure text.
+- Shared capabilities:
+  - linked residue selection
   - optional camera sync
-  - independent loaded structures with linked highlighting
-
-### 3. Implement future features as feature slices
-- Target/template pair:
-  - Add a “structure set” concept in the document for related entries.
-  - First workspace preset is a two-structure target/template session.
-- Interface/hotspot selection:
-  - Store residue selections as named domain objects, not just transient viewer indices.
-  - Selection tools should live above Mol* so they can drive 3D view, sequence view, and later forms/actions.
-- Cropping:
-  - Define crop as a saved residue-range or selection on the target entry.
-  - Frontend v1 should create and persist crop definitions plus a cropped view; no irreversible structure rewriting in this phase.
-- Generated binders:
-  - Add a binder browser panel fed by `StructureEntry[]` grouped under the active target/template context.
-  - Binder cards should open detail or comparison sessions, not replace the whole app state.
-- AF2-predicted binder structures:
-  - Treat these as child entries of a binder candidate, with their own structure/PAE/confidence payloads.
-  - Reuse the same viewer-session and selection plumbing as the current single prediction viewer.
-- Binder comparison:
-  - First-class compare session type with 2-up or 3-up connected viewers.
-  - Overlay mode should be deferred until after side-by-side works cleanly.
-- Save Mol* states:
-  - Save snapshots per viewer session into the `WorkspaceDocument`.
-  - State records should reference the structure entry they belong to and store a user label plus Mol* snapshot payload.
-
-### 4. Reorganize the frontend around domain seams
-- Keep [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx) as composition/root state only.
-- Move the current cross-cutting types out of [types.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/types.ts) into separate domains: import/parsing types, document types, and viewer-session types.
-- Keep [MolstarPanel.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/components/MolstarPanel.tsx) as a presentational shell over the new viewer controller.
+  - synchronized saved-view restore
+- Overlay can remain a later extension once artifact identity and comparison sessions are stable.
 
 ## Public Interfaces / Types
 
-- Replace `PredictionBundle` as the main app state with:
-  - `StructureEntry`
-  - `WorkspaceDocument`
-  - `ViewerSession`
-  - `CompareSession`
-- Add semantic enums:
-  - `StructureRole = 'target' | 'template' | 'binder' | 'binder_prediction'`
-  - `SelectionKind = 'hotspot' | 'interface' | 'crop'`
-  - `ComparisonLayout = 'single' | 'side-by-side'`
-- Keep the existing parsed residue/chain data, but extend entries with:
-  - stable IDs
-  - parent/child relationships
-  - source provenance
-  - optional chain-role annotations
-- Worker messages should become request/response envelopes with `requestId` so multiple loads can be in flight safely.
+Add frontend domain types:
+- `WorkspaceProject`
+- `ProjectArtifactRef`
+- `StructureArtifact`
+- `CropVariantArtifact`
+- `SavedSelection`
+- `BinderRun`
+- `BinderCandidate`
+- `PredictionRun`
+- `JobRef`
+- `JobStatus`
+- `ViewerStateSnapshot`
+- `ComparisonSession`
+
+Key enums:
+- `ArtifactKind = 'target' | 'template' | 'crop_variant' | 'binder_candidate' | 'binder_prediction'`
+- `SelectionKind = 'hotspot' | 'interface'`
+- `JobType = 'import' | 'crop' | 'binder_generation' | 'binder_prediction'`
+- `JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'`
+
+Important defaults:
+- crop requests create new artifacts
+- binder generation consumes saved selections plus a selected crop variant or source target
+- long-running Python work is always async
 
 ## Test Plan
 
-- Add app-level tests for concurrent discovery/load requests and stale-response handling.
-- Add reducer/state tests for `WorkspaceDocument` mutations: add structure set, create hotspot selection, create crop, open compare session, save Mol* state.
-- Add viewer-session tests for selection sync between side-by-side viewers and state restore behavior.
-- Extend import tests to cover target/template sets and binder-with-prediction grouping.
-- Keep the current interaction tests as regression coverage for heatmap-to-viewer linking.
+- Add frontend state tests for project/artifact/job reducers.
+- Add API-client tests for job polling and artifact refresh after successful jobs.
+- Add UI tests for:
+  - saving hotspot/interface selections
+  - starting a crop job and surfacing its result as a new target variant
+  - starting a binder generation job from a chosen crop variant
+  - browsing binder candidates and opening compare sessions
+  - saving and restoring Mol* viewer states against persisted artifact IDs
+- Keep current import and interaction tests as regression coverage for the local-first viewer path.
 
 ## Assumptions
 
-- Frontend-only planning: no detailed FastAPI or SLURM contract is specified here, but the new state model should leave a clean seam for a later remote data source.
-- Local file import remains supported and becomes one source of `StructureEntry` data rather than the defining architecture.
-- Side-by-side connected comparison is the default comparison UX; overlay is a later enhancement.
-- “Cropping” means defining and persisting a selected target subset plus cropped view behavior in the UI first, not performing backend structure editing yet.
-- Current baseline is healthy enough to evolve incrementally: `npm test` passes on April 8, 2026.
+- Cropping is a real Python/backend operation, not a frontend-only view transform.
+- Binder generation is backend-orchestrated and may be SLURM-backed.
+- FastAPI should own canonical artifact identity once a project exists.
+- The frontend may still support pure local preview/import, but the main long-term architecture should assume persisted project data and async jobs.
+- Side-by-side connected comparison remains the default comparison mode.
