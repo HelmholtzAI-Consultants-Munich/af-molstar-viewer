@@ -22,6 +22,16 @@ uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 
 ![demo](demo.gif)
 
+## Repo Layout
+
+```text
+af-molstar-viewer/
+  frontend/  # React + Vite app
+  backend/   # uv-managed FastAPI placeholder backend
+  fixtures/  # shared example and test inputs
+  docs/      # architecture and API notes
+```
+
 ## Features
 
 - load local prediction files directly in the browser
@@ -47,21 +57,64 @@ The app currently understands:
 - Structure-only:
   - a lone `.pdb` / `.cif` / `.mmcif` with confidence values embedded in the structure
 
-## setup
+## Common Commands
 
-install dependencies and run the dev server
+From the repo root:
 
 ```bash
+make help
+make install
+make dev-frontend
+make dev-backend
+make build
+make test
+```
+
+## Frontend Setup
+
+Install dependencies and run the dev server:
+
+```bash
+cd frontend
 npm install
 npm run dev
 ```
 
 
-production build:
+Production build:
 ```bash
+cd frontend
 npm run build
 # run tests
 npm test
 # preview locally
 npm run preview
+```
+
+## Backend Placeholder
+
+The repo now also contains a fixture-backed FastAPI placeholder backend in [backend/pyproject.toml](/Users/leo.kaindl/python/dtand/af-molstar-viewer/backend/pyproject.toml) managed with `uv`.
+
+Typical setup:
+
+```bash
+cd backend
+uv sync
+uv run backend
+```
+
+Frontend dev server with backend proxy:
+
+```bash
+cd frontend
+npm run dev
+# in a second terminal
+npm run dev:backend
+```
+
+Or from the repo root:
+
+```bash
+make dev-frontend
+make dev-backend
 ```

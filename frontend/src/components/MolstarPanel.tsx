@@ -3,7 +3,7 @@ import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 
-const DEFAULT_FOCUS_COMPONENTS = ['target', 'surroundings', 'interactions'] as const;
+const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
 
 const MOLSTAR_RENDER_OPTIONS = {

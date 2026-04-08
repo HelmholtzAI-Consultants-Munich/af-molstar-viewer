@@ -1,11 +1,20 @@
 # Dependencies
 node_modules/
+frontend/node_modules/
+backend/.venv/
 
-# most examples
-example/
+# Shared fixture data
+fixtures/examples/
 
 # Build output
 dist/
+frontend/dist/
+.vite/
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
 
 # TypeScript/Vite incremental build caches
 *.tsbuildinfo
@@ -15,6 +24,10 @@ vite.config.js
 vite.config.d.ts
 vitest.config.js
 vitest.config.d.ts
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/vitest.config.js
+frontend/vitest.config.d.ts
 
 # Logs
 npm-debug.log*

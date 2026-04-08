@@ -1,0 +1,161 @@
+{
+  "project": {
+    "id": "project-seed",
+    "name": "BindCraft Workspace Demo"
+  },
+  "source_structures": [
+    {
+      "id": "source-uploaded-q14145",
+      "name": "Uploaded AF-Q14145 target",
+      "chain_ids": ["A"]
+    },
+    {
+      "id": "source-template-multimer",
+      "name": "Template multichain toy complex",
+      "chain_ids": ["A", "B"]
+    }
+  ],
+  "targets": [
+    {
+      "id": "target-uploaded",
+      "name": "Q14145 uploaded target",
+      "provenance": "uploaded",
+      "source_structure_id": "source-uploaded-q14145",
+      "target_interface_residues": "A15-25",
+      "chain_ids": ["A"],
+      "viewer_asset_id": "viewer-target-uploaded"
+    },
+    {
+      "id": "target-template",
+      "name": "Template-derived target",
+      "provenance": "template_extracted",
+      "source_structure_id": "source-template-multimer",
+      "source_job_id": "job-template-seeded",
+      "target_interface_residues": "A1-2,B1-2",
+      "chain_ids": ["A", "B"],
+      "viewer_asset_id": "viewer-target-template"
+    },
+    {
+      "id": "target-cropped",
+      "name": "Template-derived cropped target",
+      "provenance": "cropped",
+      "parent_target_id": "target-template",
+      "source_structure_id": "source-template-multimer",
+      "source_job_id": "job-crop-seeded",
+      "target_interface_residues": "A1-2",
+      "chain_ids": ["A"],
+      "viewer_asset_id": "viewer-target-cropped"
+    }
+  ],
+  "viewer_assets": [
+    {
+      "id": "viewer-target-uploaded",
+      "artifact_id": "target-uploaded",
+      "label": "Uploaded target",
+      "files": [
+        {
+          "name": "AF-Q14145-F1-model_v6.cif",
+          "path": "fixtures/examples/AF-Q14145-F1-model_v6.cif"
+        },
+        {
+          "name": "AF-Q14145-F1-predicted_aligned_error_v6.json",
+          "path": "fixtures/examples/AF-Q14145-F1-predicted_aligned_error_v6.json"
+        }
+      ]
+    },
+    {
+      "id": "viewer-target-template",
+      "artifact_id": "target-template",
+      "label": "Template-derived target",
+      "files": [
+        {
+          "name": "toy_multimer_unrelaxed_rank_001.pdb",
+          "path": "fixtures/test-inputs/colabfold-multimer/toy_multimer_unrelaxed_rank_001.pdb"
+        },
+        {
+          "name": "toy_multimer_scores.json",
+          "path": "fixtures/test-inputs/colabfold-multimer/toy_multimer_scores.json"
+        }
+      ]
+    },
+    {
+      "id": "viewer-target-cropped",
+      "artifact_id": "target-cropped",
+      "label": "Cropped target",
+      "files": [
+        {
+          "name": "l73.pdb",
+          "path": "fixtures/examples/l73.pdb"
+        },
+        {
+          "name": "l73.json",
+          "path": "fixtures/examples/l73.json"
+        }
+      ]
+    },
+    {
+      "id": "viewer-binder-validation-1",
+      "artifact_id": "binder-validation-1",
+      "label": "Binder validation l73",
+      "files": [
+        {
+          "name": "l73.pdb",
+          "path": "fixtures/examples/l73.pdb"
+        },
+        {
+          "name": "l73.json",
+          "path": "fixtures/examples/l73.json"
+        }
+      ]
+    },
+    {
+      "id": "viewer-binder-validation-2",
+      "artifact_id": "binder-validation-2",
+      "label": "Binder validation l77",
+      "files": [
+        {
+          "name": "l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb",
+          "path": "fixtures/examples/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb"
+        },
+        {
+          "name": "l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json",
+          "path": "fixtures/examples/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json"
+        }
+      ]
+    }
+  ],
+  "generated_outputs": {
+    "binder_run": {
+      "id": "binder-run-generated",
+      "name": "Generated binder candidates"
+    },
+    "binder_candidates": [
+      {
+        "id": "binder-candidate-1",
+        "name": "Binder candidate l73"
+      },
+      {
+        "id": "binder-candidate-2",
+        "name": "Binder candidate l77"
+      }
+    ],
+    "validation_run": {
+      "id": "validation-run-generated",
+      "name": "Refolding validation"
+    },
+    "binder_validations": [
+      {
+        "id": "binder-validation-1",
+        "name": "Refolded binder l73",
+        "binder_candidate_id": "binder-candidate-1",
+        "viewer_asset_id": "viewer-binder-validation-1"
+      },
+      {
+        "id": "binder-validation-2",
+        "name": "Refolded binder l77",
+        "binder_candidate_id": "binder-candidate-2",
+        "viewer_asset_id": "viewer-binder-validation-2"
+      }
+    ]
+  }
+}
