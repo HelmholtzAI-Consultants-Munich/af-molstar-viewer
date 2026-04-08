@@ -4,6 +4,22 @@ Prototype local-first _all-vibe-coded_ web app for inspecting self-generated pro
 
 uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 
+> [!NOTE] Future plans
+> - This will become a part of the Web UI for a larger project around BindCraft.
+> - There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre-or post-processing and orchestration.
+> - The Web UI should gain functionality to:
+>   - display the structure of the target protein / template pair
+>   - enable selecting the interface / hotspots
+>   - enable cropping that protein
+>   - show the generated binders
+>   - show the AF2-predictes structures of the binders
+>   - allow comparing the binders, maybe in separate connected views or with overlaying
+>   - enable saving views as Mol* states
+
+### TODO
+- ask codex to evaluate architecture for this purpose
+- design choice: Mol* `Focus` should only ever be `target`, and not include `surroundings`
+
 ![demo](demo.gif)
 
 ## Features

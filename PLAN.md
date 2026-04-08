@@ -1,79 +1,95 @@
-# Mol* AlphaFold Viewer Plan
+# Frontend Evolution Plan For AF Mol* Viewer
 
-**Summary**
-- Build a local-first, static-hostable web app in React + TypeScript + Vite that loads AlphaFold/ColabFold/AlphaFold3 output files directly in the browser.
-- Use `pdbe-molstar` as the 3D viewer wrapper, with `alphafoldView` enabled, because it is the Mol* integration used by AlphaFold DB and already exposes AlphaFold-style confidence coloring plus programmatic selection/highlight hooks.
-- Recreate the classic AlphaFold DB workspace: sequence strip on top, PAE heatmap bottom-left, Mol* viewer center, confidence legend/right panel, with tightly linked hover, click, brush, and zoom interactions.
+## Summary
 
-**Implementation Changes**
-- App shell:
-  - Add a top-level workspace with file import, example-loader, prediction chooser, and a persisted “current bundle” state.
-  - Support drag-and-drop, multi-file pick, and folder pick when the File System Access API is available.
-- Normalization layer:
-  - Define `PredictionBundle`, `PredictionAdapter`, `PolymerIndex`, and `SelectionState` types.
-  - Implement adapters for:
-    - AF2/AFDB-style files: structure `.cif` or `.pdb` plus `predicted_aligned_error` JSON array.
-    - ColabFold: matched structure file plus `scores.json`-style output containing `plddt`, optional `pae`, `max_pae`, `ptm`, `iptm`.
-    - AF3: `<job>_model.cif` plus `<job>_confidences.json` and optional summary JSON.
-  - Normalize all inputs to:
-    - polymer sequence tracks by chain
-    - displayed PAE matrix
-    - per-residue confidence bins for coloring/legend
-    - chain and residue lookup tables for Mol* synchronization
-  - AF3 v1 rule: display only protein/RNA/DNA polymer tokens in the 2D confidence workspace; keep ligands/PTMs visible in 3D but exclude ligand-only confidence semantics from the PAE/sequence UI.
-- PAE + sequence workspace:
-  - Render the PAE matrix with a canvas heatmap plus lightweight SVG/canvas overlays for axes, diagonal, hover crosshair, brush rectangle, and zoom window.
-  - Render the sequence strip as a scalable residue track colored by confidence bins matching AlphaFold DB.
-  - Interaction contract:
-    - sequence hover highlights the residue in Mol*, shows row/column guides in PAE
-    - PAE hover highlights the corresponding residue pair/ranges in Mol*
-    - click on a residue or PAE cell locks selection
-    - brush on the PAE heatmap selects a submatrix and focuses the corresponding sequence ranges and structure regions
-    - reset/clear restores the full matrix and viewer
-- Mol* integration:
-  - Load local structures into `pdbe-molstar` through object URLs and `customData`.
-  - Use viewer APIs for highlight, selection, focus, sequence coloring, and reset rather than building custom 3D logic.
-  - Keep default coloring on pLDDT/confidence; expose a minimal right-panel legend matching AlphaFold DB’s four confidence bins.
-  - Subscribe to Mol* hover/selection events so direct 3D interaction also updates the sequence and PAE state.
-- File discovery and matching:
-  - Group files by basename/job stem and validate required pairs before enabling a prediction.
-  - Show a resolver UI when multiple candidate JSONs or structures match one job.
-  - Run JSON parsing and matrix preprocessing in a web worker to avoid blocking on large AF3/ColabFold outputs.
+### Architecture review
+- High: [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L21) is the current state hub for import state, loaded data, and all interaction state. That works for one loaded prediction, but it will become brittle once the UI needs target/template pairs, binder lists, compare sessions, and saved views.
+- High: [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L35) uses a single `pendingResolver` for worker responses, and [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx#L97) chains discovery into a fire-and-forget load. Future multi-panel or concurrent loads need request IDs and stale-response protection.
+- High: [types.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/types.ts#L41) models the app around one `PredictionBundle` with one structure and one PAE matrix. That is the main mismatch with the README roadmap.
+- Medium: [MolstarPanel.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/components/MolstarPanel.tsx#L235) embeds viewer lifecycle, event wiring, styling, and selection application in one component. For saved states and synchronized comparison, the viewer needs a thinner panel and a reusable controller layer.
+- Medium: [helpers.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/adapters/helpers.ts#L42) drops ligands and keeps only generic polymer chains. Future interface/hotspot/cropping features need explicit structure roles and chain-level semantics, not just residue arrays.
 
-**Public Interfaces / Types**
-- `PredictionAdapter`:
-  - `canLoad(files): boolean`
-  - `load(files): Promise<PredictionBundle>`
-- `PredictionBundle`:
-  - structure source
-  - chains and polymer residue/token index
-  - normalized displayed PAE matrix
-  - confidence track
-  - summary metrics
-  - source metadata
-- `SelectionState`:
-  - hovered residue/range
-  - hovered PAE cell/window
-  - pinned selection
-  - current PAE viewport
+### Recommended direction
+Refactor the app from “single loaded bundle with one viewer workspace” into “workspace document with multiple structure entries and reusable viewer sessions.” Keep local-file import as the first data source, but stop letting it define the whole domain model.
 
-**Test Plan**
-- Unit tests for each adapter with fixtures for:
-  - AFDB/AF2 example files already in the repo
-  - one ColabFold monomer/multimer fixture
-  - one AF3 polymer-containing fixture
-- Interaction tests for:
-  - sequence-to-PAE-to-Mol* hover sync
-  - brush selection and reset
-  - file grouping and ambiguous-match handling
-  - AF3 polymer-only projection behavior
-- Browser smoke tests for:
-  - loading local files without a backend
-  - rendering a 600+ residue PAE matrix
-  - preserving responsiveness during worker-based parsing
+## Key Changes
 
-**Assumptions / Defaults**
-- v1 is single-user and client-only; no auth, database, uploads API, or shareable server-side jobs.
-- The UI matches the classic screenshot layout rather than the newer AFDB page shell.
-- AF3 support in v1 is protein/nucleic-acid first; ligand/PTM-specific confidence visualization is explicitly deferred.
-- `pdbe-molstar` is the primary viewer dependency; raw `molstar` is only used indirectly unless a missing hook forces a small extension layer.
+### 1. Replace the single-bundle app model
+- Keep parsing/adapters as the low-level import layer, but make them output `StructureEntry` records instead of directly defining the whole UI state.
+- Introduce a top-level `WorkspaceDocument` state in `App` that owns:
+  - imported structures and their metadata
+  - semantic roles (`target`, `template`, `binder`, `binder_prediction`)
+  - named selections (`hotspots`, `interface`, `crop`)
+  - open comparison sessions
+  - saved Mol* view states
+- Split UI state into document state vs view state. Document state is persistent and shareable; hover/pin/brush state stays per viewer session.
+
+### 2. Add a reusable viewer-session layer
+- Extract a viewer controller from `MolstarPanel` that owns Mol* instance creation, highlight/select/focus application, and save/restore of Mol* state snapshots.
+- Make `Workspace` render one or more viewer sessions from configuration instead of assuming one fixed PAE + one fixed Mol* panel.
+- Use side-by-side synchronized viewers as the primary compare mode:
+  - shared selection bus for residue/chain selections
+  - optional camera sync
+  - independent loaded structures with linked highlighting
+
+### 3. Implement future features as feature slices
+- Target/template pair:
+  - Add a “structure set” concept in the document for related entries.
+  - First workspace preset is a two-structure target/template session.
+- Interface/hotspot selection:
+  - Store residue selections as named domain objects, not just transient viewer indices.
+  - Selection tools should live above Mol* so they can drive 3D view, sequence view, and later forms/actions.
+- Cropping:
+  - Define crop as a saved residue-range or selection on the target entry.
+  - Frontend v1 should create and persist crop definitions plus a cropped view; no irreversible structure rewriting in this phase.
+- Generated binders:
+  - Add a binder browser panel fed by `StructureEntry[]` grouped under the active target/template context.
+  - Binder cards should open detail or comparison sessions, not replace the whole app state.
+- AF2-predicted binder structures:
+  - Treat these as child entries of a binder candidate, with their own structure/PAE/confidence payloads.
+  - Reuse the same viewer-session and selection plumbing as the current single prediction viewer.
+- Binder comparison:
+  - First-class compare session type with 2-up or 3-up connected viewers.
+  - Overlay mode should be deferred until after side-by-side works cleanly.
+- Save Mol* states:
+  - Save snapshots per viewer session into the `WorkspaceDocument`.
+  - State records should reference the structure entry they belong to and store a user label plus Mol* snapshot payload.
+
+### 4. Reorganize the frontend around domain seams
+- Keep [App.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/app/App.tsx) as composition/root state only.
+- Move the current cross-cutting types out of [types.ts](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/lib/types.ts) into separate domains: import/parsing types, document types, and viewer-session types.
+- Keep [MolstarPanel.tsx](/Users/leo.kaindl/python/dtand/af-molstar-viewer/src/components/MolstarPanel.tsx) as a presentational shell over the new viewer controller.
+
+## Public Interfaces / Types
+
+- Replace `PredictionBundle` as the main app state with:
+  - `StructureEntry`
+  - `WorkspaceDocument`
+  - `ViewerSession`
+  - `CompareSession`
+- Add semantic enums:
+  - `StructureRole = 'target' | 'template' | 'binder' | 'binder_prediction'`
+  - `SelectionKind = 'hotspot' | 'interface' | 'crop'`
+  - `ComparisonLayout = 'single' | 'side-by-side'`
+- Keep the existing parsed residue/chain data, but extend entries with:
+  - stable IDs
+  - parent/child relationships
+  - source provenance
+  - optional chain-role annotations
+- Worker messages should become request/response envelopes with `requestId` so multiple loads can be in flight safely.
+
+## Test Plan
+
+- Add app-level tests for concurrent discovery/load requests and stale-response handling.
+- Add reducer/state tests for `WorkspaceDocument` mutations: add structure set, create hotspot selection, create crop, open compare session, save Mol* state.
+- Add viewer-session tests for selection sync between side-by-side viewers and state restore behavior.
+- Extend import tests to cover target/template sets and binder-with-prediction grouping.
+- Keep the current interaction tests as regression coverage for heatmap-to-viewer linking.
+
+## Assumptions
+
+- Frontend-only planning: no detailed FastAPI or SLURM contract is specified here, but the new state model should leave a clean seam for a later remote data source.
+- Local file import remains supported and becomes one source of `StructureEntry` data rather than the defining architecture.
+- Side-by-side connected comparison is the default comparison UX; overlay is a later enhancement.
+- “Cropping” means defining and persisting a selected target subset plus cropped view behavior in the UI first, not performing backend structure editing yet.
+- Current baseline is healthy enough to evolve incrementally: `npm test` passes on April 8, 2026.
