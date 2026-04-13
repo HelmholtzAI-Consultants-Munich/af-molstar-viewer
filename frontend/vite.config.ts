@@ -3,10 +3,12 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 
+const repoRoot = resolve(__dirname, '..');
+
 function resolveDependencyFile(relativePath: string): string {
   const localPath = resolve(__dirname, 'node_modules', relativePath);
   if (existsSync(localPath)) return localPath;
-  return resolve(__dirname, '..', 'node_modules', relativePath);
+  return resolve(repoRoot, 'node_modules', relativePath);
 }
 
 const pdbeLightScss = resolveDependencyFile('pdbe-molstar/lib/styles/pdbe-molstar-light.scss');
@@ -30,6 +32,13 @@ export default defineConfig({
     react(),
   ],
   server: {
+    fs: {
+      allow: [
+        repoRoot,
+        resolve(repoRoot, 'fixtures'),
+        resolve(repoRoot, 'node_modules'),
+      ],
+    },
     proxy: {
       '/api': 'http://127.0.0.1:8000',
       '/fixture-files': 'http://127.0.0.1:8000',

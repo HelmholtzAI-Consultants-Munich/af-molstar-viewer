@@ -39,7 +39,10 @@ export function FileImportPanel(props: FileImportPanelProps) {
     const files = await Promise.all(
       example.files.map(async (entry) => ({
         name: entry.name,
-        text: await fetch(entry.url).then(async (response) => response.text()),
+        text:
+          typeof entry.text === 'string'
+            ? entry.text
+            : await fetch(entry.url ?? '').then(async (response) => response.text()),
       })),
     );
     await props.onLoadExample(files);

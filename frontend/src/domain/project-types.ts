@@ -98,7 +98,8 @@ export interface WorkspaceProject {
 
 export interface ViewerFileRef {
   name: string;
-  url: string;
+  url?: string;
+  text?: string;
 }
 
 export interface ViewerArtifactSource {

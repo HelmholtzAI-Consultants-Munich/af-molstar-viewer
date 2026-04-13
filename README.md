@@ -19,6 +19,7 @@ uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 ### TODO
 - ask codex to evaluate architecture for this purpose
 - design choice: Mol* `Focus` should only ever be `target`, and not include `surroundings`
+- it might be nice if dragging a file onto the viewer panel would load that as well, but only in the viewer?
 
 ![demo](demo.gif)
 

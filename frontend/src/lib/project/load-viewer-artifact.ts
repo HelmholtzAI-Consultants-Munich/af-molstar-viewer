@@ -6,12 +6,15 @@ export async function loadViewerArtifact(source: ViewerArtifactSource): Promise<
   const files: WorkerInputFile[] = await Promise.all(
     source.files.map(async (file) => ({
       name: file.name,
-      text: await fetch(file.url).then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Unable to fetch ${file.name}`);
-        }
-        return response.text();
-      }),
+      text:
+        typeof file.text === 'string'
+          ? file.text
+          : await fetch(file.url ?? '').then(async (response) => {
+              if (!response.ok) {
+                throw new Error(`Unable to fetch ${file.name}`);
+              }
+              return response.text();
+            }),
     })),
   );
   const groups = discoverGroups(files);
