@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import re
 
 
-SELECTION_PATTERN = re.compile(r"^(?P<chain>[A-Za-z0-9]+)(?P<start>\d+)(?:-(?P<end>\d+))?$")
+SELECTION_PATTERN = re.compile(r"^(?P<chain>[A-Za-z]+)(?P<start>\d+)(?:-(?:(?P<end_chain>[A-Za-z]+))?(?P<end>\d+))?$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,9 @@ def parse_target_interface_residues(selection: str) -> list[ResidueRange]:
         match = SELECTION_PATTERN.match(part)
         if not match:
             raise ValueError(f"Invalid residue selection segment: {part}")
+        end_chain = match.group("end_chain")
+        if end_chain and end_chain != match.group("chain"):
+            raise ValueError(f"Selection range crosses chains: {part}")
         start = int(match.group("start"))
         end = int(match.group("end") or start)
         if end < start:

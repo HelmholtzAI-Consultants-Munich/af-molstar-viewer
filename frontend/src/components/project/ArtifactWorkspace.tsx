@@ -7,6 +7,10 @@ const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
 
 interface ArtifactWorkspaceProps {
   artifact: LoadedViewerArtifact;
+  selectedResidues: number[] | null;
+  focusedResidues?: number[] | null;
+  onSelectionResiduesChange?: (indices: number[]) => void;
+  onFocusResiduesChange?: (indices: number[]) => void;
 }
 
 export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
@@ -29,6 +33,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
     <Workspace
       bundle={props.artifact.bundle}
       structureText={props.artifact.structureText}
+      selectedResidues={props.selectedResidues}
+      focusedResidues={props.focusedResidues ?? null}
       hoveredResidues={hoveredResidues}
       pinnedResidues={pinnedResidues}
       pinnedCell={pinnedCell}
@@ -54,7 +60,9 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
           const next = !enabled;
           if (!next) {
             setPinnedCell((currentPinnedCell) => {
-              if (currentPinnedCell) setPinnedResidues([]);
+              if (currentPinnedCell) {
+                setPinnedResidues([]);
+              }
               return null;
             });
           }
@@ -65,6 +73,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
         setPinnedCell(null);
         setPinnedResidues([]);
       }}
+      onMolstarSelectionChange={props.onSelectionResiduesChange}
+      onMolstarFocusChange={props.onFocusResiduesChange}
     />
   );
 }

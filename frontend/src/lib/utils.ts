@@ -54,3 +54,39 @@ export function normalizeStem(name: string): string {
 export function summarizeResidueSelection(indices: number[]): number[] {
   return [...new Set(indices)].sort((a, b) => a - b);
 }
+
+export function formatResidueSelection(
+  residues: PolymerResidue[],
+  indices: number[],
+  options: { emptyLabel?: string } = {},
+): string {
+  const normalized = summarizeResidueSelection(indices)
+    .map((index) => residues[index])
+    .filter((residue): residue is PolymerResidue => Boolean(residue));
+
+  if (normalized.length === 0) {
+    return options.emptyLabel ?? 'No Mol* selection';
+  }
+
+  const segments: string[] = [];
+  let currentChain = normalized[0].chainId;
+  let startSeq = normalized[0].authSeqId ?? normalized[0].labelSeqId;
+  let previousSeq = startSeq;
+
+  for (const residue of normalized.slice(1)) {
+    const chainId = residue.chainId;
+    const sequenceId = residue.authSeqId ?? residue.labelSeqId;
+    if (chainId === currentChain && sequenceId === previousSeq + 1) {
+      previousSeq = sequenceId;
+      continue;
+    }
+
+    segments.push(startSeq === previousSeq ? `${currentChain}${startSeq}` : `${currentChain}${startSeq}-${previousSeq}`);
+    currentChain = chainId;
+    startSeq = sequenceId;
+    previousSeq = sequenceId;
+  }
+
+  segments.push(startSeq === previousSeq ? `${currentChain}${startSeq}` : `${currentChain}${startSeq}-${previousSeq}`);
+  return segments.join(',');
+}

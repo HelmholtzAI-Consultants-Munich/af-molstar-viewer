@@ -28,6 +28,8 @@ function Harness() {
     <Workspace
       bundle={bundle}
       structureText="ATOM"
+      selectedResidues={[]}
+      focusedResidues={[]}
       hoveredResidues={hoveredResidues}
       pinnedResidues={pinnedResidues}
       pinnedCell={pinnedCell}

@@ -1,4 +1,4 @@
-const SEGMENT_PATTERN = /^(?<chain>[A-Za-z0-9]+)(?<start>\d+)(?:-(?<end>\d+))?$/;
+const SEGMENT_PATTERN = /^(?<chain>[A-Za-z]+)(?<start>\d+)(?:-(?:(?<endChain>[A-Za-z]+))?(?<end>\d+))?$/;
 
 export interface TargetInterfaceRange {
   chainId: string;
@@ -19,6 +19,10 @@ export function parseTargetInterfaceResidues(input: string): TargetInterfaceRang
     const match = SEGMENT_PATTERN.exec(segment);
     if (!match?.groups) {
       throw new Error(`Invalid selection segment: ${segment}`);
+    }
+    const endChain = match.groups.endChain;
+    if (endChain && endChain !== match.groups.chain) {
+      throw new Error(`Selection range crosses chains: ${segment}`);
     }
     const start = Number(match.groups.start);
     const end = Number(match.groups.end ?? match.groups.start);

@@ -9,6 +9,8 @@ import { summarizeResidueSelection } from '../lib/utils';
 interface WorkspaceProps {
   bundle: PredictionBundle;
   structureText: string;
+  selectedResidues: number[] | null;
+  focusedResidues: number[] | null;
   hoveredResidues: number[];
   pinnedResidues: number[];
   pinnedCell: { x: number; y: number } | null;
@@ -25,6 +27,8 @@ interface WorkspaceProps {
   onTogglePaeHoverSync: () => void;
   onTogglePaePairSelection: () => void;
   onClearPairSelection: () => void;
+  onMolstarSelectionChange?: (indices: number[]) => void;
+  onMolstarFocusChange?: (indices: number[]) => void;
 }
 
 export function Workspace(props: WorkspaceProps) {
@@ -127,6 +131,8 @@ export function Workspace(props: WorkspaceProps) {
       <MolstarPanel
         bundle={props.bundle}
         structureText={props.structureText}
+        selectedResidues={props.selectedResidues}
+        focusedResidues={props.focusedResidues}
         hoveredResidues={props.hoveredResidues}
         pinnedResidues={props.pinnedResidues}
         pinnedCell={props.pinnedCell}
@@ -135,8 +141,13 @@ export function Workspace(props: WorkspaceProps) {
         onClickResidue={(index) => {
           clearPendingHoverResidues();
           props.onPinCell(null);
-          if (index !== null) props.onPinResidues([index]);
         }}
+        onSelectionResiduesChange={(indices) => {
+          clearPendingHoverResidues();
+          props.onPinCell(null);
+          props.onMolstarSelectionChange?.(indices);
+        }}
+        onFocusResiduesChange={props.onMolstarFocusChange}
       />
       <LegendPanel bundle={props.bundle} />
     </div>

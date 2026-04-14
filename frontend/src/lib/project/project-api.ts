@@ -1,10 +1,13 @@
 import type {
   JobRef,
+  TargetArtifact,
   ViewerArtifactSource,
   ViewerStateSnapshot,
   WorkspaceProject,
 } from '../../domain/project-types';
 import { canonicalizeTargetInterfaceResidues } from '../../domain/target-interface';
+import { discoverGroups, loadBundle } from '../discovery';
+import type { WorkerInputFile } from '../types';
 import { createSeedProject, getGeneratedOutputs, resolveViewerArtifactSource } from './project-fixtures';
 
 export interface ProjectApi {
@@ -18,6 +21,7 @@ export interface ProjectApi {
   validateRefolding(projectId: string, binderCandidateIds: string[]): Promise<JobRef>;
   getJob(jobId: string): Promise<JobRef>;
   saveViewerState(projectId: string, artifactId: string, label: string): Promise<ViewerStateSnapshot>;
+  uploadTarget(projectId: string, files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }>;
 }
 
 interface LocalJobRecord {
@@ -28,6 +32,7 @@ interface LocalJobRecord {
 class LocalFixtureProjectApi implements ProjectApi {
   private project: WorkspaceProject | null = null;
   private jobs = new Map<string, LocalJobRecord>();
+  private uploadedViewerArtifacts = new Map<string, ViewerArtifactSource>();
   private projectCounter = 1;
   private targetCounter = 1;
   private viewerStateCounter = 1;
@@ -46,6 +51,10 @@ class LocalFixtureProjectApi implements ProjectApi {
 
   async getViewerArtifact(projectId: string, artifactId: string): Promise<ViewerArtifactSource> {
     this.requireProject(projectId);
+    const uploaded = this.uploadedViewerArtifacts.get(artifactId);
+    if (uploaded) {
+      return structuredClone(uploaded);
+    }
     return resolveViewerArtifactSource(artifactId);
   }
 
@@ -77,12 +86,12 @@ class LocalFixtureProjectApi implements ProjectApi {
     const project = this.requireProject(projectId);
     const sourceTarget = project.targets.find((entry) => entry.id === targetId);
     if (!sourceTarget) throw new Error(`Unknown target ${targetId}`);
-    const croppedSeed = project.targets.find((entry) => entry.provenance === 'cropped') ?? sourceTarget;
     return this.createJob(projectId, 'crop_target', 'Cropping target with fixture output', () => {
       project.targets.push({
-        ...croppedSeed,
+        ...sourceTarget,
         id: `target-${this.targetCounter++}`,
         name: label?.trim() || `${sourceTarget.name} cropped`,
+        provenance: 'cropped',
         parent_target_id: sourceTarget.id,
         source_structure_id: sourceTarget.source_structure_id,
         source_job_id: undefined,
@@ -169,6 +178,18 @@ class LocalFixtureProjectApi implements ProjectApi {
     };
     project.viewer_states.push(snapshot);
     return structuredClone(snapshot);
+  }
+
+  async uploadTarget(projectId: string, files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }> {
+    const project = this.requireProject(projectId);
+    const targetId = `target-${this.targetCounter++}`;
+    const { target, viewerArtifactSource } = createUploadedTarget(files, targetId);
+    project.targets.push(target);
+    this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
+    return {
+      project: structuredClone(project),
+      target: structuredClone(target),
+    };
   }
 
   private createJob(projectId: string, jobType: JobRef['job_type'], progressMessage: string, apply: () => void): JobRef {
@@ -281,6 +302,10 @@ class HttpProjectApi implements ProjectApi {
     });
   }
 
+  async uploadTarget(_projectId: string, _files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }> {
+    throw new Error('Target upload is only implemented in local project mode right now.');
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
@@ -300,4 +325,41 @@ export function createProjectApi(): ProjectApi {
   return import.meta.env.VITE_PROJECT_API_MODE === 'http'
     ? new HttpProjectApi(import.meta.env.VITE_PROJECT_API_BASE_URL ?? '/api')
     : new LocalFixtureProjectApi();
+}
+
+function createUploadedTarget(files: WorkerInputFile[], targetId: string): { target: TargetArtifact; viewerArtifactSource: ViewerArtifactSource } {
+  if (files.length === 0) {
+    throw new Error('Choose at least one file to upload a target.');
+  }
+
+  const groups = discoverGroups(files);
+  const preferredGroup = groups.find((group) => !group.unresolved) ?? groups[0];
+  if (!preferredGroup) {
+    throw new Error('No supported target files were provided.');
+  }
+  if (preferredGroup.unresolved) {
+    throw new Error(preferredGroup.reasons.join('. '));
+  }
+
+  const bundle = loadBundle(files, preferredGroup);
+  const target: TargetArtifact = {
+    id: targetId,
+    name: bundle.name,
+    provenance: 'uploaded',
+    target_interface_residues: '',
+    chain_ids: bundle.chains.map((chain) => chain.chainId),
+    viewer_asset_id: targetId,
+    parent_target_id: null,
+    source_structure_id: null,
+    source_job_id: null,
+  };
+  const viewerArtifactSource: ViewerArtifactSource = {
+    artifact_id: targetId,
+    label: bundle.name,
+    files: files.map((file) => ({
+      name: file.name,
+      text: file.text,
+    })),
+  };
+  return { target, viewerArtifactSource };
 }

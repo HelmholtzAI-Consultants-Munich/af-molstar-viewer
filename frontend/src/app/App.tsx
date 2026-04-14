@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { EXAMPLES } from './examples';
 import type { LoadedViewerArtifact, WorkspaceProject } from '../domain/project-types';
-import { canonicalizeTargetInterfaceResidues } from '../domain/target-interface';
+import { canonicalizeTargetInterfaceResidues, parseTargetInterfaceResidues } from '../domain/target-interface';
 import { ArtifactWorkspace } from '../components/project/ArtifactWorkspace';
 import { ProjectSidebar } from '../components/project/ProjectSidebar';
 import { loadViewerArtifact } from '../lib/project/load-viewer-artifact';
 import type { ProjectApi } from '../lib/project/project-api';
 import { createProjectApi } from '../lib/project/project-api';
+import type { WorkerInputFile } from '../lib/types';
+import { formatResidueSelection } from '../lib/utils';
 
 interface AppProps {
   api?: ProjectApi;
@@ -15,13 +18,52 @@ function isActiveJob(status: WorkspaceProject['jobs'][number]['status']) {
   return status === 'queued' || status === 'running';
 }
 
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error(`Unable to read ${file.name}`));
+    reader.readAsText(file);
+  });
+}
+
+function resolveInterfaceResidueIndices(
+  artifact: LoadedViewerArtifact | null,
+  input: string,
+): number[] | null {
+  if (!artifact) return null;
+  if (!input.trim()) return [];
+
+  try {
+    const ranges = parseTargetInterfaceResidues(input);
+    const indices = artifact.bundle.residues
+      .filter((residue) =>
+        ranges.some(
+          (range) =>
+            residue.chainId === range.chainId &&
+            ((residue.labelSeqId >= range.start && residue.labelSeqId <= range.end) ||
+              (residue.authSeqId !== undefined && residue.authSeqId >= range.start && residue.authSeqId <= range.end)),
+        ),
+      )
+      .map((residue) => residue.index);
+
+    return [...new Set(indices)].sort((left, right) => left - right);
+  } catch {
+    return null;
+  }
+}
+
 export function App(props: AppProps) {
   const api = useMemo(() => props.api ?? createProjectApi(), [props.api]);
   const [project, setProject] = useState<WorkspaceProject | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [compareValidationIds, setCompareValidationIds] = useState<string[]>([]);
-  const [interfaceDraft, setInterfaceDraft] = useState('');
+  const [targetInterfaceDrafts, setTargetInterfaceDrafts] = useState<Record<string, string>>({});
   const [viewerArtifacts, setViewerArtifacts] = useState<Record<string, LoadedViewerArtifact>>({});
+  const [viewerFocusSelections, setViewerFocusSelections] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +72,23 @@ export function App(props: AppProps) {
   const compareValidations = compareValidationIds
     .map((validationId) => project?.binder_validations.find((validation) => validation.id === validationId) ?? null)
     .filter((validation): validation is NonNullable<typeof validation> => validation !== null);
+  const selectedArtifact = selectedTargetId ? viewerArtifacts[selectedTargetId] : null;
+  const interfaceDraft = selectedTarget ? (targetInterfaceDrafts[selectedTarget.id] ?? selectedTarget.target_interface_residues) : '';
+  const selectedInterfaceResidues = resolveInterfaceResidueIndices(selectedArtifact, interfaceDraft);
+  const selectedTargetFocusResidues = selectedTarget ? (viewerFocusSelections[selectedTarget.id] ?? []) : [];
+  const selectedTargetMolstarFocus =
+    selectedTarget && selectedArtifact
+      ? formatResidueSelection(selectedArtifact.bundle.residues, selectedTargetFocusResidues, {
+          emptyLabel: 'No Mol* focus',
+        })
+      : 'No Mol* focus';
+
+  const setTargetInterfaceDraft = (targetId: string, value: string) => {
+    setTargetInterfaceDrafts((current) => ({
+      ...current,
+      [targetId]: value,
+    }));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +101,9 @@ export function App(props: AppProps) {
         setProject(nextProject);
         const preferredTarget = nextProject.targets[0] ?? null;
         setSelectedTargetId(preferredTarget?.id ?? null);
-        setInterfaceDraft(preferredTarget?.target_interface_residues ?? '');
+        setTargetInterfaceDrafts(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, target.target_interface_residues])),
+        );
       } catch (appError) {
         if (!cancelled) {
           setError(appError instanceof Error ? appError.message : 'Unable to initialize project');
@@ -58,23 +119,29 @@ export function App(props: AppProps) {
   }, [api]);
 
   useEffect(() => {
-    if (!selectedTarget) {
-      setInterfaceDraft('');
-      return;
-    }
-    setInterfaceDraft(selectedTarget.target_interface_residues);
-  }, [selectedTarget?.id, selectedTarget?.target_interface_residues]);
+    if (!project) return;
+    setTargetInterfaceDrafts((current) => {
+      const next = Object.fromEntries(
+        project.targets.map((target) => [target.id, current[target.id] ?? target.target_interface_residues]),
+      );
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+  }, [project]);
 
   useEffect(() => {
     if (!project) return;
     const artifactIds = [selectedTargetId, ...compareValidationIds].filter((value): value is string => Boolean(value));
-    if (artifactIds.length === 0) return;
+    const missingArtifactIds = artifactIds.filter((artifactId) => !viewerArtifacts[artifactId]);
+    if (missingArtifactIds.length === 0) return;
     let cancelled = false;
 
     const loadArtifacts = async () => {
       try {
         const resolved = await Promise.all(
-          artifactIds.map(async (artifactId) => {
+          missingArtifactIds.map(async (artifactId) => {
             const source = await api.getViewerArtifact(project.id, artifactId);
             const artifact = await loadViewerArtifact(source);
             return [artifactId, artifact] as const;
@@ -96,7 +163,7 @@ export function App(props: AppProps) {
     return () => {
       cancelled = true;
     };
-  }, [api, project, selectedTargetId, compareValidationIds]);
+  }, [api, project, selectedTargetId, compareValidationIds, viewerArtifacts]);
 
   useEffect(() => {
     if (!project || !project.jobs.some((job) => isActiveJob(job.status))) return;
@@ -146,6 +213,57 @@ export function App(props: AppProps) {
     }
   };
 
+  const uploadTargetFiles = async (files: File[]) => {
+    if (!project || files.length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const workerFiles: WorkerInputFile[] = await Promise.all(
+        files.map(async (file) => ({
+          name: file.name,
+          text: await readFileAsText(file),
+        })),
+      );
+      const result = await api.uploadTarget(project.id, workerFiles);
+      setProject(result.project);
+      setSelectedTargetId(result.target.id);
+      setCompareValidationIds([]);
+      setTargetInterfaceDraft(result.target.id, result.target.target_interface_residues);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload target');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadExample = async (exampleId: string) => {
+    if (!project) return;
+    const example = EXAMPLES.find((entry) => entry.id === exampleId);
+    if (!example) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const workerFiles: WorkerInputFile[] = example.files.map((file) => {
+        if (typeof file.text !== 'string') {
+          throw new Error(`Example ${example.label} is missing embedded fixture text for ${file.name}`);
+        }
+        return {
+          name: file.name,
+          text: file.text,
+        };
+      });
+      const result = await api.uploadTarget(project.id, workerFiles);
+      setProject(result.project);
+      setSelectedTargetId(result.target.id);
+      setCompareValidationIds([]);
+      setTargetInterfaceDraft(result.target.id, result.target.target_interface_residues);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load example');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="app-shell">
@@ -167,8 +285,6 @@ export function App(props: AppProps) {
     );
   }
 
-  const selectedArtifact = selectedTargetId ? viewerArtifacts[selectedTargetId] : null;
-
   return (
     <main className="app-shell app-shell-project">
       {error && <div className="panel error-panel">{error}</div>}
@@ -177,18 +293,24 @@ export function App(props: AppProps) {
         <ProjectSidebar
           project={project}
           selectedTargetId={selectedTargetId}
+          selectedTargetMolstarFocus={selectedTargetMolstarFocus}
           interfaceDraft={interfaceDraft}
           compareValidationIds={compareValidationIds}
           busy={busy}
+          onUploadTargetFiles={uploadTargetFiles}
+          onLoadExample={loadExample}
           onSelectTarget={setSelectedTargetId}
-          onInterfaceDraftChange={setInterfaceDraft}
+          onInterfaceDraftChange={(value) => {
+            if (!selectedTarget) return;
+            setTargetInterfaceDraft(selectedTarget.id, value);
+          }}
           onSaveInterface={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;
               const canonical = canonicalizeTargetInterfaceResidues(interfaceDraft);
               const updated = await api.updateTargetInterface(project.id, selectedTarget.id, canonical);
               setProject(updated);
-              setInterfaceDraft(canonical);
+              setTargetInterfaceDraft(selectedTarget.id, canonical);
             })
           }
           onExtractTarget={(sourceStructureId) =>
@@ -243,7 +365,24 @@ export function App(props: AppProps) {
           </section>
 
           {selectedArtifact ? (
-            <ArtifactWorkspace key={selectedArtifact.artifactId} artifact={selectedArtifact} />
+            <ArtifactWorkspace
+              key={selectedArtifact.artifactId}
+              artifact={selectedArtifact}
+              selectedResidues={selectedInterfaceResidues}
+              focusedResidues={selectedTargetFocusResidues}
+              onSelectionResiduesChange={(indices) => {
+                const nextSelection = formatResidueSelection(selectedArtifact.bundle.residues, indices, {
+                  emptyLabel: '',
+                });
+                setTargetInterfaceDraft(selectedArtifact.artifactId, nextSelection);
+              }}
+              onFocusResiduesChange={(indices) =>
+                setViewerFocusSelections((current) => ({
+                  ...current,
+                  [selectedArtifact.artifactId]: indices,
+                }))
+              }
+            />
           ) : (
             <section className="panel empty-panel">
               <h2>No viewer artifact loaded</h2>
@@ -269,7 +408,7 @@ export function App(props: AppProps) {
                         <span>{validation.id}</span>
                       </div>
                       {artifact ? (
-                        <ArtifactWorkspace key={artifact.artifactId} artifact={artifact} />
+                        <ArtifactWorkspace key={artifact.artifactId} artifact={artifact} selectedResidues={null} focusedResidues={null} />
                       ) : (
                         <div className="panel empty-panel compare-empty-panel">
                           <h2>Loading validation…</h2>

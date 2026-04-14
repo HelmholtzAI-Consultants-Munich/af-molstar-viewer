@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProjectApi } from '../lib/project/project-api';
+import toyRanked0 from '../../../fixtures/test-inputs/colabfold/toy_ranked_0.pdb?raw';
+import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?raw';
+
+async function uploadColabfoldTarget() {
+  const api = createProjectApi();
+  const project = await api.createProject();
+  const result = await api.uploadTarget(project.id, [
+    { name: 'toy_ranked_0.pdb', text: toyRanked0 },
+    { name: 'toy_scores.json', text: toyScores },
+  ]);
+  return { api, project: result.project, target: result.target };
+}
 
 describe('project api fixtures', () => {
   beforeEach(() => {
@@ -12,10 +24,9 @@ describe('project api fixtures', () => {
   });
 
   it('creates derived targets through crop jobs without replacing existing targets', async () => {
-    const api = createProjectApi();
-    const project = await api.createProject();
+    const { api, project, target } = await uploadColabfoldTarget();
 
-    const job = await api.cropTarget(project.id, project.targets[0].id, 'Cropped fixture target');
+    const job = await api.cropTarget(project.id, target.id, 'Cropped fixture target');
     vi.advanceTimersByTime(700);
     const resolved = await api.getJob(job.job_id);
     const refreshed = await api.getProject(project.id);
@@ -26,10 +37,9 @@ describe('project api fixtures', () => {
   });
 
   it('generates binders and validates refolding through async jobs', async () => {
-    const api = createProjectApi();
-    const project = await api.createProject();
+    const { api, project, target } = await uploadColabfoldTarget();
 
-    const generateJob = await api.generateBinders(project.id, project.targets[0].id, 'B20-22,A1-10');
+    const generateJob = await api.generateBinders(project.id, target.id, 'B20-22,A1-10');
     vi.advanceTimersByTime(700);
     await api.getJob(generateJob.job_id);
     const afterGenerate = await api.getProject(project.id);

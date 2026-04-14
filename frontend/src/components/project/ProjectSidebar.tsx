@@ -1,19 +1,17 @@
-import type {
-  BinderCandidate,
-  BinderValidation,
-  JobRef,
-  SourceStructure,
-  TargetArtifact,
-  ViewerStateSnapshot,
-  WorkspaceProject,
-} from '../../domain/project-types';
+import type { ChangeEvent, DragEvent } from 'react';
+import { useRef, useState } from 'react';
+import { EXAMPLES } from '../../app/examples';
+import type { WorkspaceProject } from '../../domain/project-types';
 
 interface ProjectSidebarProps {
   project: WorkspaceProject;
   selectedTargetId: string | null;
+  selectedTargetMolstarFocus: string;
   interfaceDraft: string;
   compareValidationIds: string[];
   busy: boolean;
+  onUploadTargetFiles: (files: File[]) => Promise<void>;
+  onLoadExample: (exampleId: string) => Promise<void>;
   onSelectTarget: (targetId: string) => void;
   onInterfaceDraftChange: (value: string) => void;
   onSaveInterface: () => void;
@@ -26,8 +24,27 @@ interface ProjectSidebarProps {
 }
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
+  const targetInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingTargetFiles, setIsDraggingTargetFiles] = useState(false);
   const selectedTarget = props.project.targets.find((target) => target.id === props.selectedTargetId) ?? null;
   const templateSource = props.project.source_structures.find((source) => source.chain_ids.length > 1) ?? props.project.source_structures[0] ?? null;
+
+  const handleTargetFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? [...event.target.files] : [];
+    if (files.length > 0) {
+      await props.onUploadTargetFiles(files);
+    }
+    event.target.value = '';
+  };
+
+  const handleTargetDrop = async (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsDraggingTargetFiles(false);
+    const files = [...event.dataTransfer.files];
+    if (files.length > 0) {
+      await props.onUploadTargetFiles(files);
+    }
+  };
 
   return (
     <aside className="project-sidebar">
@@ -39,29 +56,95 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         </p>
       </section>
 
-      <section className="panel project-section-panel">
+      <section
+        className={`panel project-section-panel target-panel${isDraggingTargetFiles ? ' dragging' : ''}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDraggingTargetFiles(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setIsDraggingTargetFiles(false);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          void handleTargetDrop(event);
+        }}
+      >
         <div className="project-section-header">
           <h2>Targets</h2>
-          {templateSource && (
-            <button type="button" className="secondary-button" onClick={() => props.onExtractTarget(templateSource.id)} disabled={props.busy}>
-              Extract from template
-            </button>
-          )}
+          <div className="project-section-actions target-section-actions">
+            <div className="target-primary-actions">
+              <button type="button" className="secondary-button" onClick={() => targetInputRef.current?.click()} disabled={props.busy}>
+                upload
+              </button>
+              <label className="target-example-select-shell">
+                <span className="sr-only">Load target example</span>
+                <select
+                  aria-label="Load target example"
+                  className="select-input target-example-select"
+                  defaultValue=""
+                  onChange={(event) => {
+                    if (event.target.value) void props.onLoadExample(event.target.value);
+                    event.target.value = '';
+                  }}
+                >
+                  <option value="" disabled>
+                    example
+                  </option>
+                  {EXAMPLES.map((example) => (
+                    <option key={example.id} value={example.id}>
+                      {example.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {templateSource && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => props.onExtractTarget(templateSource.id)}
+                disabled={props.busy}
+              >
+                Extract from template
+              </button>
+            )}
+          </div>
         </div>
         <div className="artifact-list">
-          {props.project.targets.map((target) => (
-            <button
-              key={target.id}
-              type="button"
-              className={`artifact-card${target.id === props.selectedTargetId ? ' selected' : ''}`}
-              onClick={() => props.onSelectTarget(target.id)}
-            >
-              <strong>{target.name}</strong>
-              <span>{target.provenance.replace('_', ' ')}</span>
-              <span>chains: {target.chain_ids.join(', ')}</span>
-            </button>
-          ))}
+          {props.project.targets.length === 0 ? (
+            <div className="artifact-empty-state">
+              <strong>No targets yet</strong>
+              <span>Upload a structure file, or drag files anywhere into this panel to create the first target.</span>
+            </div>
+          ) : (
+            props.project.targets.map((target) => (
+              <button
+                key={target.id}
+                type="button"
+                className={`artifact-card${target.id === props.selectedTargetId ? ' selected' : ''}`}
+                onClick={() => props.onSelectTarget(target.id)}
+              >
+                <strong>{target.name}</strong>
+                <span>{target.provenance.replace('_', ' ')}</span>
+                <span>chains: {target.chain_ids.join(', ')}</span>
+                {target.id === props.selectedTargetId && <span className="artifact-card-selection">Focus: {props.selectedTargetMolstarFocus}</span>}
+              </button>
+            ))
+          )}
         </div>
+        <input
+          ref={targetInputRef}
+          hidden
+          multiple
+          type="file"
+          accept=".pdb,.cif,.mmcif,.json"
+          onChange={(event) => {
+            void handleTargetFileInput(event);
+          }}
+        />
       </section>
 
       {selectedTarget && (

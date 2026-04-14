@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
+import { summarizeResidueSelection } from '../lib/utils';
 
 const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
@@ -221,15 +222,127 @@ async function applyIllustrativeQuickStyle(viewer: import('pdbe-molstar/lib/view
   }
 }
 
+function getCurrentStructure(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
+  return viewer.plugin?.managers?.structure?.hierarchy?.selection?.structures?.[0]?.cell?.obj?.data ?? null;
+}
+
+async function selectionLociFromResidues(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+  indices: number[],
+) {
+  const structure = getCurrentStructure(viewer);
+  if (!structure) return null;
+  const { QueryHelper } = await import('pdbe-molstar/lib/helpers.js');
+  return QueryHelper.getInteractivityLoci(residueIndicesToQueries(residues, indices), structure);
+}
+
+async function readSelectionResidues(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+) {
+  const structure = getCurrentStructure(viewer);
+  if (!structure) return [];
+
+  const [{ StructureElement, StructureProperties }] = await Promise.all([import('molstar/lib/mol-model/structure.js')]);
+  const loci = viewer.plugin?.managers?.structure?.selection?.getLoci(structure);
+  if (!loci || !StructureElement.Loci.is(loci) || StructureElement.Loci.isEmpty(loci)) return [];
+
+  const selection = new Set<number>();
+  StructureElement.Loci.forEachLocation(loci, (location: unknown) => {
+    const chainId = StructureProperties.chain.label_asym_id(location as never);
+    const labelSeqId = StructureProperties.residue.label_seq_id(location as never);
+    const authSeqId = StructureProperties.residue.auth_seq_id(location as never);
+    const match = residues.find(
+      (residue) =>
+        residue.chainId === chainId &&
+        (residue.labelSeqId === labelSeqId || (authSeqId !== undefined && residue.authSeqId === authSeqId)),
+    );
+    if (match) selection.add(match.index);
+  });
+
+  return summarizeResidueSelection([...selection]);
+}
+
+async function readFocusResidues(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+) {
+  const [{ StructureElement, StructureProperties }] = await Promise.all([import('molstar/lib/mol-model/structure.js')]);
+  const loci = viewer.plugin?.managers?.structure?.focus?.current?.loci;
+  if (!loci || !StructureElement.Loci.is(loci) || StructureElement.Loci.isEmpty(loci)) return [];
+
+  const focus = new Set<number>();
+  StructureElement.Loci.forEachLocation(loci, (location: unknown) => {
+    const chainId = StructureProperties.chain.label_asym_id(location as never);
+    const labelSeqId = StructureProperties.residue.label_seq_id(location as never);
+    const authSeqId = StructureProperties.residue.auth_seq_id(location as never);
+    const match = residues.find(
+      (residue) =>
+        residue.chainId === chainId &&
+        (residue.labelSeqId === labelSeqId || (authSeqId !== undefined && residue.authSeqId === authSeqId)),
+    );
+    if (match) focus.add(match.index);
+  });
+
+  return summarizeResidueSelection([...focus]);
+}
+
+async function syncNativeSelection(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+  indices: number[],
+  options?: { force?: boolean },
+) {
+  const structure = getCurrentStructure(viewer);
+  if (!structure || !viewer.plugin?.managers?.structure?.selection) return;
+
+  const [{ StructureElement }, nextLoci] = await Promise.all([
+    import('molstar/lib/mol-model/structure.js'),
+    selectionLociFromResidues(viewer, residues, indices),
+  ]);
+
+  if (!nextLoci) return;
+  const currentLoci = viewer.plugin.managers.structure.selection.getLoci(structure);
+  if (!options?.force && StructureElement.Loci.is(currentLoci) && StructureElement.Loci.areEqual(currentLoci, nextLoci)) return;
+
+  if (indices.length === 0) {
+    viewer.plugin.managers.structure.selection.clear();
+    return;
+  }
+
+  viewer.plugin.managers.structure.selection.fromLoci('set', nextLoci, true);
+}
+
+async function syncNativeFocus(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  residues: PredictionBundle['residues'],
+  indices: number[],
+) {
+  if (!viewer.plugin?.managers?.structure?.focus) return;
+  if (indices.length === 0) {
+    viewer.plugin.managers.structure.focus.clear();
+    return;
+  }
+
+  const loci = await selectionLociFromResidues(viewer, residues, indices);
+  if (!loci) return;
+  viewer.plugin.managers.structure.focus.setFromLoci(loci);
+}
+
 interface MolstarPanelProps {
   bundle: PredictionBundle;
   structureText: string;
+  selectedResidues: number[] | null;
+  focusedResidues: number[] | null;
   hoveredResidues: number[];
   pinnedResidues: number[];
   pinnedCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
   onHoverResidue: (index: number | null) => void;
   onClickResidue: (index: number | null) => void;
+  onSelectionResiduesChange?: (indices: number[]) => void;
+  onFocusResiduesChange?: (indices: number[]) => void;
 }
 
 export function MolstarPanel(props: MolstarPanelProps) {
@@ -240,12 +353,27 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const objectUrlRef = useRef<string | null>(null);
   const hoverCallbackRef = useRef(props.onHoverResidue);
   const clickCallbackRef = useRef(props.onClickResidue);
+  const selectionCallbackRef = useRef(props.onSelectionResiduesChange);
+  const focusCallbackRef = useRef(props.onFocusResiduesChange);
+  const selectedResiduesRef = useRef(props.selectedResidues);
+  const focusedResiduesRef = useRef(props.focusedResidues);
+  const selectionModeRef = useRef(false);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
 
   useEffect(() => {
     hoverCallbackRef.current = props.onHoverResidue;
     clickCallbackRef.current = props.onClickResidue;
-  }, [props.onClickResidue, props.onHoverResidue]);
+    selectionCallbackRef.current = props.onSelectionResiduesChange;
+    focusCallbackRef.current = props.onFocusResiduesChange;
+  }, [props.onClickResidue, props.onHoverResidue, props.onSelectionResiduesChange, props.onFocusResiduesChange]);
+
+  useEffect(() => {
+    selectedResiduesRef.current = props.selectedResidues;
+  }, [props.selectedResidues]);
+
+  useEffect(() => {
+    focusedResiduesRef.current = props.focusedResidues;
+  }, [props.focusedResidues]);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,10 +425,40 @@ export function MolstarPanel(props: MolstarPanelProps) {
         },
       );
 
+      await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       await applyIllustrativeQuickStyle(viewerRef.current);
       await applyDefaultSequenceTheme(viewerRef.current);
+      selectionModeRef.current = Boolean(viewerRef.current.plugin?.selectionMode);
+
+      const selectionSubscription = viewerRef.current.plugin?.managers?.structure?.selection?.events?.changed?.subscribe(async () => {
+        if (!viewerRef.current) return;
+        const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
+        if (!selectionModeRef.current && indices.length === 0) return;
+        selectionCallbackRef.current?.(indices);
+      });
+      const focusSubscription = viewerRef.current.plugin?.managers?.structure?.focus?.behaviors?.current?.subscribe(async () => {
+        if (!viewerRef.current) return;
+        const indices = await readFocusResidues(viewerRef.current, props.bundle.residues);
+        focusCallbackRef.current?.(indices);
+      });
+      const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
+        if (!viewerRef.current) return;
+        selectionModeRef.current = enabled;
+        if (!enabled || selectedResiduesRef.current === null) return;
+        await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+      });
+
+      const initialSelection = await readSelectionResidues(viewerRef.current, props.bundle.residues);
+      if (selectionModeRef.current || initialSelection.length > 0) {
+        selectionCallbackRef.current?.(initialSelection);
+      }
+      const initialFocus = await readFocusResidues(viewerRef.current, props.bundle.residues);
+      focusCallbackRef.current?.(initialFocus);
 
       return () => {
+        selectionSubscription?.unsubscribe?.();
+        focusSubscription?.unsubscribe?.();
+        selectionModeSubscription?.unsubscribe?.();
         shellRef.current?.removeEventListener('PDB.molstar.mouseover', handleHover);
         shellRef.current?.removeEventListener('PDB.molstar.mouseout', handleOut);
         shellRef.current?.removeEventListener('PDB.molstar.click', handleClick);
@@ -336,35 +494,55 @@ export function MolstarPanel(props: MolstarPanelProps) {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
+    if (props.selectedResidues === null) return;
+
+    void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues);
+  }, [props.bundle.residues, props.selectedResidues]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
     if (props.brushSelection) {
-      void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
-      void clearStructureFocus(viewer);
-      void applyBrushColoring(viewer, props.bundle.residues, props.brushSelection);
+      const brushSelection = props.brushSelection;
+      void (async () => {
+        await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+        await clearStructureFocus(viewer);
+        await applyBrushColoring(viewer, props.bundle.residues, brushSelection);
+      })();
       return;
     }
 
     if (props.pinnedResidues.length === 0) {
-      void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
-      void clearStructureFocus(viewer);
-      void viewer.visual.clearSelection();
-      void applyDefaultSequenceTheme(viewer);
+      void (async () => {
+        await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+        await viewer.visual.clearSelection();
+        await applyDefaultSequenceTheme(viewer);
+        if (selectedResiduesRef.current !== null) {
+          await syncNativeSelection(viewer, props.bundle.residues, selectedResiduesRef.current, { force: true });
+        }
+        if (focusedResiduesRef.current !== null) {
+          await syncNativeFocus(viewer, props.bundle.residues, focusedResiduesRef.current);
+        }
+      })();
       return;
     }
 
     if (props.pinnedCell) {
-      const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
       void (async () => {
         await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
-        await viewer.visual.interactivityFocus({ data: queries });
+        await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
+        await viewer.visual.interactivityFocus({ data: residueIndicesToQueries(props.bundle.residues, props.pinnedResidues) });
         await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
       })();
       return;
     }
 
-    void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
-    const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
-    void viewer.visual.select({ data: queries });
-    void applyDefaultSequenceTheme(viewer);
+    void (async () => {
+      await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+      await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
+      await applyDefaultSequenceTheme(viewer);
+    })();
   }, [props.brushSelection, props.bundle.residues, props.pinnedCell, props.pinnedResidues]);
 
   return (

@@ -29,8 +29,8 @@ export function createSeedProject(): WorkspaceProject {
   return structuredClone({
     id: rawSeedManifest.project.id,
     name: rawSeedManifest.project.name,
-    source_structures: rawSeedManifest.source_structures,
-    targets: rawSeedManifest.targets,
+    source_structures: [],
+    targets: [],
     binder_runs: [],
     binder_candidates: [],
     validation_runs: [],
