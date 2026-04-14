@@ -2,6 +2,7 @@ import type {
   JobRef,
   TargetArtifact,
   ViewerArtifactSource,
+  ViewerConfiguration,
   ViewerStateSnapshot,
   WorkspaceProject,
 } from '../../domain/project-types';
@@ -20,7 +21,13 @@ export interface ProjectApi {
   generateBinders(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   validateRefolding(projectId: string, binderCandidateIds: string[]): Promise<JobRef>;
   getJob(jobId: string): Promise<JobRef>;
-  saveViewerState(projectId: string, artifactId: string, label: string): Promise<ViewerStateSnapshot>;
+  saveViewerState(
+    projectId: string,
+    artifactId: string,
+    label: string,
+    payload?: Record<string, unknown>,
+    viewerConfiguration?: ViewerConfiguration,
+  ): Promise<ViewerStateSnapshot>;
   uploadTarget(projectId: string, files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }>;
 }
 
@@ -167,16 +174,42 @@ class LocalFixtureProjectApi implements ProjectApi {
     return structuredClone(record.job);
   }
 
-  async saveViewerState(projectId: string, artifactId: string, label: string): Promise<ViewerStateSnapshot> {
+  async saveViewerState(
+    projectId: string,
+    artifactId: string,
+    label: string,
+    payload: Record<string, unknown> = {},
+    viewerConfiguration: ViewerConfiguration = 'target',
+  ): Promise<ViewerStateSnapshot> {
     const project = this.requireProject(projectId);
     if (!label.trim()) throw new Error('Viewer state label cannot be empty');
-    const snapshot: ViewerStateSnapshot = {
-      id: `viewer-state-${this.viewerStateCounter++}`,
-      artifact_id: artifactId,
-      label: label.trim(),
-      payload: { kind: 'placeholder' },
-    };
-    project.viewer_states.push(snapshot);
+    const trimmedLabel = label.trim();
+    const existing = project.viewer_states.find(
+      (state) =>
+        state.artifact_id === artifactId &&
+        state.viewer_configuration === viewerConfiguration &&
+        state.label === trimmedLabel,
+    );
+    const snapshot: ViewerStateSnapshot = existing
+      ? {
+          ...existing,
+          payload: structuredClone(payload),
+          updated_at: Date.now(),
+        }
+      : {
+          id: `viewer-state-${this.viewerStateCounter++}`,
+          artifact_id: artifactId,
+          viewer_configuration: viewerConfiguration,
+          label: trimmedLabel,
+          payload: structuredClone(payload),
+          updated_at: Date.now(),
+        };
+    if (existing) {
+      const index = project.viewer_states.findIndex((state) => state.id === existing.id);
+      project.viewer_states.splice(index, 1, snapshot);
+    } else {
+      project.viewer_states.push(snapshot);
+    }
     return structuredClone(snapshot);
   }
 
@@ -292,12 +325,20 @@ class HttpProjectApi implements ProjectApi {
     return this.request<JobRef>(`/jobs/${jobId}`);
   }
 
-  async saveViewerState(projectId: string, artifactId: string, label: string): Promise<ViewerStateSnapshot> {
+  async saveViewerState(
+    projectId: string,
+    artifactId: string,
+    label: string,
+    payload: Record<string, unknown> = {},
+    viewerConfiguration: ViewerConfiguration = 'target',
+  ): Promise<ViewerStateSnapshot> {
     return this.request<ViewerStateSnapshot>(`/projects/${projectId}/viewer-states`, {
       method: 'POST',
       body: JSON.stringify({
         artifact_id: artifactId,
         label,
+        payload,
+        viewer_configuration: viewerConfiguration,
       }),
     });
   }

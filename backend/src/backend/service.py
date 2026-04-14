@@ -66,18 +66,45 @@ class ProjectService:
             raise KeyError(artifact_id)
         return asset
 
-    def save_viewer_state(self, project_id: str, artifact_id: str, label: str, payload: dict[str, object] | None = None) -> ViewerState:
+    def save_viewer_state(
+        self,
+        project_id: str,
+        artifact_id: str,
+        viewer_configuration: str,
+        label: str,
+        payload: dict[str, object] | None = None,
+    ) -> ViewerState:
         project = self.get_project(project_id)
         if not label.strip():
             raise ValueError("Viewer state label cannot be empty")
-        state = ViewerState(
-            id=f"viewer-state-{self._id_counters['viewer_state']}",
-            artifact_id=artifact_id,
-            label=label.strip(),
-            payload=payload or {"kind": "placeholder"},
+        now = time.time()
+        if viewer_configuration not in {"target", "validate_refolding"}:
+            raise ValueError("Viewer state viewer_configuration must be 'target' or 'validate_refolding'")
+
+        state = next(
+            (
+                entry
+                for entry in project.viewer_states
+                if entry.artifact_id == artifact_id
+                and entry.viewer_configuration == viewer_configuration
+                and entry.label == label.strip()
+            ),
+            None,
         )
-        self._id_counters["viewer_state"] += 1
-        project.viewer_states.append(state)
+        if state is None:
+            state = ViewerState(
+                id=f"viewer-state-{self._id_counters['viewer_state']}",
+                artifact_id=artifact_id,
+                viewer_configuration=viewer_configuration,
+                label=label.strip(),
+                updated_at=now,
+                payload=dict(payload or {}),
+            )
+            self._id_counters["viewer_state"] += 1
+            project.viewer_states.append(state)
+        else:
+            state.payload = dict(payload or {})
+            state.updated_at = now
         return state
 
     def list_viewer_states(self, project_id: str) -> list[ViewerState]:

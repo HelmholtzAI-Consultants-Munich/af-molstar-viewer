@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Workspace } from '../Workspace';
-import type { LoadedViewerArtifact } from '../../domain/project-types';
+import type { LoadedViewerArtifact, ViewerConfiguration } from '../../domain/project-types';
 import { resolvePaeInteractionPerformance } from '../../lib/performance';
 
 const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
 
 interface ArtifactWorkspaceProps {
   artifact: LoadedViewerArtifact;
+  viewerConfiguration: ViewerConfiguration;
+  viewerStatePayload?: Record<string, unknown> | null;
   selectedResidues: number[] | null;
   focusedResidues?: number[] | null;
   onSelectionResiduesChange?: (indices: number[]) => void;
   onFocusResiduesChange?: (indices: number[]) => void;
+  onViewerStateChange?: (payload: Record<string, unknown>) => void;
 }
 
 export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
@@ -31,6 +34,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
 
   return (
     <Workspace
+      viewerConfiguration={props.viewerConfiguration}
+      viewerStatePayload={props.viewerStatePayload ?? null}
       bundle={props.artifact.bundle}
       structureText={props.artifact.structureText}
       selectedResidues={props.selectedResidues}
@@ -75,6 +80,7 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       }}
       onMolstarSelectionChange={props.onSelectionResiduesChange}
       onMolstarFocusChange={props.onFocusResiduesChange}
+      onViewerStateChange={props.onViewerStateChange}
     />
   );
 }

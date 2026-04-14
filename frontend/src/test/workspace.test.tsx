@@ -26,6 +26,8 @@ function Harness() {
 
   return (
     <Workspace
+      viewerConfiguration="validate_refolding"
+      viewerStatePayload={null}
       bundle={bundle}
       structureText="ATOM"
       selectedResidues={[]}
@@ -66,6 +68,39 @@ function Harness() {
         setPinnedCell(null);
         setPinnedResidues([]);
       }}
+      onViewerStateChange={() => {}}
+    />
+  );
+}
+
+function TargetHarness() {
+  const bundle = createToyBundle();
+
+  return (
+    <Workspace
+      viewerConfiguration="target"
+      viewerStatePayload={null}
+      bundle={bundle}
+      structureText="ATOM"
+      selectedResidues={[]}
+      focusedResidues={[]}
+      hoveredResidues={[]}
+      pinnedResidues={[]}
+      pinnedCell={null}
+      hoveredCell={null}
+      brushSelection={null}
+      interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
+      paeHoverSyncEnabled
+      paePairSelectionEnabled
+      onHoverResidues={() => {}}
+      onHoverCell={() => {}}
+      onPinResidues={() => {}}
+      onPinCell={() => {}}
+      onBrushSelectionChange={() => {}}
+      onTogglePaeHoverSync={() => {}}
+      onTogglePaePairSelection={() => {}}
+      onClearPairSelection={() => {}}
+      onViewerStateChange={() => {}}
     />
   );
 }
@@ -188,5 +223,14 @@ describe('workspace interactions', () => {
 
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { pinnedResidues: number[] };
     expect(lastCall.pinnedResidues).toEqual([]);
+  });
+
+  it('uses a Mol*-only layout for the target viewer configuration', () => {
+    render(<TargetHarness />);
+
+    expect(document.querySelector('.heatmap-panel')).not.toBeInTheDocument();
+    expect(document.querySelector('.legend-panel')).not.toBeInTheDocument();
+    const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { viewerConfiguration: string };
+    expect(lastCall.viewerConfiguration).toBe('target');
   });
 });

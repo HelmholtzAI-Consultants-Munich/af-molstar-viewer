@@ -10,19 +10,27 @@ import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?r
 vi.mock('../components/project/ArtifactWorkspace', () => ({
   ArtifactWorkspace: ({
     artifact,
+    viewerConfiguration,
+    viewerStatePayload,
     selectedResidues,
     focusedResidues,
     onSelectionResiduesChange,
     onFocusResiduesChange,
+    onViewerStateChange,
   }: {
     artifact: { artifactId: string };
+    viewerConfiguration: 'target' | 'validate_refolding';
+    viewerStatePayload?: Record<string, unknown> | null;
     selectedResidues?: number[] | null;
     focusedResidues?: number[] | null;
     onSelectionResiduesChange?: (indices: number[]) => void;
     onFocusResiduesChange?: (indices: number[]) => void;
+    onViewerStateChange?: (payload: Record<string, unknown>) => void;
   }) => (
     <div>
       <div data-testid="artifact-workspace">{artifact.artifactId}</div>
+      <div data-testid="viewer-configuration">{viewerConfiguration}</div>
+      <div data-testid="viewer-state-payload">{JSON.stringify(viewerStatePayload ?? null)}</div>
       <div data-testid="selected-residues">
         {(selectedResidues ?? null) === null ? 'null' : selectedResidues!.join(',')}
       </div>
@@ -34,6 +42,19 @@ vi.mock('../components/project/ArtifactWorkspace', () => ({
       </button>
       <button type="button" onClick={() => onFocusResiduesChange?.([1, 2])}>
         Mock Molstar focus
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onViewerStateChange?.({
+            snapshot: {
+              camera: { current: { position: [1, 2, 3] } },
+              tag: `${artifact.artifactId}-${viewerConfiguration}`,
+            },
+          })
+        }
+      >
+        Mock viewer state
       </button>
     </div>
   ),
@@ -218,6 +239,60 @@ describe('project app shell', () => {
     await waitFor(() => {
       expect(scoped.getByText('Focus: A2-3')).toBeInTheDocument();
       expect(scoped.getByTestId('focused-residues')).toHaveTextContent('1,2');
+    });
+  });
+
+  it('restores per-target viewer snapshots and keeps target and validate-refolding states separate', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<App api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+
+    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
+    ]);
+
+    await user.click(scoped.getByRole('button', { name: 'Mock viewer state' }));
+    await waitFor(() => {
+      expect(scoped.getByTestId('viewer-state-payload')).toHaveTextContent('"tag":"target-1-target"');
+      expect(scoped.getByTestId('viewer-configuration')).toHaveTextContent('target');
+    });
+
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_beta_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
+    ]);
+
+    expect(scoped.getByTestId('viewer-state-payload')).toHaveTextContent('null');
+
+    const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
+    await user.click(targetCards()[0]);
+    await waitFor(() => {
+      expect(scoped.getByTestId('viewer-state-payload')).toHaveTextContent('"tag":"target-1-target"');
+    });
+
+    const input = scoped.getByPlaceholderText('A1-10,B20-22');
+    await user.clear(input);
+    await user.type(input, 'A1');
+
+    fireEvent.click(scoped.getByRole('button', { name: /Generate binders/i }));
+    await waitFor(() => {
+      expect(scoped.getByText(/Binder candidate l73/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(scoped.getByRole('button', { name: /Validate refolding/i }));
+    await waitFor(() => {
+      expect(scoped.getByLabelText(/Refolded binder l73/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(scoped.getByLabelText(/Refolded binder l73/i));
+    await waitFor(() => {
+      expect(scoped.getAllByTestId('viewer-configuration').at(-1)).toHaveTextContent('validate_refolding');
+      expect(scoped.getAllByTestId('viewer-state-payload').at(-1)).toHaveTextContent('null');
     });
   });
 });

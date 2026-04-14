@@ -138,6 +138,7 @@ def create_app() -> Any:
             state = SERVICE.save_viewer_state(
                 project_id=project_id,
                 artifact_id=str(payload.get("artifact_id", "")),
+                viewer_configuration=str(payload.get("viewer_configuration", "target")),
                 label=str(payload.get("label", "")),
                 payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else None,
             )

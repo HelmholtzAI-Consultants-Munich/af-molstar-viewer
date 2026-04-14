@@ -56,4 +56,36 @@ describe('project api fixtures', () => {
     expect(afterValidate.binder_validations).toHaveLength(2);
     expect(afterValidate.targets[0].target_interface_residues).toBe('A1-10,B20-22');
   });
+
+  it('stores viewer states per artifact and viewer configuration', async () => {
+    const { api, project, target } = await uploadColabfoldTarget();
+
+    const targetState = await api.saveViewerState(
+      project.id,
+      target.id,
+      'Current target view',
+      { snapshot: { camera: { current: { position: [1, 2, 3] } } } },
+      'target',
+    );
+    const targetStateReplacement = await api.saveViewerState(
+      project.id,
+      target.id,
+      'Current target view',
+      { snapshot: { camera: { current: { position: [3, 2, 1] } } } },
+      'target',
+    );
+    const validateState = await api.saveViewerState(
+      project.id,
+      target.id,
+      'Current validate refolding view',
+      { snapshot: { camera: { current: { position: [4, 5, 6] } } } },
+      'validate_refolding',
+    );
+    const refreshed = await api.getProject(project.id);
+
+    expect(targetStateReplacement.id).toBe(targetState.id);
+    expect(targetStateReplacement.payload).toEqual({ snapshot: { camera: { current: { position: [3, 2, 1] } } } });
+    expect(validateState.viewer_configuration).toBe('validate_refolding');
+    expect(refreshed.viewer_states).toHaveLength(2);
+  });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EXAMPLES } from './examples';
-import type { LoadedViewerArtifact, WorkspaceProject } from '../domain/project-types';
+import type { LoadedViewerArtifact, ViewerConfiguration, ViewerStateSnapshot, WorkspaceProject } from '../domain/project-types';
 import { canonicalizeTargetInterfaceResidues, parseTargetInterfaceResidues } from '../domain/target-interface';
 import { ArtifactWorkspace } from '../components/project/ArtifactWorkspace';
 import { ProjectSidebar } from '../components/project/ProjectSidebar';
@@ -56,6 +56,34 @@ function resolveInterfaceResidueIndices(
   }
 }
 
+function getLatestViewerState(
+  project: WorkspaceProject | null,
+  artifactId: string | null,
+  viewerConfiguration: ViewerConfiguration,
+) {
+  if (!project || !artifactId) return null;
+  return (
+    project.viewer_states
+      .filter(
+        (state) => state.artifact_id === artifactId && state.viewer_configuration === viewerConfiguration,
+      )
+      .sort((left, right) => right.updated_at - left.updated_at)[0] ?? null
+  );
+}
+
+function upsertViewerState(project: WorkspaceProject, snapshot: ViewerStateSnapshot) {
+  const existingIndex = project.viewer_states.findIndex((state) => state.id === snapshot.id);
+  if (existingIndex >= 0) {
+    const viewerStates = [...project.viewer_states];
+    viewerStates.splice(existingIndex, 1, snapshot);
+    return { ...project, viewer_states: viewerStates };
+  }
+  return {
+    ...project,
+    viewer_states: [...project.viewer_states, snapshot],
+  };
+}
+
 export function App(props: AppProps) {
   const api = useMemo(() => props.api ?? createProjectApi(), [props.api]);
   const [project, setProject] = useState<WorkspaceProject | null>(null);
@@ -76,6 +104,7 @@ export function App(props: AppProps) {
   const interfaceDraft = selectedTarget ? (targetInterfaceDrafts[selectedTarget.id] ?? selectedTarget.target_interface_residues) : '';
   const selectedInterfaceResidues = resolveInterfaceResidueIndices(selectedArtifact, interfaceDraft);
   const selectedTargetFocusResidues = selectedTarget ? (viewerFocusSelections[selectedTarget.id] ?? []) : [];
+  const selectedTargetViewerState = getLatestViewerState(project, selectedTarget?.id ?? null, 'target');
   const selectedTargetMolstarFocus =
     selectedTarget && selectedArtifact
       ? formatResidueSelection(selectedArtifact.bundle.residues, selectedTargetFocusResidues, {
@@ -88,6 +117,21 @@ export function App(props: AppProps) {
       ...current,
       [targetId]: value,
     }));
+  };
+
+  const persistViewerState = async (
+    artifactId: string,
+    viewerConfiguration: ViewerConfiguration,
+    label: string,
+    payload: Record<string, unknown>,
+  ) => {
+    if (!project) return;
+    try {
+      const snapshot = await api.saveViewerState(project.id, artifactId, label, payload, viewerConfiguration);
+      setProject((current) => (current && current.id === project.id ? upsertViewerState(current, snapshot) : current));
+    } catch (viewerStateError) {
+      setError(viewerStateError instanceof Error ? viewerStateError.message : 'Unable to persist viewer state');
+    }
   };
 
   useEffect(() => {
@@ -338,7 +382,13 @@ export function App(props: AppProps) {
           onSaveViewerState={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;
-              await api.saveViewerState(project.id, selectedTarget.id, `${selectedTarget.name} view ${project.viewer_states.length + 1}`);
+              await api.saveViewerState(
+                project.id,
+                selectedTarget.id,
+                `${selectedTarget.name} view ${project.viewer_states.length + 1}`,
+                selectedTargetViewerState?.payload ?? {},
+                'target',
+              );
             })
           }
           onToggleValidationCompare={(validationId) =>
@@ -368,6 +418,8 @@ export function App(props: AppProps) {
             <ArtifactWorkspace
               key={selectedArtifact.artifactId}
               artifact={selectedArtifact}
+              viewerConfiguration="target"
+              viewerStatePayload={selectedTargetViewerState?.payload ?? null}
               selectedResidues={selectedInterfaceResidues}
               focusedResidues={selectedTargetFocusResidues}
               onSelectionResiduesChange={(indices) => {
@@ -382,6 +434,9 @@ export function App(props: AppProps) {
                   [selectedArtifact.artifactId]: indices,
                 }))
               }
+              onViewerStateChange={(payload) => {
+                void persistViewerState(selectedArtifact.artifactId, 'target', 'Current target view', payload);
+              }}
             />
           ) : (
             <section className="panel empty-panel">
@@ -408,7 +463,17 @@ export function App(props: AppProps) {
                         <span>{validation.id}</span>
                       </div>
                       {artifact ? (
-                        <ArtifactWorkspace key={artifact.artifactId} artifact={artifact} selectedResidues={null} focusedResidues={null} />
+                        <ArtifactWorkspace
+                          key={artifact.artifactId}
+                          artifact={artifact}
+                          viewerConfiguration="validate_refolding"
+                          viewerStatePayload={getLatestViewerState(project, validation.id, 'validate_refolding')?.payload ?? null}
+                          selectedResidues={null}
+                          focusedResidues={null}
+                          onViewerStateChange={(payload) => {
+                            void persistViewerState(validation.id, 'validate_refolding', 'Current validate refolding view', payload);
+                          }}
+                        />
                       ) : (
                         <div className="panel empty-panel compare-empty-panel">
                           <h2>Loading validation…</h2>

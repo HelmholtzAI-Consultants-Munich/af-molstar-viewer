@@ -2,6 +2,7 @@ import type { PredictionBundle } from '../lib/types';
 
 export type ArtifactKind = 'target' | 'binder_candidate' | 'binder_validation';
 export type TargetProvenance = 'uploaded' | 'template_extracted' | 'cropped';
+export type ViewerConfiguration = 'target' | 'validate_refolding';
 export type JobType =
   | 'import'
   | 'extract_target_from_template'
@@ -79,8 +80,10 @@ export interface JobRef {
 export interface ViewerStateSnapshot {
   id: string;
   artifact_id: string;
+  viewer_configuration: ViewerConfiguration;
   label: string;
   payload: Record<string, unknown>;
+  updated_at: number;
 }
 
 export interface WorkspaceProject {

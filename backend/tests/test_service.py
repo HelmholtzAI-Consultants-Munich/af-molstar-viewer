@@ -46,6 +46,37 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(resolved_validate.status, "succeeded")
         self.assertGreaterEqual(len(refreshed.binder_validations), 2)
 
+    def test_viewer_states_are_keyed_by_artifact_and_configuration(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+
+        first = service.save_viewer_state(
+            project.id,
+            artifact_id=project.targets[0].id,
+            viewer_configuration="target",
+            label="Current target view",
+            payload={"snapshot": {"camera": {"current": {"position": [1, 2, 3]}}}},
+        )
+        replacement = service.save_viewer_state(
+            project.id,
+            artifact_id=project.targets[0].id,
+            viewer_configuration="target",
+            label="Current target view",
+            payload={"snapshot": {"camera": {"current": {"position": [3, 2, 1]}}}},
+        )
+        validate = service.save_viewer_state(
+            project.id,
+            artifact_id=project.targets[0].id,
+            viewer_configuration="validate_refolding",
+            label="Current validate refolding view",
+            payload={"snapshot": {"camera": {"current": {"position": [4, 5, 6]}}}},
+        )
+
+        self.assertEqual(first.id, replacement.id)
+        self.assertEqual(replacement.payload["snapshot"], {"camera": {"current": {"position": [3, 2, 1]}}})
+        self.assertEqual(validate.viewer_configuration, "validate_refolding")
+        self.assertEqual(len(service.list_viewer_states(project.id)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

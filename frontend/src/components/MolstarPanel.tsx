@@ -6,6 +6,7 @@ import { summarizeResidueSelection } from '../lib/utils';
 
 const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
+const VIEWER_STATE_DEBOUNCE_MS = 240;
 
 const MOLSTAR_RENDER_OPTIONS = {
   alphafoldView: true,
@@ -18,6 +19,21 @@ const MOLSTAR_RENDER_OPTIONS = {
   hideControls: false,
   selectInteraction: true,
   hideCanvasControls: [],
+};
+
+const MOLSTAR_SNAPSHOT_PARAMS = {
+  data: true,
+  behavior: false,
+  structureSelection: true,
+  componentManager: true,
+  animation: false,
+  startAnimation: false,
+  canvas3d: true,
+  canvas3dContext: true,
+  interactivity: true,
+  camera: true,
+  cameraTransition: { name: 'instant' as const, params: {} },
+  image: false,
 };
 
 const PAE_PAIR_SELECTION_COLOR = '#ff6699';
@@ -330,7 +346,24 @@ async function syncNativeFocus(
   viewer.plugin.managers.structure.focus.setFromLoci(loci);
 }
 
+function readSnapshotFromPayload(payload: Record<string, unknown> | null | undefined) {
+  if (!payload || typeof payload !== 'object') return null;
+  const snapshot = payload.snapshot;
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  return snapshot;
+}
+
+async function captureViewerState(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
+  const snapshot = viewer.plugin?.state?.getSnapshot?.(MOLSTAR_SNAPSHOT_PARAMS);
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  return {
+    snapshot: structuredClone(snapshot as Record<string, unknown>),
+  };
+}
+
 interface MolstarPanelProps {
+  viewerConfiguration: 'target' | 'validate_refolding';
+  viewerStatePayload: Record<string, unknown> | null;
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
@@ -343,6 +376,7 @@ interface MolstarPanelProps {
   onClickResidue: (index: number | null) => void;
   onSelectionResiduesChange?: (indices: number[]) => void;
   onFocusResiduesChange?: (indices: number[]) => void;
+  onViewerStateChange?: (payload: Record<string, unknown>) => void;
 }
 
 export function MolstarPanel(props: MolstarPanelProps) {
@@ -355,9 +389,12 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const clickCallbackRef = useRef(props.onClickResidue);
   const selectionCallbackRef = useRef(props.onSelectionResiduesChange);
   const focusCallbackRef = useRef(props.onFocusResiduesChange);
+  const viewerStateCallbackRef = useRef(props.onViewerStateChange);
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
+  const restoringViewerStateRef = useRef(false);
+  const persistTimeoutRef = useRef<number | null>(null);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
 
   useEffect(() => {
@@ -365,7 +402,14 @@ export function MolstarPanel(props: MolstarPanelProps) {
     clickCallbackRef.current = props.onClickResidue;
     selectionCallbackRef.current = props.onSelectionResiduesChange;
     focusCallbackRef.current = props.onFocusResiduesChange;
-  }, [props.onClickResidue, props.onHoverResidue, props.onSelectionResiduesChange, props.onFocusResiduesChange]);
+    viewerStateCallbackRef.current = props.onViewerStateChange;
+  }, [
+    props.onClickResidue,
+    props.onHoverResidue,
+    props.onSelectionResiduesChange,
+    props.onFocusResiduesChange,
+    props.onViewerStateChange,
+  ]);
 
   useEffect(() => {
     selectedResiduesRef.current = props.selectedResidues;
@@ -377,6 +421,25 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
   useEffect(() => {
     let cancelled = false;
+
+    const flushViewerState = async (viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin | null) => {
+      if (!viewer || restoringViewerStateRef.current) return;
+      const payload = await captureViewerState(viewer);
+      if (payload) {
+        viewerStateCallbackRef.current?.(payload);
+      }
+    };
+
+    const scheduleViewerStatePersist = (viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin | null) => {
+      if (!viewer || restoringViewerStateRef.current || !viewerStateCallbackRef.current) return;
+      if (persistTimeoutRef.current !== null) {
+        window.clearTimeout(persistTimeoutRef.current);
+      }
+      persistTimeoutRef.current = window.setTimeout(() => {
+        persistTimeoutRef.current = null;
+        void flushViewerState(viewer);
+      }, VIEWER_STATE_DEBOUNCE_MS);
+    };
 
     const setup = async () => {
       if (!sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
@@ -430,22 +493,48 @@ export function MolstarPanel(props: MolstarPanelProps) {
       await applyDefaultSequenceTheme(viewerRef.current);
       selectionModeRef.current = Boolean(viewerRef.current.plugin?.selectionMode);
 
+      const snapshot = readSnapshotFromPayload(props.viewerStatePayload);
+      if (snapshot && viewerRef.current.plugin?.state?.setSnapshot) {
+        restoringViewerStateRef.current = true;
+        try {
+          await viewerRef.current.plugin.state.setSnapshot(snapshot as never);
+        } finally {
+          restoringViewerStateRef.current = false;
+        }
+        await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
+      }
+      if (selectedResiduesRef.current !== null) {
+        await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+      }
+      if (!snapshot && focusedResiduesRef.current !== null) {
+        await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current);
+      }
+
       const selectionSubscription = viewerRef.current.plugin?.managers?.structure?.selection?.events?.changed?.subscribe(async () => {
         if (!viewerRef.current) return;
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
         if (!selectionModeRef.current && indices.length === 0) return;
         selectionCallbackRef.current?.(indices);
+        if (selectionModeRef.current) {
+          scheduleViewerStatePersist(viewerRef.current);
+        }
       });
       const focusSubscription = viewerRef.current.plugin?.managers?.structure?.focus?.behaviors?.current?.subscribe(async () => {
         if (!viewerRef.current) return;
         const indices = await readFocusResidues(viewerRef.current, props.bundle.residues);
         focusCallbackRef.current?.(indices);
+        scheduleViewerStatePersist(viewerRef.current);
       });
       const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
         if (!viewerRef.current) return;
         selectionModeRef.current = enabled;
-        if (!enabled || selectedResiduesRef.current === null) return;
-        await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+        if (enabled && selectedResiduesRef.current !== null) {
+          await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+        }
+        scheduleViewerStatePersist(viewerRef.current);
+      });
+      const cameraSubscription = viewerRef.current.plugin?.canvas3d?.camera?.stateChanged?.subscribe(() => {
+        scheduleViewerStatePersist(viewerRef.current);
       });
 
       const initialSelection = await readSelectionResidues(viewerRef.current, props.bundle.residues);
@@ -456,9 +545,15 @@ export function MolstarPanel(props: MolstarPanelProps) {
       focusCallbackRef.current?.(initialFocus);
 
       return () => {
+        if (persistTimeoutRef.current !== null) {
+          window.clearTimeout(persistTimeoutRef.current);
+          persistTimeoutRef.current = null;
+        }
+        void flushViewerState(viewerRef.current);
         selectionSubscription?.unsubscribe?.();
         focusSubscription?.unsubscribe?.();
         selectionModeSubscription?.unsubscribe?.();
+        cameraSubscription?.unsubscribe?.();
         shellRef.current?.removeEventListener('PDB.molstar.mouseover', handleHover);
         shellRef.current?.removeEventListener('PDB.molstar.mouseout', handleOut);
         shellRef.current?.removeEventListener('PDB.molstar.click', handleClick);
@@ -478,7 +573,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         objectUrlRef.current = null;
       }
     };
-  }, [props.bundle, props.structureText]);
+  }, [props.bundle, props.structureText, props.viewerConfiguration]);
 
   useEffect(() => {
     if (!viewerRef.current) return;

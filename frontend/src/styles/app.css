@@ -570,6 +570,13 @@ input {
     'heatmap viewer legend';
 }
 
+.target-workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'sequence'
+    'viewer';
+}
+
 .sequence-panel {
   grid-area: sequence;
   padding: 0;
@@ -592,6 +599,10 @@ input {
   padding: 0;
   overflow: hidden;
   border: 0;
+}
+
+.target-workspace-grid .viewer-panel {
+  min-height: 560px;
 }
 
 .legend-panel {

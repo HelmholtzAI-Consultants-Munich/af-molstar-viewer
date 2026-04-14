@@ -14,6 +14,7 @@ JobType = Literal[
 ]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 TargetProvenance = Literal["uploaded", "template_extracted", "cropped"]
+ViewerConfiguration = Literal["target", "validate_refolding"]
 
 
 @dataclass(slots=True)
@@ -91,7 +92,9 @@ class ValidationRun:
 class ViewerState:
     id: str
     artifact_id: str
+    viewer_configuration: ViewerConfiguration
     label: str
+    updated_at: float
     payload: dict[str, object] = field(default_factory=dict)
 
 

@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react';
 import { PaeHeatmap } from './PaeHeatmap';
 import { MolstarPanel } from './MolstarPanel';
 import { LegendPanel } from './LegendPanel';
+import type { ViewerConfiguration } from '../domain/project-types';
 import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 import { summarizeResidueSelection } from '../lib/utils';
 
 interface WorkspaceProps {
+  viewerConfiguration: ViewerConfiguration;
+  viewerStatePayload: Record<string, unknown> | null;
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
@@ -29,6 +32,7 @@ interface WorkspaceProps {
   onClearPairSelection: () => void;
   onMolstarSelectionChange?: (indices: number[]) => void;
   onMolstarFocusChange?: (indices: number[]) => void;
+  onViewerStateChange?: (payload: Record<string, unknown>) => void;
 }
 
 export function Workspace(props: WorkspaceProps) {
@@ -96,39 +100,10 @@ export function Workspace(props: WorkspaceProps) {
   };
 
   return (
-    <div className="workspace-grid">
-      <PaeHeatmap
-        matrix={props.bundle.paeMatrix}
-        maxValue={props.bundle.paeMax}
-        syntheticPae={Boolean(props.bundle.metadata.syntheticPae)}
-        hoveredCell={props.hoveredCell}
-        pinnedResidues={props.pinnedResidues}
-        pinnedCell={props.pinnedCell}
-        brushSelection={props.brushSelection}
-        interactionPerformance={props.interactionPerformance}
-        hoverSyncEnabled={props.paeHoverSyncEnabled}
-        pairSelectionEnabled={props.paePairSelectionEnabled}
-        onHoverCell={(cell) => {
-          props.onHoverCell(cell);
-          if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
-            scheduleHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
-          }
-        }}
-        onClickCell={(cell) => {
-          clearPendingHoverResidues();
-          props.onPinCell(cell);
-          props.onPinResidues(summarizeResidueSelection([cell.x, cell.y]));
-          props.onHoverResidues([]);
-        }}
-        onBrushSelectionChange={props.onBrushSelectionChange}
-        onToggleHoverSync={props.onTogglePaeHoverSync}
-        onTogglePairSelection={props.onTogglePaePairSelection}
-        onClearPairSelection={() => {
-          clearPendingHoverResidues();
-          props.onClearPairSelection();
-        }}
-      />
+    <div className={`workspace-grid${props.viewerConfiguration === 'target' ? ' target-workspace-grid' : ''}`}>
       <MolstarPanel
+        viewerConfiguration={props.viewerConfiguration}
+        viewerStatePayload={props.viewerStatePayload}
         bundle={props.bundle}
         structureText={props.structureText}
         selectedResidues={props.selectedResidues}
@@ -148,8 +123,44 @@ export function Workspace(props: WorkspaceProps) {
           props.onMolstarSelectionChange?.(indices);
         }}
         onFocusResiduesChange={props.onMolstarFocusChange}
+        onViewerStateChange={props.onViewerStateChange}
       />
-      <LegendPanel bundle={props.bundle} />
+      {props.viewerConfiguration === 'validate_refolding' && (
+        <>
+          <PaeHeatmap
+            matrix={props.bundle.paeMatrix}
+            maxValue={props.bundle.paeMax}
+            syntheticPae={Boolean(props.bundle.metadata.syntheticPae)}
+            hoveredCell={props.hoveredCell}
+            pinnedResidues={props.pinnedResidues}
+            pinnedCell={props.pinnedCell}
+            brushSelection={props.brushSelection}
+            interactionPerformance={props.interactionPerformance}
+            hoverSyncEnabled={props.paeHoverSyncEnabled}
+            pairSelectionEnabled={props.paePairSelectionEnabled}
+            onHoverCell={(cell) => {
+              props.onHoverCell(cell);
+              if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
+                scheduleHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
+              }
+            }}
+            onClickCell={(cell) => {
+              clearPendingHoverResidues();
+              props.onPinCell(cell);
+              props.onPinResidues(summarizeResidueSelection([cell.x, cell.y]));
+              props.onHoverResidues([]);
+            }}
+            onBrushSelectionChange={props.onBrushSelectionChange}
+            onToggleHoverSync={props.onTogglePaeHoverSync}
+            onTogglePairSelection={props.onTogglePaePairSelection}
+            onClearPairSelection={() => {
+              clearPendingHoverResidues();
+              props.onClearPairSelection();
+            }}
+          />
+          <LegendPanel bundle={props.bundle} />
+        </>
+      )}
     </div>
   );
 }
