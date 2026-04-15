@@ -22,9 +22,9 @@ const MOLSTAR_RENDER_OPTIONS = {
 };
 
 const MOLSTAR_SNAPSHOT_PARAMS = {
-  data: true,
+  data: false,
   behavior: false,
-  structureSelection: true,
+  structureSelection: false,
   componentManager: true,
   animation: false,
   startAnimation: false,
@@ -356,8 +356,14 @@ function readSnapshotFromPayload(payload: Record<string, unknown> | null | undef
 async function captureViewerState(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
   const snapshot = viewer.plugin?.state?.getSnapshot?.(MOLSTAR_SNAPSHOT_PARAMS);
   if (!snapshot || typeof snapshot !== 'object') return null;
+  const sanitizedSnapshot = structuredClone(snapshot as Record<string, unknown>);
+  delete sanitizedSnapshot.data;
+  delete sanitizedSnapshot.behaviour;
+  delete sanitizedSnapshot.animation;
+  delete sanitizedSnapshot.structureFocus;
+  delete sanitizedSnapshot.structureSelection;
   return {
-    snapshot: structuredClone(snapshot as Record<string, unknown>),
+    snapshot: sanitizedSnapshot,
   };
 }
 
@@ -498,6 +504,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
         restoringViewerStateRef.current = true;
         try {
           await viewerRef.current.plugin.state.setSnapshot(snapshot as never);
+        } catch (snapshotError) {
+          console.warn('Unable to restore Mol* viewer snapshot, continuing with a fresh view.', snapshotError);
         } finally {
           restoringViewerStateRef.current = false;
         }
@@ -506,7 +514,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       if (selectedResiduesRef.current !== null) {
         await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
       }
-      if (!snapshot && focusedResiduesRef.current !== null) {
+      if (focusedResiduesRef.current !== null) {
         await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current);
       }
 

@@ -1249,6 +1249,13 @@ input {
   .heatmap-actions {
     justify-content: flex-start;
   }
+
+  .target-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'sequence'
+      'viewer';
+  }
 }
 
 @media (max-width: 600px) {
@@ -1264,5 +1271,12 @@ input {
   .heatmap-chart,
   .legend-panel {
     max-width: none;
+  }
+
+  .target-workspace-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'sequence'
+      'viewer';
   }
 }
