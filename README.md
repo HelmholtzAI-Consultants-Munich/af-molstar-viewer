@@ -16,9 +16,6 @@ uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 >   - allow comparing the binders, maybe in separate connected views or with overlaying
 >   - enable saving/exporting views from viewer panels as Mol* states
 
-### TODO
-- ask codex to evaluate architecture for this purpose
-- design choice: Mol* `Focus` should only ever be `target`, and not include `surroundings`
 
 ![demo](demo.gif)
 
@@ -49,7 +46,9 @@ The app currently understands:
 
 ## setup
 
-install dependencies and run the dev server
+get `npm` by installing [Node.js](https://nodejs.org/en/download) on your platform.  
+
+install dependencies and run the (dev) server:
 
 ```bash
 npm install

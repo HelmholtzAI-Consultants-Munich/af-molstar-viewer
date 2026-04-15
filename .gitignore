@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# Caches
+**__pycache__**
 
 # most examples
 example/
