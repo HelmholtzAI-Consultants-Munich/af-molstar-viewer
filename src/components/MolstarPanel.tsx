@@ -3,7 +3,7 @@ import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 
-const DEFAULT_FOCUS_COMPONENTS = ['target', 'surroundings', 'interactions'] as const;
+const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;  // 'surroundings', 'interactions'
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
 
 const MOLSTAR_RENDER_OPTIONS = {
@@ -76,13 +76,8 @@ function queriesWithColor(
   return residueIndicesToQueries(residues, indices).map((query) => ({ ...query, color }));
 }
 
-async function applyDefaultSequenceTheme(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
-  await viewer.visual.sequenceColor({
-    data: [],
-    theme: {
-      name: 'plddt-confidence',
-      params: {},
       themeStrength: 1,
+      themeStrength: .6,
     },
   });
 }
@@ -103,7 +98,7 @@ async function applyPinnedPairSelection(
     theme: {
       name: 'plddt-confidence',
       params: {},
-      themeStrength: 1,
+      themeStrength: .6,
     },
   });
 }
@@ -299,6 +294,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       await applyIllustrativeQuickStyle(viewerRef.current);
       await applyDefaultSequenceTheme(viewerRef.current);
+      // Ensure focus components and default styles are active from the very beginning
+      await setStructureFocusComponents(viewerRef.current, DEFAULT_FOCUS_COMPONENTS);
+      await clearStructureFocus(viewerRef.current);
+      await viewerRef.current.visual.clearSelection();
 
       return () => {
         shellRef.current?.removeEventListener('PDB.molstar.mouseover', handleHover);
