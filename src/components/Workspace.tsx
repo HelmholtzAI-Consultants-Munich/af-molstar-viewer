@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PaeHeatmap } from './PaeHeatmap';
 import { MolstarPanel } from './MolstarPanel';
 import { LegendPanel } from './LegendPanel';
@@ -91,6 +91,13 @@ export function Workspace(props: WorkspaceProps) {
     hoverFrameRef.current = requestAnimationFrame(tick);
   };
 
+  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState<boolean>(Boolean(props.bundle.metadata?.looksLikePLDDTs));
+
+  // useEffect(() => {
+  //   // Reset pLDDT coloring toggle to the bundle’s capability on bundle change
+  //   setColorByPLDDTEnabled(Boolean(props.bundle.metadata?.looksLikePLDDTs));
+  // }, [props.bundle]);
+
   return (
     <div className="workspace-grid">
       <PaeHeatmap
@@ -104,6 +111,7 @@ export function Workspace(props: WorkspaceProps) {
         interactionPerformance={props.interactionPerformance}
         hoverSyncEnabled={props.paeHoverSyncEnabled}
         pairSelectionEnabled={props.paePairSelectionEnabled}
+        colorByPLDDTEnabled={colorByPLDDTEnabled}
         onHoverCell={(cell) => {
           props.onHoverCell(cell);
           if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
@@ -123,6 +131,7 @@ export function Workspace(props: WorkspaceProps) {
           clearPendingHoverResidues();
           props.onClearPairSelection();
         }}
+        onToggleColorByPLDDT={() => setColorByPLDDTEnabled((v) => !v)}
       />
       <MolstarPanel
         bundle={props.bundle}
@@ -131,6 +140,7 @@ export function Workspace(props: WorkspaceProps) {
         pinnedResidues={props.pinnedResidues}
         pinnedCell={props.pinnedCell}
         brushSelection={props.brushSelection}
+        colorByPLDDTEnabled={colorByPLDDTEnabled}
         onHoverResidue={(index) => props.onHoverResidues(index === null ? [] : [index])}
         onClickResidue={(index) => {
           clearPendingHoverResidues();
