@@ -7,7 +7,7 @@ const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;  // 'surroundings', 'inter
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
 
 const MOLSTAR_RENDER_OPTIONS = {
-  alphafoldView: true,
+  // alphafoldView: true,
   visualStyle: 'cartoon' as const,
   bgColor: { r: 255, g: 255, b: 255 },
   leftPanel: false,
@@ -76,10 +76,49 @@ function queriesWithColor(
   return residueIndicesToQueries(residues, indices).map((query) => ({ ...query, color }));
 }
 
-      themeStrength: 1,
+async function applyDefaultSequenceTheme(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  looksLikePLDDTs: boolean = false,
+) {
+  if (looksLikePLDDTs) {
+    try {
+      await viewer.visual.sequenceColor({
+        data: [],
+        theme: {
+          name: 'plddt-confidence',
+          params: {},
+          themeStrength: .6, // the opacity / alpha of the coloring
+        },
+      });
+      return;
+    } catch {
+      // fall through to chain-id below
+    }
+  }
+  // Fallback or non-PLDDT structures: use chain coloring in the sequence view
+  await viewer.visual.sequenceColor({
+    data: [],
+    theme: {
+      name: 'chain-id',
+      params: {},
       themeStrength: .6,
     },
   });
+}
+
+// On initial load the SequenceView UI may not be fully ready right after render().
+// Apply the default sequence theme after the next two animation frames to ensure
+// the sequence panel has mounted and internal behaviors have initialized.
+async function applyDefaultSequenceThemeDeferred(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  looksLikePLDDTs: boolean = false,
+) {
+  const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await raf();
+  await raf();
+  // In case structure loading is still in progress, add a tiny timeout as a safety net.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await applyDefaultSequenceTheme(viewer, looksLikePLDDTs);
 }
 
 async function applyPinnedPairSelection(
@@ -288,16 +327,17 @@ export function MolstarPanel(props: MolstarPanelProps) {
             format: props.bundle.structure.format,
             binary: false,
           },
-          ...MOLSTAR_RENDER_OPTIONS,
+          alphafoldView: Boolean(props.bundle.metadata?.looksLikePLDDTs),
+          ...MOLSTAR_RENDER_OPTIONS,  // instead of using alphafoldView = true from there, fetch it from props
         },
       );
 
       await applyIllustrativeQuickStyle(viewerRef.current);
-      await applyDefaultSequenceTheme(viewerRef.current);
       // Ensure focus components and default styles are active from the very beginning
       await setStructureFocusComponents(viewerRef.current, DEFAULT_FOCUS_COMPONENTS);
       await clearStructureFocus(viewerRef.current);
       await viewerRef.current.visual.clearSelection();
+      await applyDefaultSequenceThemeDeferred(viewerRef.current, Boolean(props.bundle.metadata?.looksLikePLDDTs));
 
       return () => {
         shellRef.current?.removeEventListener('PDB.molstar.mouseover', handleHover);
@@ -346,7 +386,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
       void clearStructureFocus(viewer);
       void viewer.visual.clearSelection();
-      void applyDefaultSequenceTheme(viewer);
+      void applyDefaultSequenceTheme(viewer, Boolean(props.bundle.metadata?.looksLikePLDDTs));
       return;
     }
 
@@ -363,7 +403,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
     const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
     void viewer.visual.select({ data: queries });
-    void applyDefaultSequenceTheme(viewer);
+    void applyDefaultSequenceTheme(viewer, Boolean(props.bundle.metadata?.looksLikePLDDTs));
   }, [props.brushSelection, props.bundle.residues, props.pinnedCell, props.pinnedResidues]);
 
   return (
