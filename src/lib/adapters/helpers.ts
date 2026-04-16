@@ -78,6 +78,7 @@ export function makeBundle(params: {
       warnings: params.warnings ?? [],
       matchedFiles: params.matchedFiles,
       syntheticPae: params.syntheticPae,
+      looksLikePLDDTs: params.parsedStructure.looksLikePLDDTs,
     },
   };
 }

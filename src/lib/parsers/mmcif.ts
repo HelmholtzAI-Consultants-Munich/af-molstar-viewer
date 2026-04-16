@@ -85,6 +85,8 @@ export function parseMmCifStructure(text: string): ParsedStructure {
     }
   }
 
+    const looksLikePLDDTs = localMetricIds.size > 0;
+
   const localQa = loops.get('_ma_qa_metric_local');
   const localConfidence = new Map<string, number>();
   if (localQa) {
@@ -153,5 +155,5 @@ export function parseMmCifStructure(text: string): ParsedStructure {
 
   pushResidue(atomSite.rows[atomSite.rows.length - 1] ?? null);
 
-  return { residues };
+  return { residues, looksLikePLDDTs };
 }

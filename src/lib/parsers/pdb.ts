@@ -8,7 +8,14 @@ export function parsePdbStructure(text: string): ParsedStructure {
   let currentKey = '';
   let current: ParsedResidue | null = null;
   let atomBFactors: number[] = [];
+  let perResidueStd: number[] = [];
   let atomIndex = 0;
+
+  function std(values: number[]) {
+    if (values.length === 0) return 0;
+    const m = mean(values);
+    return Math.sqrt(mean(values.map(v => (v - m) ** 2)));
+  }
 
   for (const line of lines) {
     if (!line.startsWith('ATOM') && !line.startsWith('HETATM')) continue;
@@ -22,6 +29,7 @@ export function parsePdbStructure(text: string): ParsedStructure {
       if (current) {
         current.confidenceFromStructure = mean(atomBFactors);
         current.atomEnd = atomIndex - 1;
+        perResidueStd.push(std(atomBFactors));
         residues.push(current);
       }
       const moleculeType = classifyChemCompType(line.startsWith('ATOM') ? 'PEPTIDE LINKING' : undefined, compId);
@@ -47,8 +55,21 @@ export function parsePdbStructure(text: string): ParsedStructure {
   if (current) {
     current.confidenceFromStructure = mean(atomBFactors);
     current.atomEnd = atomIndex - 1;
+    perResidueStd.push(std(atomBFactors));
     residues.push(current);
   }
 
-  return { residues };
+  // guess the B-Factor source
+  const globalStdMean = mean(perResidueStd);
+  let looksLikePLDDTs: ParsedStructure['looksLikePLDDTs'] = false;
+
+  if (globalStdMean < 1.0) {
+    // atoms within residues are almost identical → pLDDT-like
+    looksLikePLDDTs = true;
+  } else if (globalStdMean > 2.0) {
+    // noticeable variation within residues → experimental-like
+    looksLikePLDDTs = false;
+  }
+
+  return { residues, looksLikePLDDTs };
 }

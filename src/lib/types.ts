@@ -52,6 +52,7 @@ export interface PredictionBundle {
     warnings: string[];
     matchedFiles: string[];
     syntheticPae?: boolean;
+    looksLikePLDDTs?: boolean;
   };
 }
 
@@ -114,4 +115,5 @@ export interface ParsedResidue {
 
 export interface ParsedStructure {
   residues: ParsedResidue[];
+  looksLikePLDDTs: boolean;
 }
