@@ -16,7 +16,7 @@ declare module 'pdbe-molstar/lib/viewer.js' {
       options: {
         customData?: {
           url: string;
-          format: 'cif' | 'mmcif' | 'pdb';
+          format: 'cif' | 'mmcif' | 'pdb' | 'ent';
           binary?: boolean;
         };
         alphafoldView?: boolean;
