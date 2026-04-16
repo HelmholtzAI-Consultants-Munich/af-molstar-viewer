@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport } from '../lib/types';
-import { PAE_SELECTION_COLORS } from '../lib/constants';
+import { PAE_SELECTION_COLORS, PAE_PAIR_SELECTION_COLOR } from '../lib/constants';
 import { clamp } from '../lib/utils';
 
 interface PaeHeatmapProps {
@@ -239,7 +239,7 @@ function drawPinnedPairMarker(
   const bottom = (max + 1) * cellHeight;
 
   if (typeof context.save === 'function') context.save();
-  context.strokeStyle = '#ff6699';
+  context.strokeStyle = PAE_PAIR_SELECTION_COLOR;
   context.lineWidth = 1.5;
   if (typeof context.setLineDash === 'function') context.setLineDash([7, 5]);
 

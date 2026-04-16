@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { PAE_SELECTION_COLORS } from '../lib/constants';
+import { PAE_SELECTION_COLORS, PAE_PAIR_SELECTION_COLOR } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 
@@ -18,8 +18,6 @@ const MOLSTAR_RENDER_OPTIONS = {
   selectInteraction: true,
   hideCanvasControls: [],
 };
-
-const PAE_PAIR_SELECTION_COLOR = '#ff6699';
 
 const MOLSTAR_ILLUSTRATIVE_STYLE = {
   componentOptions: {

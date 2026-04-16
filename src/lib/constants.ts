@@ -21,6 +21,8 @@ export const PAE_SELECTION_COLORS = {
   dimmed: '#8b8f94',
 } as const;
 
+export const PAE_PAIR_SELECTION_COLOR = '#ff6699';
+
 export const PROTEIN_CODES: Record<string, string> = {
   ALA: 'A',
   ARG: 'R',
