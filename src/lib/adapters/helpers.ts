@@ -12,9 +12,9 @@ import { createChains, createDefaultViewport, mean, round } from '../utils';
 
 export function structureFormatFromName(name: string): StructureFileRef['format'] | null {
   const lower = name.toLowerCase();
-  if (lower.endsWith('.pdb')) return 'pdb';
-  if (lower.endsWith('.cif')) return 'cif';
-  if (lower.endsWith('.mmcif')) return 'mmcif';
+  // treat `.ent` files as if they are `.pdb`
+  if (lower.endsWith('.pdb') || lower.endsWith('.ent')) return 'pdb';
+  if (lower.endsWith('.cif') || lower.endsWith('.mmcif')) return 'cif';
   return null;
 }
 
