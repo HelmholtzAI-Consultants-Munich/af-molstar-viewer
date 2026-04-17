@@ -32,6 +32,8 @@ export function App() {
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
   const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(false);
   const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
+  const [colorByPLDDTToggleStatus, setColorByPLDDTToggleStatus] = useState(true);
+  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState(true);
   const pendingResolver = useRef<((payload: unknown) => void) | null>(null);
 
   const fileMap = useMemo(() => new Map(files.map((file) => [file.name, file.text])), [files]);
@@ -71,6 +73,14 @@ export function App() {
     setBrushSelection(null);
     setPaeHoverSyncEnabled(_nextBundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD);
     setPaePairSelectionEnabled(true);
+    if (!_nextBundle.metadata.looksLikePLDDTs) {
+      // if the _nextBundle doesn't have PLDDTs, turn coloring off and disable
+      setColorByPLDDTToggleStatus(false);
+      setColorByPLDDTEnabled(false);
+    } else {
+      // enable but do not switch PLDDTs back on automatically
+      setColorByPLDDTEnabled(true);
+    }
   };
 
   const loadGroup = async (groupId: string, choice?: BundleChoice, sourceFiles = files) => {
@@ -153,6 +163,8 @@ export function App() {
           interactionPerformance={interactionPerformance}
           paeHoverSyncEnabled={paeHoverSyncEnabled}
           paePairSelectionEnabled={paePairSelectionEnabled}
+          colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
+          colorByPLDDTEnabled={colorByPLDDTEnabled}
           onHoverResidues={(indices) => setHoveredResidues(indices)}
           onHoverCell={setHoveredCell}
           onPinResidues={(indices) => setPinnedResidues(indices)}
@@ -180,6 +192,17 @@ export function App() {
           onClearPairSelection={() => {
             setPinnedCell(null);
             setPinnedResidues([]);
+          }}
+          onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
+          onEnableColorByPLDDT={() => {
+            setColorByPLDDTEnabled((enabled) => {
+              const next = !enabled;  // make a new variable that is the other boolean
+              if (!next) {
+                // on disabling, also turn it off
+                setColorByPLDDTToggleStatus(false);
+              }
+              return next;
+            })
           }}
         />
       ) : (

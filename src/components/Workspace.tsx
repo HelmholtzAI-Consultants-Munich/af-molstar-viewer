@@ -17,6 +17,8 @@ interface WorkspaceProps {
   interactionPerformance: PaeInteractionPerformanceSettings;
   paeHoverSyncEnabled: boolean;
   paePairSelectionEnabled: boolean;
+  colorByPLDDTToggleStatus: boolean;
+  colorByPLDDTEnabled: boolean;
   onHoverResidues: (indices: number[]) => void;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onPinResidues: (indices: number[]) => void;
@@ -25,6 +27,8 @@ interface WorkspaceProps {
   onTogglePaeHoverSync: () => void;
   onTogglePaePairSelection: () => void;
   onClearPairSelection: () => void;
+  onToggleColorByPLDDT: () => void;
+  onEnableColorByPLDDT: () => void;
 }
 
 export function Workspace(props: WorkspaceProps) {
@@ -91,13 +95,6 @@ export function Workspace(props: WorkspaceProps) {
     hoverFrameRef.current = requestAnimationFrame(tick);
   };
 
-  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState<boolean>(Boolean(props.bundle.metadata?.looksLikePLDDTs));
-
-  // useEffect(() => {
-  //   // Reset pLDDT coloring toggle to the bundle’s capability on bundle change
-  //   setColorByPLDDTEnabled(Boolean(props.bundle.metadata?.looksLikePLDDTs));
-  // }, [props.bundle]);
-
   return (
     <div className="workspace-grid">
       <PaeHeatmap
@@ -111,7 +108,8 @@ export function Workspace(props: WorkspaceProps) {
         interactionPerformance={props.interactionPerformance}
         hoverSyncEnabled={props.paeHoverSyncEnabled}
         pairSelectionEnabled={props.paePairSelectionEnabled}
-        colorByPLDDTEnabled={colorByPLDDTEnabled}
+        colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
+        colorByPLDDTEnabled={props.colorByPLDDTEnabled}
         onHoverCell={(cell) => {
           props.onHoverCell(cell);
           if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
@@ -131,7 +129,8 @@ export function Workspace(props: WorkspaceProps) {
           clearPendingHoverResidues();
           props.onClearPairSelection();
         }}
-        onToggleColorByPLDDT={() => setColorByPLDDTEnabled((v) => !v)}
+        onToggleColorByPLDDT={props.onToggleColorByPLDDT}
+        onEnableColorByPLDDT={props.onEnableColorByPLDDT}
       />
       <MolstarPanel
         bundle={props.bundle}
@@ -140,7 +139,8 @@ export function Workspace(props: WorkspaceProps) {
         pinnedResidues={props.pinnedResidues}
         pinnedCell={props.pinnedCell}
         brushSelection={props.brushSelection}
-        colorByPLDDTEnabled={colorByPLDDTEnabled}
+        colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
+        colorByPLDDTEnabled={props.colorByPLDDTEnabled}
         onHoverResidue={(index) => props.onHoverResidues(index === null ? [] : [index])}
         onClickResidue={(index) => {
           clearPendingHoverResidues();

@@ -7,7 +7,6 @@ const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;  // 'surroundings', 'inter
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
 
 const MOLSTAR_RENDER_OPTIONS = {
-  // alphafoldView: true,
   visualStyle: 'cartoon' as const,
   bgColor: { r: 255, g: 255, b: 255 },
   leftPanel: false,
@@ -108,16 +107,16 @@ async function applyDefaultSequenceTheme(
 // On initial load the SequenceView UI may not be fully ready right after render().
 // Apply the default sequence theme after the next two animation frames to ensure
 // the sequence panel has mounted and internal behaviors have initialized.
-async function applyDefaultSequenceThemeDeferred(
+async function applyDefaultColorsDeferred(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
-  usePLDDTs: boolean = false,
+  props: MolstarPanelProps,
 ) {
   const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await raf();
-  await raf();
+  // await raf();
   // In case structure loading is still in progress, add a tiny timeout as a safety net.
   await new Promise((resolve) => setTimeout(resolve, 0));
-  await applyDefaultSequenceTheme(viewer, usePLDDTs);
+  await applyDefaultColors(viewer, props);
 }
 
 async function applyDefaultStructureTheme(
@@ -154,7 +153,7 @@ async function applyDefaultColors(
     viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
     props: MolstarPanelProps,
     ) {
-  const usePLDDT = props.bundle.metadata?.looksLikePLDDTs && props.colorByPLDDTEnabled;
+  const usePLDDT = props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTToggleStatus && props.colorByPLDDTEnabled;
   void applyDefaultSequenceTheme(viewer, usePLDDT);
   void applyDefaultStructureTheme(viewer, usePLDDT);
 }
@@ -291,6 +290,7 @@ interface MolstarPanelProps {
   pinnedResidues: number[];
   pinnedCell: { x: number; y: number } | null;
   brushSelection: MatrixViewport | null;
+  colorByPLDDTToggleStatus: boolean;
   colorByPLDDTEnabled: boolean;
   onHoverResidue: (index: number | null) => void;
   onClickResidue: (index: number | null) => void;
@@ -305,7 +305,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const hoverCallbackRef = useRef(props.onHoverResidue);
   const clickCallbackRef = useRef(props.onClickResidue);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
-    const usePLDDT = props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTEnabled;
 
   useEffect(() => {
     hoverCallbackRef.current = props.onHoverResidue;
@@ -358,8 +357,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
             format: props.bundle.structure.format,
             binary: false,
           },
-          alphafoldView: usePLDDT,
-          ...MOLSTAR_RENDER_OPTIONS,  // instead of using alphafoldView = true from there, fetch it from props
+          // alphafoldView is a loader-time switch that preloads the confidence data.
+          // Keep it on if reasonable, otherwise the viewer can’t find the necessary data/theme later.
+          alphafoldView: props.bundle.metadata.looksLikePLDDTs,
+          ...MOLSTAR_RENDER_OPTIONS
         },
       );
 
@@ -368,9 +369,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       await setStructureFocusComponents(viewerRef.current, DEFAULT_FOCUS_COMPONENTS);
       await clearStructureFocus(viewerRef.current);
       await viewerRef.current.visual.clearSelection();
-      // await applyDefaultColors(viewerRef.current, props);
-      await applyDefaultStructureTheme(viewerRef.current, usePLDDT);
-      await applyDefaultSequenceThemeDeferred(viewerRef.current, usePLDDT);
+      await applyDefaultColorsDeferred(viewerRef.current, props);
 
       return () => {
         shellRef.current?.removeEventListener('PDB.molstar.mouseover', handleHover);
@@ -436,7 +435,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
     void setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
     const queries = residueIndicesToQueries(props.bundle.residues, props.pinnedResidues);
     void viewer.visual.select({ data: queries });
-  }, [props.brushSelection, props.bundle.residues, props.pinnedCell, props.pinnedResidues, props.colorByPLDDTEnabled]);
+  }, [props.brushSelection, props.bundle.residues, props.pinnedCell,
+    props.pinnedResidues, props.colorByPLDDTToggleStatus, props.colorByPLDDTEnabled]);
 
   return (
     <>

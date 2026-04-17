@@ -15,6 +15,7 @@ interface PaeHeatmapProps {
   interactionPerformance: PaeInteractionPerformanceSettings;
   hoverSyncEnabled: boolean;
   pairSelectionEnabled: boolean;
+  colorByPLDDTToggleStatus: boolean;
   colorByPLDDTEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onClickCell: (cell: { x: number; y: number }) => void;
@@ -23,6 +24,7 @@ interface PaeHeatmapProps {
   onTogglePairSelection: () => void;
   onClearPairSelection: () => void;
   onToggleColorByPLDDT: () => void;
+  onEnableColorByPLDDT: () => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -755,7 +757,8 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                     type="checkbox"
                     role="switch"
                     aria-label="pLDDT color"
-                    checked={props.colorByPLDDTEnabled}
+                    disabled={!props.colorByPLDDTEnabled}
+                    checked={props.colorByPLDDTToggleStatus}
                     onChange={props.onToggleColorByPLDDT}
                   />
                   <span className="switch-track" aria-hidden="true">
