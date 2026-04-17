@@ -12,7 +12,7 @@ import type {
 
 const worker = new Worker(new URL('../lib/worker/parse-worker.ts', import.meta.url), { type: 'module' });
 const STORAGE_KEY = 'af-molstar-viewer:selected-group';
-const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
+const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 1600;
 
 async function filesToWorkerInputs(files: File[]): Promise<WorkerInputFile[]> {
   return Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));

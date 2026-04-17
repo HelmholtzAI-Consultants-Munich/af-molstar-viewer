@@ -1,6 +1,7 @@
 # AFDB-style Mol* Viewer
 
-Prototype local-first mostly vibe-coded web app for inspecting self-generated protein structure predictions just like in the AlphaFold database.  
+Prototype local-first and mostly vibe-coded web app for inspecting self-generated 
+protein structure predictions just like in the AlphaFold database.
 
 uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
 
@@ -64,3 +65,8 @@ npm run preview
   - allow comparing the binders, maybe in separate connected views or with overlaying
   - enable saving/exporting views from viewer panels as Mol* states
 
+## Attribution
+Reverse-engineered from the [AlphaFold database](https://alphafold.com/), 
+which is under a [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) 
+creative commons license and developed by [Google DeepMind](https://deepmind.google/) 
+with [EMBL-EBI](https://www.ebi.ac.uk/).

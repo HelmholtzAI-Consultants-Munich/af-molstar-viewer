@@ -113,7 +113,7 @@ async function applyDefaultColorsDeferred(
 ) {
   const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await raf();
-  // await raf();
+  await raf();
   // In case structure loading is still in progress, add a tiny timeout as a safety net.
   await new Promise((resolve) => setTimeout(resolve, 0));
   await applyDefaultColors(viewer, props);
