@@ -16,11 +16,11 @@ describe('discovery and adapter loading', () => {
     const files = [
       {
         name: 'AF-Q14145-F1-model_v6.cif',
-        text: readFileSync(resolve(process.cwd(), 'example/AF-Q14145-F1-model_v6.cif'), 'utf8'),
+        text: readFileSync(resolve(process.cwd(), 'fixtures/examples/AF-Q14145-F1-model_v6.cif'), 'utf8'),
       },
       {
         name: 'AF-Q14145-F1-predicted_aligned_error_v6.json',
-        text: readFileSync(resolve(process.cwd(), 'example/AF-Q14145-F1-predicted_aligned_error_v6.json'), 'utf8'),
+        text: readFileSync(resolve(process.cwd(), 'fixtures/examples/AF-Q14145-F1-predicted_aligned_error_v6.json'), 'utf8'),
       },
     ];
 
@@ -63,11 +63,11 @@ describe('discovery and adapter loading', () => {
     const files = [
       {
         name: 'l73.pdb',
-        text: readFileSync(resolve(process.cwd(), 'example/l73.pdb'), 'utf8'),
+        text: readFileSync(resolve(process.cwd(), 'fixtures/examples/l73.pdb'), 'utf8'),
       },
       {
         name: 'l73.json',
-        text: readFileSync(resolve(process.cwd(), 'example/l73.json'), 'utf8'),
+        text: readFileSync(resolve(process.cwd(), 'fixtures/examples/l73.json'), 'utf8'),
       },
     ];
 
@@ -89,14 +89,14 @@ describe('discovery and adapter loading', () => {
       {
         name: 'l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
           'utf8',
         ),
       },
       {
         name: 'l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
           'utf8',
         ),
       },
@@ -119,14 +119,14 @@ describe('discovery and adapter loading', () => {
       {
         name: 'totally-different-structure-name.pdb',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
           'utf8',
         ),
       },
       {
         name: 'nothing-like-the-structure-name.json',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
           'utf8',
         ),
       },
@@ -150,7 +150,7 @@ describe('discovery and adapter loading', () => {
       {
         name: 'l73.pdb',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l73.pdb'),
+          resolve(process.cwd(), 'fixtures/examples/l73.pdb'),
           'utf8',
         ),
       },
@@ -174,21 +174,21 @@ describe('discovery and adapter loading', () => {
       {
         name: 'random-structure-name.pdb',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_002.pdb'),
           'utf8',
         ),
       },
       {
         name: 'completely-different-scores-name.json',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn2_scores_rank_001_alphafold2_ptm_model_1_seed_002.json'),
           'utf8',
         ),
       },
       {
         name: 'extra-neighboring-output.pdb',
         text: readFileSync(
-          resolve(process.cwd(), 'example/l77_s858427_mpnn1_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_000.pdb'),
+          resolve(process.cwd(), 'fixtures/examples/l77_s858427_mpnn1_unrelaxed_rank_001_alphafold2_ptm_model_1_seed_000.pdb'),
           'utf8',
         ),
       },
