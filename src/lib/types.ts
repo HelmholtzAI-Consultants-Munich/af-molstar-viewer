@@ -52,7 +52,7 @@ export interface PredictionBundle {
     warnings: string[];
     matchedFiles: string[];
     syntheticPae?: boolean;
-    looksLikePLDDTs?: boolean;
+    looksLikePLDDTs: boolean;
   };
 }
 

@@ -66,6 +66,7 @@ export function createToyBundle(): PredictionBundle {
     metadata: {
       warnings: [],
       matchedFiles: ['toy_ranked_0.pdb', 'toy_scores.json'],
+      looksLikePLDDTs: true,
     },
   };
 }

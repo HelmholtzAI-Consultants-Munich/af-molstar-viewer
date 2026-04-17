@@ -154,7 +154,7 @@ async function applyDefaultColors(
     viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
     props: MolstarPanelProps,
     ) {
-  const usePLDDT = Boolean(props.bundle.metadata?.looksLikePLDDTs) && props.colorByPLDDTEnabled;
+  const usePLDDT = props.bundle.metadata?.looksLikePLDDTs && props.colorByPLDDTEnabled;
   void applyDefaultSequenceTheme(viewer, usePLDDT);
   void applyDefaultStructureTheme(viewer, usePLDDT);
 }
@@ -305,7 +305,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const hoverCallbackRef = useRef(props.onHoverResidue);
   const clickCallbackRef = useRef(props.onClickResidue);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
-  const usePLDDT = Boolean(props.bundle.metadata?.looksLikePLDDTs) && props.colorByPLDDTEnabled;
+    const usePLDDT = props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTEnabled;
 
   useEffect(() => {
     hoverCallbackRef.current = props.onHoverResidue;
