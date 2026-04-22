@@ -168,7 +168,7 @@ describe('project app shell', () => {
 
     await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy cropped' })).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_cropped_1' })).toBeInTheDocument();
       expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
     });
 
@@ -179,7 +179,7 @@ describe('project app shell', () => {
 
     await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy cut' })).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_cut_1' })).toBeInTheDocument();
       expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
     });
   });

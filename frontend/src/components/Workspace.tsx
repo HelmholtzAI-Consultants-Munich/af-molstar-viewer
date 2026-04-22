@@ -102,10 +102,10 @@ export function Workspace(props: WorkspaceProps) {
   return (
     <div className={`workspace-grid${props.viewerConfiguration === 'target' ? ' target-workspace-grid' : ''}`}>
       <MolstarPanel
-        viewerConfiguration={props.viewerConfiguration}
-        viewerStatePayload={props.viewerStatePayload}
-        bundle={props.bundle}
-        structureText={props.structureText}
+      viewerConfiguration={props.viewerConfiguration}
+      viewerStatePayload={props.viewerStatePayload}
+      bundle={props.bundle}
+      structureText={props.structureText}
         selectedResidues={props.selectedResidues}
         focusedResidues={props.focusedResidues}
         hoveredResidues={props.hoveredResidues}

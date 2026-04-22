@@ -33,7 +33,7 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
   );
 
   return (
-    <Workspace
+      <Workspace
       viewerConfiguration={props.viewerConfiguration}
       viewerStatePayload={props.viewerStatePayload ?? null}
       bundle={props.artifact.bundle}

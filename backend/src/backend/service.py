@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from pathlib import Path
+import re
+import shutil
 import time
 from typing import Any
 
@@ -162,7 +164,10 @@ class ProjectService:
         }
 
         project.targets = [entry for entry in project.targets if entry.id != target_id]
-        if target.source_structure_id:
+        if target.source_structure_id and not any(
+            entry.id != target_id and entry.source_structure_id == target.source_structure_id
+            for entry in project.targets
+        ):
             project.source_structures = [entry for entry in project.source_structures if entry.id != target.source_structure_id]
         project.binder_runs = [entry for entry in project.binder_runs if entry.id not in binder_run_ids]
         project.binder_candidates = [entry for entry in project.binder_candidates if entry.id not in binder_candidate_ids]
@@ -180,7 +185,7 @@ class ProjectService:
                     file_path.unlink()
             upload_dir = self.runtime_dir / project_id / target_id
             if upload_dir.exists():
-                upload_dir.rmdir()
+                shutil.rmtree(upload_dir)
         return project
 
     def save_viewer_state(
@@ -244,10 +249,12 @@ class ProjectService:
             output_dir=str(self.runtime_dir / project_id / derived_target_id),
         )
         derived_target, derived_viewer_asset = self._create_derived_target_artifacts(
+            project=project,
             source_target=target,
             derived_target_id=derived_target_id,
-            derived_name=f"{target.name} cropped",
+            operation="cropped",
             derived_structure_path=str(edit_result["output_path"]),
+            derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
         )
         return self._create_job(
             project_id=project_id,
@@ -278,10 +285,12 @@ class ProjectService:
             output_dir=str(self.runtime_dir / project_id / derived_target_id),
         )
         derived_target, derived_viewer_asset = self._create_derived_target_artifacts(
+            project=project,
             source_target=target,
             derived_target_id=derived_target_id,
-            derived_name=f"{target.name} cut",
+            operation="cut",
             derived_structure_path=str(edit_result["output_path"]),
+            derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
         )
         return self._create_job(
             project_id=project_id,
@@ -463,18 +472,21 @@ class ProjectService:
     def _create_derived_target_artifacts(
         self,
         *,
+        project: Project,
         source_target: TargetArtifact,
         derived_target_id: str,
-        derived_name: str,
+        operation: str,
         derived_structure_path: str,
+        derived_chain_ids: list[str],
     ) -> tuple[TargetArtifact, ViewerAsset]:
+        derived_name = self._create_derived_target_name(project, source_target.name, operation)
         viewer_asset_id = f"viewer-{derived_target_id}"
         derived_target = TargetArtifact(
             id=derived_target_id,
             name=derived_name,
             provenance="cropped",
             target_interface_residues="",
-            chain_ids=list(source_target.chain_ids),
+            chain_ids=list(derived_chain_ids) if derived_chain_ids else list(source_target.chain_ids),
             viewer_asset_id=viewer_asset_id,
             parent_target_id=source_target.id,
             source_structure_id=source_target.source_structure_id,
@@ -492,6 +504,23 @@ class ProjectService:
             ],
         )
         return derived_target, derived_viewer_asset
+
+    def _create_derived_target_name(self, project: Project, source_name: str, operation: str) -> str:
+        base_name = re.sub(r"_(?:cropped|cut)_\d+$", "", source_name)
+        pattern = re.compile(rf"^{re.escape(base_name)}_{re.escape(operation)}_(\d+)$")
+        next_index = (
+            max(
+                (
+                    int(match.group(1))
+                    for target in project.targets
+                    for match in [pattern.match(target.name)]
+                    if match is not None
+                ),
+                default=0,
+            )
+            + 1
+        )
+        return f"{base_name}_{operation}_{next_index}"
 
 
 def serialize_project(project: Project, jobs: list[JobRef] | None = None) -> dict[str, Any]:

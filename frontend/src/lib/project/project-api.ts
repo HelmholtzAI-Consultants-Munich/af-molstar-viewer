@@ -136,8 +136,9 @@ class LocalFixtureProjectApi implements ProjectApi {
     });
     return this.createJob(projectId, 'crop_target', 'Printing crop-to-selection request in local fixture mode', (job) => {
       const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
+        project,
         sourceTarget,
-        `${sourceTarget.name} cropped`,
+        'cropped',
       );
       project.targets.push(target);
       this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
@@ -156,8 +157,9 @@ class LocalFixtureProjectApi implements ProjectApi {
     });
     return this.createJob(projectId, 'cut_target', 'Printing cut-off-selection request in local fixture mode', (job) => {
       const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
+        project,
         sourceTarget,
-        `${sourceTarget.name} cut`,
+        'cut',
       );
       project.targets.push(target);
       this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
@@ -318,16 +320,22 @@ class LocalFixtureProjectApi implements ProjectApi {
     this.project.jobs = [...this.jobs.values()].map((entry) => structuredClone(entry.job));
   }
 
-  private createDerivedTargetFromSource(sourceTarget: TargetArtifact, name: string) {
+  private createDerivedTargetFromSource(
+    project: WorkspaceProject,
+    sourceTarget: TargetArtifact,
+    operation: 'cropped' | 'cut',
+  ) {
     const sourceArtifact =
       this.uploadedViewerArtifacts.get(sourceTarget.id) ?? resolveViewerArtifactSource(sourceTarget.id);
     const targetId = `target-${this.targetCounter++}`;
+    const name = this.createDerivedTargetName(project, sourceTarget.name, operation);
     const target: TargetArtifact = {
       ...sourceTarget,
       id: targetId,
       name,
       provenance: 'cropped',
       target_interface_residues: '',
+      chain_ids: this.deriveChainIdsForDerivedTarget(sourceTarget, sourceArtifact),
       parent_target_id: sourceTarget.id,
       viewer_asset_id: targetId,
       source_job_id: null,
@@ -342,6 +350,44 @@ class LocalFixtureProjectApi implements ProjectApi {
       })),
     };
     return { target, viewerArtifactSource };
+  }
+
+  private createDerivedTargetName(
+    project: WorkspaceProject,
+    sourceName: string,
+    operation: 'cropped' | 'cut',
+  ) {
+    const baseName = sourceName.replace(/_(?:cropped|cut)_\d+$/i, '');
+    const pattern = new RegExp(`^${escapeRegExp(baseName)}_${operation}_(\\d+)$`, 'i');
+    const nextIndex =
+      project.targets.reduce((max, target) => {
+        const match = target.name.match(pattern);
+        return match ? Math.max(max, Number.parseInt(match[1] ?? '0', 10)) : max;
+      }, 0) + 1;
+    return `${baseName}_${operation}_${nextIndex}`;
+  }
+
+  private deriveChainIdsForDerivedTarget(sourceTarget: TargetArtifact, sourceArtifact: ViewerArtifactSource) {
+    const filesWithText = sourceArtifact.files.every((file) => typeof file.text === 'string');
+    if (!filesWithText) {
+      return sourceTarget.chain_ids;
+    }
+
+    try {
+      const workerFiles = sourceArtifact.files.map((file) => ({
+        name: file.name,
+        text: file.text ?? '',
+      }));
+      const groups = discoverGroups(workerFiles);
+      const preferredGroup = groups.find((group) => !group.unresolved) ?? groups[0];
+      if (!preferredGroup || preferredGroup.unresolved) {
+        return sourceTarget.chain_ids;
+      }
+      const bundle = loadBundle(workerFiles, preferredGroup);
+      return bundle.chains.map((chain) => chain.chainId);
+    } catch {
+      return sourceTarget.chain_ids;
+    }
   }
 }
 
@@ -514,4 +560,8 @@ function deriveUploadedTargetMetadata(files: WorkerInputFile[]) {
     name: bundle.name,
     chainIds: bundle.chains.map((chain) => chain.chainId),
   };
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

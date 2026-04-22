@@ -79,6 +79,8 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(len(resolved_crop.target_ids), 1)
         self.assertEqual(len(resolved_cut.target_ids), 1)
         self.assertEqual(len(refreshed.targets), initial_count + 2)
+        self.assertEqual(refreshed.targets[-2].name, "toy_cropped_1")
+        self.assertEqual(refreshed.targets[-1].name, "toy_cut_1")
         mocked_crop.assert_called_once()
         mocked_cut.assert_called_once()
         crop_call = mocked_crop.call_args.kwargs
@@ -89,6 +91,24 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(cut_call["target_interface_residues"], "A1-10,B20-22")
         self.assertEqual(crop_call["target_id"], target.id)
         self.assertEqual(cut_call["target_id"], target.id)
+
+    def test_remove_parent_target_after_crop_keeps_derived_target_and_cleans_runtime_dir(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
+
+        crop_job = service.create_crop_to_selection_job(project.id, target.id, "A1-2")
+        time.sleep(0.9)
+        resolved_crop = service.get_job(crop_job.job_id)
+        derived_target_id = resolved_crop.target_ids[0]
+
+        updated = service.remove_target(project.id, target.id)
+
+        self.assertFalse(any(entry.id == target.id for entry in updated.targets))
+        self.assertTrue(any(entry.id == derived_target_id for entry in updated.targets))
+        self.assertTrue(any(entry.source_structure_id == target.source_structure_id for entry in updated.targets))
+        self.assertTrue(any(entry.id == target.source_structure_id for entry in updated.source_structures))
+        self.assertFalse((service.runtime_dir / project.id / target.id).exists())
 
     def test_viewer_states_are_keyed_by_artifact_and_configuration(self) -> None:
         service = ProjectService()
