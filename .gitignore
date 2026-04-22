@@ -3,14 +3,19 @@ node_modules/
 # Caches
 **__pycache__**
 
+# IDE files
+.vscode/
+.idea/
+
 # most examples
-example/
+fixtures/examples/
 
 # Build output
 dist/
 
 # TypeScript/Vite incremental build caches
 *.tsbuildinfo
+.vite/
 
 # Generated config artifacts from tsc
 vite.config.js
