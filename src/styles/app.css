@@ -270,7 +270,7 @@ select {
 .sequence-panel {
   grid-area: sequence;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 0;
   background: #f3f3f3;
 }
@@ -701,13 +701,15 @@ select {
 
 .molstar-sequence-host {
   position: relative;
-  height: 90px;
-  min-height: 90px;
+  height: 95px;
+  min-height: 72px;
   width: 100%;
   overflow: hidden;
   background: #f3f3f3;
   border: 0 !important;
   box-shadow: none !important;
+  max-height: 50vh;
+  resize: vertical;
 }
 
 .molstar-host {
