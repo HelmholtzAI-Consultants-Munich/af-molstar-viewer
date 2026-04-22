@@ -7,7 +7,6 @@ from typing import Literal
 
 JobType = Literal[
     "import",
-    "extract_target_from_template",
     "crop_target",
     "cut_target",
     "generate_binders",

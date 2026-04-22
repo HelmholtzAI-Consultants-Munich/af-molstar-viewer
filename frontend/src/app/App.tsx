@@ -428,11 +428,6 @@ export function App(props: AppProps) {
               setTargetInterfaceDraft(selectedTarget.id, canonical);
             })
           }
-          onExtractTarget={(sourceStructureId) =>
-            void runMutation(async () => {
-              await api.extractTargetFromTemplate(project.id, sourceStructureId, ['A', 'B'], interfaceDraft || 'A1-2,B1-2');
-            })
-          }
           onGenerateBinders={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;

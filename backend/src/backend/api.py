@@ -87,21 +87,6 @@ def create_app() -> Any:
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown project {error.args[0]}") from error
 
-    @app.post("/api/projects/{project_id}/targets/from-template")
-    def create_target_from_template(project_id: str, payload: dict[str, object]) -> dict[str, object]:
-        try:
-            job = SERVICE.create_template_extraction_job(
-                project_id=project_id,
-                source_structure_id=str(payload.get("source_structure_id", "")),
-                retained_chain_ids=[str(entry) for entry in payload.get("retained_chain_ids", [])],
-                target_interface_residues=str(payload.get("target_interface_residues")) if payload.get("target_interface_residues") else None,
-            )
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail=f"Unknown entity {error.args[0]}") from error
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        return serialize_job(job)
-
     @app.post("/api/projects/{project_id}/targets/{target_id}/interface")
     def update_target_interface(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
         try:
@@ -119,14 +104,6 @@ def create_app() -> Any:
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
         return serialize_project(project)
-
-    @app.post("/api/projects/{project_id}/targets/{target_id}/crop")
-    def crop_target(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
-        try:
-            job = SERVICE.create_crop_job(project_id, target_id, label=str(payload.get("label", "")))
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
-        return serialize_job(job)
 
     @app.post("/api/projects/{project_id}/targets/{target_id}/crop-to-selection")
     def crop_target_to_selection(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:

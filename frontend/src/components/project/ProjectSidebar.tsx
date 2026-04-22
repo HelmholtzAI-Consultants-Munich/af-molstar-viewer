@@ -21,7 +21,6 @@ interface ProjectSidebarProps {
   onCutOffSelection: () => void;
   onInterfaceDraftChange: (value: string) => void;
   onSaveInterface: () => void;
-  onExtractTarget: (sourceStructureId: string) => void;
   onGenerateBinders: () => void;
   onValidateRefolding: () => void;
   onSaveViewerState: () => void;
@@ -32,7 +31,6 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
   const targetInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingTargetFiles, setIsDraggingTargetFiles] = useState(false);
   const selectedTarget = props.project.targets.find((target) => target.id === props.selectedTargetId) ?? null;
-  const templateSource = props.project.source_structures.find((source) => source.chain_ids.length > 1) ?? props.project.source_structures[0] ?? null;
 
   const handleTargetFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? [...event.target.files] : [];
@@ -106,16 +104,6 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                 </select>
               </label>
             </div>
-            {templateSource && (
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => props.onExtractTarget(templateSource.id)}
-                disabled={props.busy}
-              >
-                Extract from template
-              </button>
-            )}
           </div>
         </div>
         <div className="artifact-list">

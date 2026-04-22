@@ -227,52 +227,6 @@ class ProjectService:
     def list_viewer_states(self, project_id: str) -> list[ViewerState]:
         return list(self.get_project(project_id).viewer_states)
 
-    def create_template_extraction_job(
-        self,
-        project_id: str,
-        source_structure_id: str,
-        retained_chain_ids: list[str],
-        target_interface_residues: str | None,
-    ) -> JobRef:
-        project = self.get_project(project_id)
-        if not any(source.id == source_structure_id for source in project.source_structures):
-            raise KeyError(source_structure_id)
-        canonical_selection = canonicalize_target_interface_residues(target_interface_residues or "A1-2,B1-2")
-        target = replace(
-            next(entry for entry in self.catalog.project_template.targets if entry.id == "target-template"),
-            id=f"target-{self._id_counters['target']}",
-            chain_ids=list(retained_chain_ids) or ["A"],
-            target_interface_residues=canonical_selection,
-            source_structure_id=source_structure_id,
-        )
-        self._id_counters["target"] += 1
-        return self._create_job(
-            project_id=project_id,
-            job_type="extract_target_from_template",
-            progress_message="Extracting target from template fixture",
-            produced={"targets": [target]},
-        )
-
-    def create_crop_job(self, project_id: str, target_id: str, label: str | None = None) -> JobRef:
-        project = self.get_project(project_id)
-        source_target = self._require_target(project, target_id)
-        cropped_target = replace(
-            next(entry for entry in self.catalog.project_template.targets if entry.id == "target-cropped"),
-            id=f"target-{self._id_counters['target']}",
-            name=label.strip() if label and label.strip() else f"{source_target.name} cropped",
-            parent_target_id=source_target.id,
-            source_structure_id=source_target.source_structure_id,
-            target_interface_residues=source_target.target_interface_residues,
-            source_job_id=None,
-        )
-        self._id_counters["target"] += 1
-        return self._create_job(
-            project_id=project_id,
-            job_type="crop_target",
-            progress_message="Cropping target with fixture output",
-            produced={"targets": [cropped_target]},
-        )
-
     def create_crop_to_selection_job(self, project_id: str, target_id: str, target_interface_residues: str) -> JobRef:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)

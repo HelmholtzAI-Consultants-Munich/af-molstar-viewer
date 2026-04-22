@@ -17,8 +17,6 @@ export interface ProjectApi {
   getViewerArtifact(projectId: string, artifactId: string): Promise<ViewerArtifactSource>;
   removeTarget(projectId: string, targetId: string): Promise<WorkspaceProject>;
   updateTargetInterface(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<WorkspaceProject>;
-  extractTargetFromTemplate(projectId: string, sourceStructureId: string, retainedChainIds: string[], targetInterfaceResidues?: string): Promise<JobRef>;
-  cropTarget(projectId: string, targetId: string, label?: string): Promise<JobRef>;
   cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   cutSelectionOffTarget(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   generateBinders(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
@@ -125,40 +123,6 @@ class LocalFixtureProjectApi implements ProjectApi {
     if (!target) throw new Error(`Unknown target ${targetId}`);
     target.target_interface_residues = canonicalizeTargetInterfaceResidues(targetInterfaceResidues);
     return structuredClone(project);
-  }
-
-  async extractTargetFromTemplate(projectId: string, sourceStructureId: string, retainedChainIds: string[], targetInterfaceResidues?: string): Promise<JobRef> {
-    const project = this.requireProject(projectId);
-    const templateTarget = project.targets.find((entry) => entry.provenance === 'template_extracted') ?? project.targets[0];
-    const canonicalSelection = canonicalizeTargetInterfaceResidues(targetInterfaceResidues ?? templateTarget.target_interface_residues);
-    return this.createJob(projectId, 'extract_target_from_template', 'Extracting target from template fixture', () => {
-      project.targets.push({
-        ...templateTarget,
-        id: `target-${this.targetCounter++}`,
-        source_structure_id: sourceStructureId,
-        source_job_id: undefined,
-        chain_ids: retainedChainIds.length > 0 ? retainedChainIds : templateTarget.chain_ids,
-        target_interface_residues: canonicalSelection,
-      });
-    });
-  }
-
-  async cropTarget(projectId: string, targetId: string, label?: string): Promise<JobRef> {
-    const project = this.requireProject(projectId);
-    const sourceTarget = project.targets.find((entry) => entry.id === targetId);
-    if (!sourceTarget) throw new Error(`Unknown target ${targetId}`);
-    return this.createJob(projectId, 'crop_target', 'Cropping target with fixture output', () => {
-      project.targets.push({
-        ...sourceTarget,
-        id: `target-${this.targetCounter++}`,
-        name: label?.trim() || `${sourceTarget.name} cropped`,
-        provenance: 'cropped',
-        parent_target_id: sourceTarget.id,
-        source_structure_id: sourceTarget.source_structure_id,
-        source_job_id: undefined,
-        target_interface_residues: sourceTarget.target_interface_residues,
-      });
-    });
   }
 
   async cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
@@ -411,24 +375,6 @@ class HttpProjectApi implements ProjectApi {
       }),
     });
     return this.getProject(projectId);
-  }
-
-  async extractTargetFromTemplate(projectId: string, sourceStructureId: string, retainedChainIds: string[], targetInterfaceResidues?: string): Promise<JobRef> {
-    return this.request<JobRef>(`/projects/${projectId}/targets/from-template`, {
-      method: 'POST',
-      body: JSON.stringify({
-        source_structure_id: sourceStructureId,
-        retained_chain_ids: retainedChainIds,
-        target_interface_residues: targetInterfaceResidues,
-      }),
-    });
-  }
-
-  async cropTarget(projectId: string, targetId: string, label?: string): Promise<JobRef> {
-    return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/crop`, {
-      method: 'POST',
-      body: JSON.stringify({ label }),
-    });
   }
 
   async cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {

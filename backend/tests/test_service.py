@@ -31,21 +31,6 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(project.targets, [])
         self.assertEqual(project.source_structures, [])
 
-    def test_crop_job_creates_new_target(self) -> None:
-        service = ProjectService()
-        project = service.create_project()
-        project, target = upload_toy_target(service, project.id)
-        initial_count = len(project.targets)
-
-        job = service.create_crop_job(project.id, target.id, label="Cropped target")
-        time.sleep(0.9)
-        resolved = service.get_job(job.job_id)
-        refreshed = service.get_project(project.id)
-
-        self.assertEqual(resolved.status, "succeeded")
-        self.assertEqual(len(refreshed.targets), initial_count + 1)
-        self.assertEqual(refreshed.targets[-1].provenance, "cropped")
-
     def test_generate_and_validate_binders(self) -> None:
         service = ProjectService()
         project = service.create_project()

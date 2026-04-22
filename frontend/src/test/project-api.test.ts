@@ -23,19 +23,6 @@ describe('project api fixtures', () => {
     vi.useRealTimers();
   });
 
-  it('creates derived targets through crop jobs without replacing existing targets', async () => {
-    const { api, project, target } = await uploadColabfoldTarget();
-
-    const job = await api.cropTarget(project.id, target.id, 'Cropped fixture target');
-    vi.advanceTimersByTime(700);
-    const resolved = await api.getJob(job.job_id);
-    const refreshed = await api.getProject(project.id);
-
-    expect(resolved.status).toBe('succeeded');
-    expect(refreshed.targets).toHaveLength(project.targets.length + 1);
-    expect(refreshed.targets.at(-1)?.provenance).toBe('cropped');
-  });
-
   it('runs crop-to-selection and cut-off-selection jobs and produces derived targets', async () => {
     const { api, project, target } = await uploadColabfoldTarget();
 

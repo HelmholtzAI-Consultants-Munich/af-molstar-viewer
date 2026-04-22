@@ -5,7 +5,6 @@ export type TargetProvenance = 'uploaded' | 'template_extracted' | 'cropped';
 export type ViewerConfiguration = 'target' | 'validate_refolding';
 export type JobType =
   | 'import'
-  | 'extract_target_from_template'
   | 'crop_target'
   | 'cut_target'
   | 'generate_binders'
