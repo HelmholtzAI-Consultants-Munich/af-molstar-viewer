@@ -36,6 +36,25 @@ describe('project api fixtures', () => {
     expect(refreshed.targets.at(-1)?.provenance).toBe('cropped');
   });
 
+  it('runs crop-to-selection and cut-off-selection jobs and produces derived targets', async () => {
+    const { api, project, target } = await uploadColabfoldTarget();
+
+    const cropJob = await api.cropTargetToSelection(project.id, target.id, 'B20-22,A1-10');
+    const cutJob = await api.cutSelectionOffTarget(project.id, target.id, 'B20-22,A1-10');
+    vi.advanceTimersByTime(700);
+    const resolvedCrop = await api.getJob(cropJob.job_id);
+    const resolvedCut = await api.getJob(cutJob.job_id);
+    const refreshed = await api.getProject(project.id);
+
+    expect(resolvedCrop.status).toBe('succeeded');
+    expect(resolvedCut.status).toBe('succeeded');
+    expect(resolvedCrop.target_ids).toHaveLength(1);
+    expect(resolvedCut.target_ids).toHaveLength(1);
+    expect(refreshed.targets).toHaveLength(project.targets.length + 2);
+    expect(refreshed.targets.at(-2)?.name).toMatch(/cropped/i);
+    expect(refreshed.targets.at(-1)?.name).toMatch(/cut/i);
+  });
+
   it('generates binders and validates refolding through async jobs', async () => {
     const { api, project, target } = await uploadColabfoldTarget();
 

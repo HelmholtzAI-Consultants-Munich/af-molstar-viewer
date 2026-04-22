@@ -1,18 +1,43 @@
 from __future__ import annotations
 
+from pathlib import Path
 import time
 import unittest
+from unittest.mock import patch
 
 from backend.service import ProjectService
 
 
+def upload_toy_target(service: ProjectService, project_id: str):
+    repo_root = Path(__file__).resolve().parents[2]
+    files = [
+        {
+            "name": "toy_ranked_0.pdb",
+            "text": (repo_root / "fixtures" / "test-inputs" / "colabfold" / "toy_ranked_0.pdb").read_text(),
+        },
+        {
+            "name": "toy_scores.json",
+            "text": (repo_root / "fixtures" / "test-inputs" / "colabfold" / "toy_scores.json").read_text(),
+        },
+    ]
+    return service.upload_target(project_id, files, name="toy", chain_ids=["A"])
+
+
 class ProjectServiceTests(unittest.TestCase):
+    def test_projects_start_empty(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+
+        self.assertEqual(project.targets, [])
+        self.assertEqual(project.source_structures, [])
+
     def test_crop_job_creates_new_target(self) -> None:
         service = ProjectService()
         project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
         initial_count = len(project.targets)
 
-        job = service.create_crop_job(project.id, project.targets[0].id, label="Cropped target")
+        job = service.create_crop_job(project.id, target.id, label="Cropped target")
         time.sleep(0.9)
         resolved = service.get_job(job.job_id)
         refreshed = service.get_project(project.id)
@@ -24,10 +49,11 @@ class ProjectServiceTests(unittest.TestCase):
     def test_generate_and_validate_binders(self) -> None:
         service = ProjectService()
         project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
 
         generate_job = service.create_generate_binders_job(
             project.id,
-            target_id=project.targets[0].id,
+            target_id=target.id,
             target_interface_residues="B20-22,A1-10",
         )
         time.sleep(0.9)
@@ -46,27 +72,61 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(resolved_validate.status, "succeeded")
         self.assertGreaterEqual(len(refreshed.binder_validations), 2)
 
+    def test_selection_edit_jobs_only_log_for_now(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
+        initial_count = len(project.targets)
+
+        with patch("backend.service.structure_edit.crop_to_selection") as mocked_crop, patch(
+            "backend.service.structure_edit.cut_selection_off_target"
+        ) as mocked_cut:
+            crop_job = service.create_crop_to_selection_job(project.id, target.id, "B20-22,A1-10")
+            cut_job = service.create_cut_selection_off_target_job(project.id, target.id, "B20-22,A1-10")
+
+        time.sleep(0.9)
+        resolved_crop = service.get_job(crop_job.job_id)
+        resolved_cut = service.get_job(cut_job.job_id)
+        refreshed = service.get_project(project.id)
+
+        self.assertEqual(resolved_crop.status, "succeeded")
+        self.assertEqual(resolved_cut.status, "succeeded")
+        self.assertEqual(len(resolved_crop.target_ids), 1)
+        self.assertEqual(len(resolved_cut.target_ids), 1)
+        self.assertEqual(len(refreshed.targets), initial_count + 2)
+        mocked_crop.assert_called_once()
+        mocked_cut.assert_called_once()
+        crop_call = mocked_crop.call_args.kwargs
+        cut_call = mocked_cut.call_args.kwargs
+        self.assertTrue(str(crop_call["structure_path"]).endswith("toy_ranked_0.pdb"))
+        self.assertIn(".backend-data", str(crop_call["structure_path"]))
+        self.assertEqual(crop_call["target_interface_residues"], "A1-10,B20-22")
+        self.assertEqual(cut_call["target_interface_residues"], "A1-10,B20-22")
+        self.assertEqual(crop_call["target_id"], target.id)
+        self.assertEqual(cut_call["target_id"], target.id)
+
     def test_viewer_states_are_keyed_by_artifact_and_configuration(self) -> None:
         service = ProjectService()
         project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
 
         first = service.save_viewer_state(
             project.id,
-            artifact_id=project.targets[0].id,
+            artifact_id=target.id,
             viewer_configuration="target",
             label="Current target view",
             payload={"snapshot": {"camera": {"current": {"position": [1, 2, 3]}}}},
         )
         replacement = service.save_viewer_state(
             project.id,
-            artifact_id=project.targets[0].id,
+            artifact_id=target.id,
             viewer_configuration="target",
             label="Current target view",
             payload={"snapshot": {"camera": {"current": {"position": [3, 2, 1]}}}},
         )
         validate = service.save_viewer_state(
             project.id,
-            artifact_id=project.targets[0].id,
+            artifact_id=target.id,
             viewer_configuration="validate_refolding",
             label="Current validate refolding view",
             payload={"snapshot": {"camera": {"current": {"position": [4, 5, 6]}}}},

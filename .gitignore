@@ -2,6 +2,7 @@
 node_modules/
 frontend/node_modules/
 backend/.venv/
+.backend-data/
 
 # Shared fixture data
 fixtures/examples/
@@ -45,3 +46,4 @@ pnpm-debug.log*
 Thumbs.db
 *.swp
 *.swo
+*.idea/

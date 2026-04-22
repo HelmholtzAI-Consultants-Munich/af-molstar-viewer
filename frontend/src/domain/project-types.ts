@@ -7,6 +7,7 @@ export type JobType =
   | 'import'
   | 'extract_target_from_template'
   | 'crop_target'
+  | 'cut_target'
   | 'generate_binders'
   | 'validate_refolding';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';

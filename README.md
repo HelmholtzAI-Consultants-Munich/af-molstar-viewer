@@ -66,6 +66,7 @@ From the repo root:
 make help
 make install
 make dev-frontend
+make dev-frontend-http
 make dev-backend
 make build
 make test
@@ -108,7 +109,7 @@ Frontend dev server with backend proxy:
 
 ```bash
 cd frontend
-npm run dev
+VITE_PROJECT_API_MODE=http npm run dev
 # in a second terminal
 npm run dev:backend
 ```
@@ -116,6 +117,6 @@ npm run dev:backend
 Or from the repo root:
 
 ```bash
-make dev-frontend
 make dev-backend
+make dev-frontend-http
 ```

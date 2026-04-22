@@ -111,7 +111,7 @@ describe('project app shell', () => {
     });
   });
 
-  it('links Mol* selection to the interface input and Mol* focus to the selected target card', async () => {
+  it('links Mol* selection to the interface input and shows both selection and focus on the selected target card', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
     const { container } = render(<App api={api} />);
@@ -125,18 +125,62 @@ describe('project app shell', () => {
     });
 
     expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
-    expect(scoped.getByText('Focus: No Mol* focus')).toBeInTheDocument();
+    expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+    expect(scoped.getByText('Focus: nothing focussed')).toBeInTheDocument();
 
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
 
     await waitFor(() => {
       expect(scoped.getByDisplayValue('A1-3')).toBeInTheDocument();
+      expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
 
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar focus' }));
 
     await waitFor(() => {
       expect(scoped.getByText('Focus: A2-3')).toBeInTheDocument();
+    });
+  });
+
+  it('shows crop and cut selection tools on the active target card and activates each derived target after the stubbed backend actions', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<App api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+    await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
+
+    await waitFor(() => {
+      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+    });
+
+    expect(scoped.getByRole('button', { name: 'Crop to selection' })).toBeDisabled();
+    expect(scoped.getByRole('button', { name: 'Cut off selection' })).toBeDisabled();
+
+    await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
+    await waitFor(() => {
+      expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
+    });
+
+    expect(scoped.getByRole('button', { name: 'Crop to selection' })).toBeEnabled();
+    expect(scoped.getByRole('button', { name: 'Cut off selection' })).toBeEnabled();
+
+    await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
+    await waitFor(() => {
+      expect(scoped.getByRole('heading', { name: 'toy cropped' })).toBeInTheDocument();
+      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+    });
+
+    await user.click(scoped.getByRole('button', { name: /^toy$/i }));
+    await waitFor(() => {
+      expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
+    });
+
+    await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
+    await waitFor(() => {
+      expect(scoped.getByRole('heading', { name: 'toy cut' })).toBeInTheDocument();
+      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
     });
   });
 
@@ -231,7 +275,7 @@ describe('project app shell', () => {
       new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
     ]);
 
-    expect(scoped.getByText('Focus: No Mol* focus')).toBeInTheDocument();
+    expect(scoped.getByText('Focus: nothing focussed')).toBeInTheDocument();
     expect(scoped.getByTestId('focused-residues')).toHaveTextContent('');
 
     const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
@@ -293,6 +337,38 @@ describe('project app shell', () => {
     await waitFor(() => {
       expect(scoped.getAllByTestId('viewer-configuration').at(-1)).toHaveTextContent('validate_refolding');
       expect(scoped.getAllByTestId('viewer-state-payload').at(-1)).toHaveTextContent('null');
+    });
+  });
+
+  it('removes a target from the sidebar and falls back to another open target', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<App api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+
+    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
+    ]);
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_beta_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
+    ]);
+
+    await waitFor(() => {
+      expect(scoped.getByRole('button', { name: 'Remove target_beta' })).toBeInTheDocument();
+      expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-2');
+    });
+
+    await user.click(scoped.getByRole('button', { name: 'Remove target_beta' }));
+
+    await waitFor(() => {
+      expect(scoped.queryByRole('button', { name: 'Remove target_beta' })).not.toBeInTheDocument();
+      expect(scoped.getByRole('button', { name: 'Remove target_alpha' })).toBeInTheDocument();
+      expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-1');
     });
   });
 });

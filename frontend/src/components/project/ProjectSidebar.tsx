@@ -1,5 +1,6 @@
 import type { ChangeEvent, DragEvent } from 'react';
 import { useRef, useState } from 'react';
+import { Crop, Scissors, Trash2 } from 'lucide-react';
 import { EXAMPLES } from '../../app/examples';
 import type { WorkspaceProject } from '../../domain/project-types';
 
@@ -7,16 +8,20 @@ interface ProjectSidebarProps {
   project: WorkspaceProject;
   selectedTargetId: string | null;
   selectedTargetMolstarFocus: string;
+  selectedTargetMolstarSelection: string;
+  hasActiveSelection: boolean;
   interfaceDraft: string;
   compareValidationIds: string[];
   busy: boolean;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
   onLoadExample: (exampleId: string) => Promise<void>;
   onSelectTarget: (targetId: string) => void;
+  onRemoveTarget: (targetId: string) => void;
+  onCropToSelection: () => void;
+  onCutOffSelection: () => void;
   onInterfaceDraftChange: (value: string) => void;
   onSaveInterface: () => void;
   onExtractTarget: (sourceStructureId: string) => void;
-  onCropTarget: () => void;
   onGenerateBinders: () => void;
   onValidateRefolding: () => void;
   onSaveViewerState: () => void;
@@ -121,17 +126,87 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             </div>
           ) : (
             props.project.targets.map((target) => (
-              <button
+              <div
                 key={target.id}
-                type="button"
-                className={`artifact-card${target.id === props.selectedTargetId ? ' selected' : ''}`}
-                onClick={() => props.onSelectTarget(target.id)}
+                className={`artifact-card-shell${target.id === props.selectedTargetId ? ' selected' : ''}`}
               >
-                <strong>{target.name}</strong>
-                <span>{target.provenance.replace('_', ' ')}</span>
-                <span>chains: {target.chain_ids.join(', ')}</span>
-                {target.id === props.selectedTargetId && <span className="artifact-card-selection">Focus: {props.selectedTargetMolstarFocus}</span>}
-              </button>
+                <button
+                  type="button"
+                  className={`artifact-card${target.id === props.selectedTargetId ? ' selected' : ''}`}
+                  onClick={() => props.onSelectTarget(target.id)}
+                >
+                  <strong>{target.name}</strong>
+                  {target.id === props.selectedTargetId && (
+                    <div className="artifact-card-details">
+                      <div className="artifact-card-detail-row">
+                        <span>{target.provenance.replace('_', ' ')}, chains: {target.chain_ids.join(', ')}</span>
+                      </div>
+                      <div className="artifact-card-detail-row">
+                        <span className="artifact-card-selection">Focus: {props.selectedTargetMolstarFocus}</span>
+                      </div>
+                      <div className="artifact-card-detail-row">
+                        <span className="artifact-card-selection">Selection: {props.selectedTargetMolstarSelection}</span>
+                      </div>
+                    </div>
+                  )}
+                </button>
+                {target.id === props.selectedTargetId && (
+                  <div className="artifact-card-tools">
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label={`Remove ${target.name}`}
+                      title={`Remove ${target.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onRemoveTarget(target.id);
+                      }}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="Crop to selection"
+                      title="crop to selection"
+                      disabled={!props.hasActiveSelection}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onCropToSelection();
+                      }}
+                    >
+                      <Crop size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="Cut off selection"
+                      title="cut off selection"
+                      disabled={!props.hasActiveSelection}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onCutOffSelection();
+                      }}
+                    >
+                      <Scissors size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+                {target.id !== props.selectedTargetId && (
+                  <button
+                    type="button"
+                    className="artifact-card-tool artifact-card-remove artifact-card-remove-floating"
+                    aria-label={`Remove ${target.name}`}
+                    title={`Remove ${target.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onRemoveTarget(target.id);
+                    }}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>
@@ -164,9 +239,6 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             />
           </label>
           <div className="project-button-row">
-            <button type="button" className="secondary-button" onClick={props.onCropTarget} disabled={props.busy}>
-              Crop target
-            </button>
             <button type="button" className="primary-button" onClick={props.onGenerateBinders} disabled={props.busy}>
               Generate binders
             </button>

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+from pathlib import Path
 import time
 from typing import Any
 
-from .fixtures import clone_project_template, load_fixture_catalog
+from .fixtures import load_fixture_catalog
 from .models import (
     BinderCandidate,
     BinderRun,
@@ -12,12 +13,15 @@ from .models import (
     FixtureCatalog,
     JobRef,
     Project,
+    SourceStructure,
     TargetArtifact,
     ValidationRun,
     ViewerAsset,
+    ViewerFile,
     ViewerState,
 )
-from .selection import canonicalize_target_interface_residues
+from . import structure_edit
+from .selection import canonicalize_target_interface_residues, parse_target_interface_residues
 
 
 class ProjectService:
@@ -26,11 +30,15 @@ class ProjectService:
         self.projects: dict[str, Project] = {}
         self.jobs: dict[str, JobRef] = {}
         self.job_outputs: dict[str, dict[str, Any]] = {}
+        self.project_viewer_assets: dict[str, dict[str, ViewerAsset]] = {}
         self._applied_jobs: set[str] = set()
+        self.runtime_dir = self.catalog.root_dir / ".backend-data"
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
         self._id_counters = {
             "project": 1,
             "job": 1,
             "target": 1,
+            "source_structure": 1,
             "binder_run": 1,
             "validation_run": 1,
             "viewer_state": 1,
@@ -39,9 +47,14 @@ class ProjectService:
     def create_project(self) -> Project:
         project_id = f"project-{self._id_counters['project']}"
         self._id_counters["project"] += 1
-        project = clone_project_template(self.catalog.project_template)
-        project.id = project_id
+        project = Project(
+            id=project_id,
+            name=self.catalog.project_template.name,
+            source_structures=[],
+            targets=[],
+        )
         self.projects[project_id] = project
+        self.project_viewer_assets[project_id] = {}
         return project
 
     def get_project(self, project_id: str) -> Project:
@@ -61,10 +74,114 @@ class ProjectService:
 
     def get_viewer_asset(self, project_id: str, artifact_id: str) -> ViewerAsset:
         self.get_project(project_id)
+        uploaded_asset = self.project_viewer_assets.get(project_id, {}).get(artifact_id)
+        if uploaded_asset is not None:
+            return uploaded_asset
         asset = self.catalog.viewer_assets.get(artifact_id)
         if asset is None:
             raise KeyError(artifact_id)
         return asset
+
+    def upload_target(
+        self,
+        project_id: str,
+        files: list[dict[str, str]],
+        *,
+        name: str,
+        chain_ids: list[str],
+    ) -> tuple[Project, TargetArtifact]:
+        project = self.get_project(project_id)
+        if not files:
+            raise ValueError("Choose at least one file to upload a target.")
+        if not name.strip():
+            raise ValueError("Uploaded targets need a name.")
+
+        target_id = f"target-{self._id_counters['target']}"
+        self._id_counters["target"] += 1
+        source_structure_id = f"source-structure-{self._id_counters['source_structure']}"
+        self._id_counters["source_structure"] += 1
+        viewer_asset_id = f"viewer-{target_id}"
+
+        upload_dir = self.runtime_dir / project_id / target_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        viewer_files: list[ViewerFile] = []
+        for index, file in enumerate(files):
+            file_name = Path(str(file.get("name", f"upload-{index + 1}"))).name or f"upload-{index + 1}"
+            file_text = str(file.get("text", ""))
+            stored_path = upload_dir / file_name
+            stored_path.write_text(file_text)
+            viewer_files.append(ViewerFile(name=file_name, path=str(stored_path)))
+
+        source_structure = SourceStructure(
+            id=source_structure_id,
+            name=name.strip(),
+            chain_ids=list(chain_ids),
+        )
+        target = TargetArtifact(
+            id=target_id,
+            name=name.strip(),
+            provenance="uploaded",
+            target_interface_residues="",
+            chain_ids=list(chain_ids),
+            viewer_asset_id=viewer_asset_id,
+            source_structure_id=source_structure_id,
+        )
+        viewer_asset = ViewerAsset(
+            id=viewer_asset_id,
+            artifact_id=target_id,
+            label=name.strip(),
+            files=viewer_files,
+        )
+
+        project.source_structures.append(source_structure)
+        project.targets.append(target)
+        self.project_viewer_assets.setdefault(project_id, {})[target_id] = viewer_asset
+        return project, target
+
+    def remove_target(self, project_id: str, target_id: str) -> Project:
+        project = self.get_project(project_id)
+        target = self._require_target(project, target_id)
+
+        binder_run_ids = {entry.id for entry in project.binder_runs if entry.target_id == target_id}
+        binder_candidate_ids = {
+            entry.id
+            for entry in project.binder_candidates
+            if entry.target_id == target_id or entry.binder_run_id in binder_run_ids
+        }
+        validation_run_ids = {
+            entry.id
+            for entry in project.validation_runs
+            if entry.target_id == target_id or any(candidate_id in binder_candidate_ids for candidate_id in entry.binder_candidate_ids)
+        }
+        binder_validation_ids = {
+            entry.id
+            for entry in project.binder_validations
+            if entry.target_id == target_id
+            or entry.binder_candidate_id in binder_candidate_ids
+            or entry.validation_run_id in validation_run_ids
+        }
+
+        project.targets = [entry for entry in project.targets if entry.id != target_id]
+        if target.source_structure_id:
+            project.source_structures = [entry for entry in project.source_structures if entry.id != target.source_structure_id]
+        project.binder_runs = [entry for entry in project.binder_runs if entry.id not in binder_run_ids]
+        project.binder_candidates = [entry for entry in project.binder_candidates if entry.id not in binder_candidate_ids]
+        project.validation_runs = [entry for entry in project.validation_runs if entry.id not in validation_run_ids]
+        project.binder_validations = [entry for entry in project.binder_validations if entry.id not in binder_validation_ids]
+        removed_artifact_ids = {target_id, *binder_validation_ids}
+        project.viewer_states = [entry for entry in project.viewer_states if entry.artifact_id not in removed_artifact_ids]
+
+        viewer_assets = self.project_viewer_assets.get(project_id, {})
+        viewer_asset = viewer_assets.pop(target_id, None)
+        if viewer_asset is not None:
+            for file in viewer_asset.files:
+                file_path = Path(file.path)
+                if file_path.exists():
+                    file_path.unlink()
+            upload_dir = self.runtime_dir / project_id / target_id
+            if upload_dir.exists():
+                upload_dir.rmdir()
+        return project
 
     def save_viewer_state(
         self,
@@ -154,6 +271,69 @@ class ProjectService:
             job_type="crop_target",
             progress_message="Cropping target with fixture output",
             produced={"targets": [cropped_target]},
+        )
+
+    def create_crop_to_selection_job(self, project_id: str, target_id: str, target_interface_residues: str) -> JobRef:
+        project = self.get_project(project_id)
+        target = self._require_target(project, target_id)
+        canonical_selection = canonicalize_target_interface_residues(target_interface_residues)
+        residue_ranges = parse_target_interface_residues(canonical_selection)
+        derived_target_id = f"target-{self._id_counters['target']}"
+        self._id_counters["target"] += 1
+        edit_result = structure_edit.crop_to_selection(
+            project_id=project_id,
+            target_id=target.id,
+            target_name=target.name,
+            structure_path=self._get_target_structure_path(project_id, target.id),
+            target_interface_residues=canonical_selection,
+            residue_ranges=residue_ranges,
+            output_dir=str(self.runtime_dir / project_id / derived_target_id),
+        )
+        derived_target, derived_viewer_asset = self._create_derived_target_artifacts(
+            source_target=target,
+            derived_target_id=derived_target_id,
+            derived_name=f"{target.name} cropped",
+            derived_structure_path=str(edit_result["output_path"]),
+        )
+        return self._create_job(
+            project_id=project_id,
+            job_type="crop_target",
+            progress_message=f"Stub: would crop {target.name} to {canonical_selection}",
+            produced={"targets": [derived_target], "viewer_assets": [derived_viewer_asset]},
+        )
+
+    def create_cut_selection_off_target_job(
+        self,
+        project_id: str,
+        target_id: str,
+        target_interface_residues: str,
+    ) -> JobRef:
+        project = self.get_project(project_id)
+        target = self._require_target(project, target_id)
+        canonical_selection = canonicalize_target_interface_residues(target_interface_residues)
+        residue_ranges = parse_target_interface_residues(canonical_selection)
+        derived_target_id = f"target-{self._id_counters['target']}"
+        self._id_counters["target"] += 1
+        edit_result = structure_edit.cut_selection_off_target(
+            project_id=project_id,
+            target_id=target.id,
+            target_name=target.name,
+            structure_path=self._get_target_structure_path(project_id, target.id),
+            target_interface_residues=canonical_selection,
+            residue_ranges=residue_ranges,
+            output_dir=str(self.runtime_dir / project_id / derived_target_id),
+        )
+        derived_target, derived_viewer_asset = self._create_derived_target_artifacts(
+            source_target=target,
+            derived_target_id=derived_target_id,
+            derived_name=f"{target.name} cut",
+            derived_structure_path=str(edit_result["output_path"]),
+        )
+        return self._create_job(
+            project_id=project_id,
+            job_type="cut_target",
+            progress_message=f"Stub: would cut off {canonical_selection} from {target.name}",
+            produced={"targets": [derived_target], "viewer_assets": [derived_viewer_asset]},
         )
 
     def create_generate_binders_job(self, project_id: str, target_id: str, target_interface_residues: str) -> JobRef:
@@ -282,6 +462,11 @@ class ProjectService:
                 target.source_job_id = job.job_id
                 project.targets.append(target)
             job.target_ids = [target.id for target in targets]
+        if "viewer_assets" in produced:
+            viewer_assets: list[ViewerAsset] = produced["viewer_assets"]
+            project_assets = self.project_viewer_assets.setdefault(job.project_id, {})
+            for viewer_asset in viewer_assets:
+                project_assets[viewer_asset.artifact_id] = viewer_asset
         if "binder_run" in produced:
             binder_run: BinderRun = produced["binder_run"]
             binder_run.source_job_id = job.job_id
@@ -306,6 +491,53 @@ class ProjectService:
         if target is None:
             raise KeyError(target_id)
         return target
+
+    def _get_target_structure_path(self, project_id: str, target_id: str) -> str:
+        asset = self.get_viewer_asset(project_id, target_id)
+        structure_file = next(
+            (
+                file
+                for file in asset.files
+                if Path(file.name).suffix.lower() in {".pdb", ".cif", ".mmcif"}
+            ),
+            None,
+        )
+        if structure_file is None:
+            raise ValueError(f"No structure file found for target {target_id}")
+        return structure_file.path
+
+    def _create_derived_target_artifacts(
+        self,
+        *,
+        source_target: TargetArtifact,
+        derived_target_id: str,
+        derived_name: str,
+        derived_structure_path: str,
+    ) -> tuple[TargetArtifact, ViewerAsset]:
+        viewer_asset_id = f"viewer-{derived_target_id}"
+        derived_target = TargetArtifact(
+            id=derived_target_id,
+            name=derived_name,
+            provenance="cropped",
+            target_interface_residues="",
+            chain_ids=list(source_target.chain_ids),
+            viewer_asset_id=viewer_asset_id,
+            parent_target_id=source_target.id,
+            source_structure_id=source_target.source_structure_id,
+            source_job_id=None,
+        )
+        derived_viewer_asset = ViewerAsset(
+            id=viewer_asset_id,
+            artifact_id=derived_target_id,
+            label=derived_name,
+            files=[
+                ViewerFile(
+                    name=Path(derived_structure_path).name,
+                    path=derived_structure_path,
+                )
+            ],
+        )
+        return derived_target, derived_viewer_asset
 
 
 def serialize_project(project: Project, jobs: list[JobRef] | None = None) -> dict[str, Any]:

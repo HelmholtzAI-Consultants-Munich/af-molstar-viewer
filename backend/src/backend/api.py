@@ -6,10 +6,12 @@ from typing import Any
 
 try:
     from fastapi import FastAPI, HTTPException
+    from fastapi.responses import PlainTextResponse
     from fastapi.middleware.cors import CORSMiddleware
 except ModuleNotFoundError:  # pragma: no cover - kept so the repo remains importable without backend deps.
     FastAPI = None  # type: ignore[assignment]
     HTTPException = RuntimeError  # type: ignore[assignment]
+    PlainTextResponse = None  # type: ignore[assignment]
     CORSMiddleware = None  # type: ignore[assignment]
 
 from .service import ProjectService, serialize_job, serialize_project, serialize_viewer_asset
@@ -43,6 +45,31 @@ def create_app() -> Any:
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown project {error.args[0]}") from error
         return serialize_job(job)
+
+    @app.post("/api/projects/{project_id}/targets/upload")
+    def upload_target(project_id: str, payload: dict[str, object]) -> dict[str, object]:
+        try:
+            project, target = SERVICE.upload_target(
+                project_id=project_id,
+                files=[
+                    {
+                        "name": str(entry.get("name", "")),
+                        "text": str(entry.get("text", "")),
+                    }
+                    for entry in payload.get("files", [])
+                    if isinstance(entry, dict)
+                ],
+                name=str(payload.get("name", "")),
+                chain_ids=[str(entry) for entry in payload.get("chain_ids", [])],
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown project {error.args[0]}") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {
+            "project": serialize_project(project),
+            "target": asdict(target),
+        }
 
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> dict[str, object]:
@@ -85,12 +112,46 @@ def create_app() -> Any:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return asdict(target)
 
+    @app.delete("/api/projects/{project_id}/targets/{target_id}")
+    def remove_target(project_id: str, target_id: str) -> dict[str, object]:
+        try:
+            project = SERVICE.remove_target(project_id, target_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
+        return serialize_project(project)
+
     @app.post("/api/projects/{project_id}/targets/{target_id}/crop")
     def crop_target(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
         try:
             job = SERVICE.create_crop_job(project_id, target_id, label=str(payload.get("label", "")))
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
+        return serialize_job(job)
+
+    @app.post("/api/projects/{project_id}/targets/{target_id}/crop-to-selection")
+    def crop_target_to_selection(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
+        try:
+            job = SERVICE.create_crop_to_selection_job(
+                project_id,
+                target_id,
+                str(payload.get("target_interface_residues", "")))
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return serialize_job(job)
+
+    @app.post("/api/projects/{project_id}/targets/{target_id}/cut-off-selection")
+    def cut_selection_off_target(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
+        try:
+            job = SERVICE.create_cut_selection_off_target_job(
+                project_id,
+                target_id,
+                str(payload.get("target_interface_residues", "")))
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         return serialize_job(job)
 
     @app.post("/api/projects/{project_id}/generate-binders")
@@ -157,27 +218,26 @@ def create_app() -> Any:
         payload["files"] = [
             {
                 "name": file["name"],
-                "url": f"/fixture-files/{Path(file['path']).name}",
+                "url": f"/api/projects/{project_id}/artifacts/{artifact_id}/files/{index}",
             }
-            for file in payload["files"]
+            for index, file in enumerate(payload["files"])
         ]
         return payload
 
-    @app.get("/fixture-files/{file_name}")
-    def get_fixture_file(file_name: str) -> str:
-        fixture_path = _resolve_fixture_file(file_name)
-        if not fixture_path.exists():
-            raise HTTPException(status_code=404, detail=f"Unknown fixture file {file_name}")
-        return fixture_path.read_text()
+    @app.get("/api/projects/{project_id}/artifacts/{artifact_id}/files/{file_index}", response_class=PlainTextResponse)
+    def get_artifact_file(project_id: str, artifact_id: str, file_index: int) -> str:
+        try:
+            asset = SERVICE.get_viewer_asset(project_id, artifact_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown artifact {error.args[0]}") from error
+        if file_index < 0 or file_index >= len(asset.files):
+            raise HTTPException(status_code=404, detail=f"Unknown file index {file_index} for artifact {artifact_id}")
+        file_path = Path(asset.files[file_index].path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"Unknown fixture file {file_path.name}")
+        return file_path.read_text()
 
     return app
-
-
-def _resolve_fixture_file(file_name: str) -> Path:
-    matches = list(SERVICE.catalog.root_dir.glob(f"**/{file_name}"))
-    if not matches:
-        return SERVICE.catalog.root_dir / file_name
-    return matches[0]
 
 
 def main() -> None:

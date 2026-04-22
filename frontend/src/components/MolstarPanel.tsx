@@ -511,6 +511,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         }
         await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       }
+      await applyDefaultSequenceTheme(viewerRef.current);
       if (selectedResiduesRef.current !== null) {
         await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
       }

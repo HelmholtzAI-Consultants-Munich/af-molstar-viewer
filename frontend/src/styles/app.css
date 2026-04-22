@@ -109,6 +109,10 @@ input {
   gap: 0.7rem;
 }
 
+.artifact-card-shell {
+  position: relative;
+}
+
 .artifact-empty-state {
   display: flex;
   flex-direction: column;
@@ -145,9 +149,90 @@ input {
   text-align: left;
 }
 
+.artifact-card-shell .artifact-card {
+  padding-right: 2.6rem;
+}
+
+.artifact-card-shell.selected .artifact-card {
+  padding-right: 3.95rem;
+}
+
 .artifact-card.selected {
   border-color: #2f6fb0;
   background: #eef5fd;
+}
+
+.artifact-card-remove {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.artifact-card-remove-floating {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+}
+
+.artifact-card-shell:hover .artifact-card-remove,
+.artifact-card-shell:focus-within .artifact-card-remove,
+.artifact-card-shell.selected .artifact-card-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.artifact-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  margin-top: 0.2rem;
+}
+
+.artifact-card-detail-row {
+  display: flex;
+  min-width: 0;
+}
+
+.artifact-card-detail-row > span {
+  min-width: 0;
+}
+
+.artifact-card-tools {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  z-index: 1;
+}
+
+.artifact-card-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 1px solid #cfd6de;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #3f566e;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.artifact-card-tool svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.artifact-card-tool:hover,
+.artifact-card-tool:focus-visible {
+  border-color: #8da4bb;
+  color: #1f3347;
+  background: #fff;
 }
 
 .artifact-card strong {
@@ -155,6 +240,7 @@ input {
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+  padding-right: 0.4rem;
 }
 
 .artifact-card span {
@@ -168,6 +254,12 @@ input {
 .artifact-card-selection {
   color: #234f7d;
   font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .artifact-card-shell.selected .artifact-card {
+    padding-right: 3.75rem;
+  }
 }
 
 .target-example-select-shell {

@@ -84,6 +84,11 @@ function upsertViewerState(project: WorkspaceProject, snapshot: ViewerStateSnaps
   };
 }
 
+function omitKey<T>(record: Record<string, T>, keyToOmit: string) {
+  const { [keyToOmit]: _omitted, ...rest } = record;
+  return rest;
+}
+
 export function App(props: AppProps) {
   const api = useMemo(() => props.api ?? createProjectApi(), [props.api]);
   const [project, setProject] = useState<WorkspaceProject | null>(null);
@@ -92,6 +97,7 @@ export function App(props: AppProps) {
   const [targetInterfaceDrafts, setTargetInterfaceDrafts] = useState<Record<string, string>>({});
   const [viewerArtifacts, setViewerArtifacts] = useState<Record<string, LoadedViewerArtifact>>({});
   const [viewerFocusSelections, setViewerFocusSelections] = useState<Record<string, number[]>>({});
+  const [pendingDerivedTargetJobIds, setPendingDerivedTargetJobIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,12 +111,19 @@ export function App(props: AppProps) {
   const selectedInterfaceResidues = resolveInterfaceResidueIndices(selectedArtifact, interfaceDraft);
   const selectedTargetFocusResidues = selectedTarget ? (viewerFocusSelections[selectedTarget.id] ?? []) : [];
   const selectedTargetViewerState = getLatestViewerState(project, selectedTarget?.id ?? null, 'target');
+  const hasActiveSelection = Boolean(selectedInterfaceResidues && selectedInterfaceResidues.length > 0);
   const selectedTargetMolstarFocus =
     selectedTarget && selectedArtifact
       ? formatResidueSelection(selectedArtifact.bundle.residues, selectedTargetFocusResidues, {
-          emptyLabel: 'No Mol* focus',
+          emptyLabel: 'nothing focussed',
         })
-      : 'No Mol* focus';
+      : 'nothing focussed';
+  const selectedTargetMolstarSelection =
+    selectedTarget && selectedArtifact
+      ? formatResidueSelection(selectedArtifact.bundle.residues, selectedInterfaceResidues ?? [], {
+          emptyLabel: 'nothing selected',
+        })
+      : 'nothing selected';
 
   const setTargetInterfaceDraft = (targetId: string, value: string) => {
     setTargetInterfaceDrafts((current) => ({
@@ -215,11 +228,19 @@ export function App(props: AppProps) {
     const interval = window.setInterval(() => {
       void (async () => {
         try {
-          await Promise.all(project.jobs.map((job) => api.getJob(job.job_id)));
+          const resolvedJobs = await Promise.all(project.jobs.map((job) => api.getJob(job.job_id)));
           const refreshed = await api.getProject(project.id);
           if (cancelled) return;
           setProject(refreshed);
-          if (!refreshed.targets.some((target) => target.id === selectedTargetId)) {
+          const activatedJob =
+            resolvedJobs.find(
+              (job) => pendingDerivedTargetJobIds.includes(job.job_id) && job.status === 'succeeded' && job.target_ids.length > 0,
+            ) ?? null;
+          const activatedTargetId = activatedJob?.target_ids.at(-1) ?? null;
+          if (activatedTargetId) {
+            setSelectedTargetId(activatedTargetId);
+            setPendingDerivedTargetJobIds((current) => current.filter((jobId) => jobId !== activatedJob?.job_id));
+          } else if (!refreshed.targets.some((target) => target.id === selectedTargetId)) {
             setSelectedTargetId(refreshed.targets.at(-1)?.id ?? refreshed.targets[0]?.id ?? null);
           }
         } catch (pollError) {
@@ -234,7 +255,7 @@ export function App(props: AppProps) {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [api, project, selectedTargetId]);
+  }, [api, pendingDerivedTargetJobIds, project, selectedTargetId]);
 
   const refreshProject = async (projectId: string) => {
     const refreshed = await api.getProject(projectId);
@@ -308,6 +329,33 @@ export function App(props: AppProps) {
     }
   };
 
+  const removeTarget = async (targetId: string) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.removeTarget(project.id, targetId);
+      const removedValidationIds = new Set(
+        project.binder_validations.filter((validation) => validation.target_id === targetId).map((validation) => validation.id),
+      );
+      setProject(updated);
+      setSelectedTargetId((current) => {
+        if (current !== targetId) return current;
+        return updated.targets.at(-1)?.id ?? updated.targets[0]?.id ?? null;
+      });
+      setCompareValidationIds((current) =>
+        current.filter((validationId) => !removedValidationIds.has(validationId) && updated.binder_validations.some((entry) => entry.id === validationId)),
+      );
+      setTargetInterfaceDrafts((current) => omitKey(current, targetId));
+      setViewerArtifacts((current) => omitKey(current, targetId));
+      setViewerFocusSelections((current) => omitKey(current, targetId));
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'Unable to remove target');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="app-shell">
@@ -338,12 +386,35 @@ export function App(props: AppProps) {
           project={project}
           selectedTargetId={selectedTargetId}
           selectedTargetMolstarFocus={selectedTargetMolstarFocus}
+          selectedTargetMolstarSelection={selectedTargetMolstarSelection}
+          hasActiveSelection={hasActiveSelection}
           interfaceDraft={interfaceDraft}
           compareValidationIds={compareValidationIds}
           busy={busy}
           onUploadTargetFiles={uploadTargetFiles}
           onLoadExample={loadExample}
           onSelectTarget={setSelectedTargetId}
+          onRemoveTarget={(targetId) => {
+            void removeTarget(targetId);
+          }}
+          onCropToSelection={() =>
+            void runMutation(async () => {
+              if (!selectedTarget) return;
+              const canonicalSelection = canonicalizeTargetInterfaceResidues(interfaceDraft);
+              const job = await api.cropTargetToSelection(project.id, selectedTarget.id, canonicalSelection);
+              setPendingDerivedTargetJobIds((current) => [...current, job.job_id]);
+              await refreshProject(project.id);
+            })
+          }
+          onCutOffSelection={() =>
+            void runMutation(async () => {
+              if (!selectedTarget) return;
+              const canonicalSelection = canonicalizeTargetInterfaceResidues(interfaceDraft);
+              const job = await api.cutSelectionOffTarget(project.id, selectedTarget.id, canonicalSelection);
+              setPendingDerivedTargetJobIds((current) => [...current, job.job_id]);
+              await refreshProject(project.id);
+            })
+          }
           onInterfaceDraftChange={(value) => {
             if (!selectedTarget) return;
             setTargetInterfaceDraft(selectedTarget.id, value);
@@ -360,12 +431,6 @@ export function App(props: AppProps) {
           onExtractTarget={(sourceStructureId) =>
             void runMutation(async () => {
               await api.extractTargetFromTemplate(project.id, sourceStructureId, ['A', 'B'], interfaceDraft || 'A1-2,B1-2');
-            })
-          }
-          onCropTarget={() =>
-            void runMutation(async () => {
-              if (!selectedTarget) return;
-              await api.cropTarget(project.id, selectedTarget.id, `${selectedTarget.name} cropped`);
             })
           }
           onGenerateBinders={() =>

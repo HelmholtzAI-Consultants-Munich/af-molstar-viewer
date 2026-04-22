@@ -1,4 +1,4 @@
-.PHONY: help install install-frontend install-backend dev dev-frontend dev-backend build build-frontend test test-frontend test-backend
+.PHONY: help install install-frontend install-backend dev dev-frontend dev-frontend-http dev-backend build build-frontend test test-frontend test-backend
 
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
@@ -9,6 +9,7 @@ help:
 	@printf "  make install-frontend  Install frontend dependencies\n"
 	@printf "  make install-backend   Install backend dependencies with uv\n"
 	@printf "  make dev-frontend      Run the Vite dev server\n"
+	@printf "  make dev-frontend-http Run the Vite dev server against FastAPI\n"
 	@printf "  make dev-backend       Run the FastAPI placeholder backend\n"
 	@printf "  make build             Build the frontend\n"
 	@printf "  make test              Run frontend and backend tests\n"
@@ -27,6 +28,9 @@ dev: help
 
 dev-frontend:
 	cd $(FRONTEND_DIR) && npm run dev
+
+dev-frontend-http:
+	cd $(FRONTEND_DIR) && VITE_PROJECT_API_MODE=http npm run dev
 
 dev-backend:
 	cd $(BACKEND_DIR) && uv run backend

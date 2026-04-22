@@ -15,9 +15,12 @@ export interface ProjectApi {
   createProject(): Promise<WorkspaceProject>;
   getProject(projectId: string): Promise<WorkspaceProject>;
   getViewerArtifact(projectId: string, artifactId: string): Promise<ViewerArtifactSource>;
+  removeTarget(projectId: string, targetId: string): Promise<WorkspaceProject>;
   updateTargetInterface(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<WorkspaceProject>;
   extractTargetFromTemplate(projectId: string, sourceStructureId: string, retainedChainIds: string[], targetInterfaceResidues?: string): Promise<JobRef>;
   cropTarget(projectId: string, targetId: string, label?: string): Promise<JobRef>;
+  cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
+  cutSelectionOffTarget(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   generateBinders(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   validateRefolding(projectId: string, binderCandidateIds: string[]): Promise<JobRef>;
   getJob(jobId: string): Promise<JobRef>;
@@ -33,7 +36,7 @@ export interface ProjectApi {
 
 interface LocalJobRecord {
   job: JobRef;
-  apply: () => void;
+  apply: (job: JobRef) => void;
 }
 
 class LocalFixtureProjectApi implements ProjectApi {
@@ -63,6 +66,57 @@ class LocalFixtureProjectApi implements ProjectApi {
       return structuredClone(uploaded);
     }
     return resolveViewerArtifactSource(artifactId);
+  }
+
+  async removeTarget(projectId: string, targetId: string): Promise<WorkspaceProject> {
+    const project = this.requireProject(projectId);
+    const target = project.targets.find((entry) => entry.id === targetId);
+    if (!target) throw new Error(`Unknown target ${targetId}`);
+
+    const binderRunIds = new Set(project.binder_runs.filter((entry) => entry.target_id === targetId).map((entry) => entry.id));
+    const binderCandidateIds = new Set(
+      project.binder_candidates.filter((entry) => entry.target_id === targetId || binderRunIds.has(entry.binder_run_id)).map((entry) => entry.id),
+    );
+    const validationRunIds = new Set(
+      project.validation_runs
+        .filter(
+          (entry) =>
+            entry.target_id === targetId ||
+            entry.binder_candidate_ids.some((candidateId) => binderCandidateIds.has(candidateId)),
+        )
+        .map((entry) => entry.id),
+    );
+    const binderValidationIds = new Set(
+      project.binder_validations
+        .filter(
+          (entry) =>
+            entry.target_id === targetId ||
+            binderCandidateIds.has(entry.binder_candidate_id) ||
+            validationRunIds.has(entry.validation_run_id),
+        )
+        .map((entry) => entry.id),
+    );
+    const removedArtifactIds = new Set<string>([
+      target.id,
+      target.viewer_asset_id,
+      ...binderValidationIds,
+      ...project.binder_validations
+        .filter((entry) => binderValidationIds.has(entry.id))
+        .map((entry) => entry.viewer_asset_id),
+    ]);
+
+    project.targets = project.targets.filter((entry) => entry.id !== targetId);
+    project.binder_runs = project.binder_runs.filter((entry) => !binderRunIds.has(entry.id));
+    project.binder_candidates = project.binder_candidates.filter((entry) => !binderCandidateIds.has(entry.id));
+    project.validation_runs = project.validation_runs.filter((entry) => !validationRunIds.has(entry.id));
+    project.binder_validations = project.binder_validations.filter((entry) => !binderValidationIds.has(entry.id));
+    project.viewer_states = project.viewer_states.filter((entry) => !removedArtifactIds.has(entry.artifact_id));
+
+    for (const artifactId of removedArtifactIds) {
+      this.uploadedViewerArtifacts.delete(artifactId);
+    }
+
+    return structuredClone(project);
   }
 
   async updateTargetInterface(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<WorkspaceProject> {
@@ -104,6 +158,46 @@ class LocalFixtureProjectApi implements ProjectApi {
         source_job_id: undefined,
         target_interface_residues: sourceTarget.target_interface_residues,
       });
+    });
+  }
+
+  async cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
+    const project = this.requireProject(projectId);
+    const sourceTarget = project.targets.find((entry) => entry.id === targetId);
+    if (!sourceTarget) throw new Error(`Unknown target ${targetId}`);
+    console.info('[LocalFixtureProjectApi] crop to selection requested', {
+      projectId,
+      targetId,
+      targetInterfaceResidues,
+    });
+    return this.createJob(projectId, 'crop_target', 'Printing crop-to-selection request in local fixture mode', (job) => {
+      const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
+        sourceTarget,
+        `${sourceTarget.name} cropped`,
+      );
+      project.targets.push(target);
+      this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
+      job.target_ids = [target.id];
+    });
+  }
+
+  async cutSelectionOffTarget(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
+    const project = this.requireProject(projectId);
+    const sourceTarget = project.targets.find((entry) => entry.id === targetId);
+    if (!sourceTarget) throw new Error(`Unknown target ${targetId}`);
+    console.info('[LocalFixtureProjectApi] cut off selection requested', {
+      projectId,
+      targetId,
+      targetInterfaceResidues,
+    });
+    return this.createJob(projectId, 'cut_target', 'Printing cut-off-selection request in local fixture mode', (job) => {
+      const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
+        sourceTarget,
+        `${sourceTarget.name} cut`,
+      );
+      project.targets.push(target);
+      this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
+      job.target_ids = [target.id];
     });
   }
 
@@ -225,7 +319,7 @@ class LocalFixtureProjectApi implements ProjectApi {
     };
   }
 
-  private createJob(projectId: string, jobType: JobRef['job_type'], progressMessage: string, apply: () => void): JobRef {
+  private createJob(projectId: string, jobType: JobRef['job_type'], progressMessage: string, apply: (job: JobRef) => void): JobRef {
     const job: JobRef = {
       job_id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       job_type: jobType,
@@ -240,7 +334,7 @@ class LocalFixtureProjectApi implements ProjectApi {
     this.jobs.set(job.job_id, {
       job,
       apply: () => {
-        apply();
+        apply(job);
         this.syncProjectJobs();
       },
     });
@@ -259,6 +353,32 @@ class LocalFixtureProjectApi implements ProjectApi {
     if (!this.project) return;
     this.project.jobs = [...this.jobs.values()].map((entry) => structuredClone(entry.job));
   }
+
+  private createDerivedTargetFromSource(sourceTarget: TargetArtifact, name: string) {
+    const sourceArtifact =
+      this.uploadedViewerArtifacts.get(sourceTarget.id) ?? resolveViewerArtifactSource(sourceTarget.id);
+    const targetId = `target-${this.targetCounter++}`;
+    const target: TargetArtifact = {
+      ...sourceTarget,
+      id: targetId,
+      name,
+      provenance: 'cropped',
+      target_interface_residues: '',
+      parent_target_id: sourceTarget.id,
+      viewer_asset_id: targetId,
+      source_job_id: null,
+    };
+    const viewerArtifactSource: ViewerArtifactSource = {
+      artifact_id: targetId,
+      label: name,
+      files: sourceArtifact.files.map((file) => ({
+        name: file.name,
+        text: file.text,
+        url: file.url,
+      })),
+    };
+    return { target, viewerArtifactSource };
+  }
 }
 
 class HttpProjectApi implements ProjectApi {
@@ -274,6 +394,13 @@ class HttpProjectApi implements ProjectApi {
 
   async getViewerArtifact(projectId: string, artifactId: string): Promise<ViewerArtifactSource> {
     return this.request<ViewerArtifactSource>(`/projects/${projectId}/artifacts/${artifactId}/viewer`);
+  }
+
+  async removeTarget(projectId: string, targetId: string): Promise<WorkspaceProject> {
+    await this.request(`/projects/${projectId}/targets/${targetId}`, {
+      method: 'DELETE',
+    });
+    return this.getProject(projectId);
   }
 
   async updateTargetInterface(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<WorkspaceProject> {
@@ -301,6 +428,24 @@ class HttpProjectApi implements ProjectApi {
     return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/crop`, {
       method: 'POST',
       body: JSON.stringify({ label }),
+    });
+  }
+
+  async cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
+    return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/crop-to-selection`, {
+      method: 'POST',
+      body: JSON.stringify({
+        target_interface_residues: targetInterfaceResidues,
+      }),
+    });
+  }
+
+  async cutSelectionOffTarget(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
+    return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/cut-off-selection`, {
+      method: 'POST',
+      body: JSON.stringify({
+        target_interface_residues: targetInterfaceResidues,
+      }),
     });
   }
 
@@ -343,8 +488,19 @@ class HttpProjectApi implements ProjectApi {
     });
   }
 
-  async uploadTarget(_projectId: string, _files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }> {
-    throw new Error('Target upload is only implemented in local project mode right now.');
+  async uploadTarget(projectId: string, files: WorkerInputFile[]): Promise<{ project: WorkspaceProject; target: TargetArtifact }> {
+    const uploadMetadata = deriveUploadedTargetMetadata(files);
+    return this.request<{ project: WorkspaceProject; target: TargetArtifact }>(`/projects/${projectId}/targets/upload`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: uploadMetadata.name,
+        chain_ids: uploadMetadata.chainIds,
+        files: files.map((file) => ({
+          name: file.name,
+          text: file.text,
+        })),
+      }),
+    });
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -369,20 +525,7 @@ export function createProjectApi(): ProjectApi {
 }
 
 function createUploadedTarget(files: WorkerInputFile[], targetId: string): { target: TargetArtifact; viewerArtifactSource: ViewerArtifactSource } {
-  if (files.length === 0) {
-    throw new Error('Choose at least one file to upload a target.');
-  }
-
-  const groups = discoverGroups(files);
-  const preferredGroup = groups.find((group) => !group.unresolved) ?? groups[0];
-  if (!preferredGroup) {
-    throw new Error('No supported target files were provided.');
-  }
-  if (preferredGroup.unresolved) {
-    throw new Error(preferredGroup.reasons.join('. '));
-  }
-
-  const bundle = loadBundle(files, preferredGroup);
+  const { bundle } = deriveUploadedTargetMetadata(files);
   const target: TargetArtifact = {
     id: targetId,
     name: bundle.name,
@@ -403,4 +546,26 @@ function createUploadedTarget(files: WorkerInputFile[], targetId: string): { tar
     })),
   };
   return { target, viewerArtifactSource };
+}
+
+function deriveUploadedTargetMetadata(files: WorkerInputFile[]) {
+  if (files.length === 0) {
+    throw new Error('Choose at least one file to upload a target.');
+  }
+
+  const groups = discoverGroups(files);
+  const preferredGroup = groups.find((group) => !group.unresolved) ?? groups[0];
+  if (!preferredGroup) {
+    throw new Error('No supported target files were provided.');
+  }
+  if (preferredGroup.unresolved) {
+    throw new Error(preferredGroup.reasons.join('. '));
+  }
+
+  const bundle = loadBundle(files, preferredGroup);
+  return {
+    bundle,
+    name: bundle.name,
+    chainIds: bundle.chains.map((chain) => chain.chainId),
+  };
 }
