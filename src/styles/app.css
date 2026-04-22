@@ -927,7 +927,7 @@ select {
   }
 
   .legend-panel {
-    max-width: 420px;
+    max-width: 380px;
   }
 
   .heatmap-footer {
@@ -939,18 +939,18 @@ select {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .workspace-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 2fr;
     grid-template-areas:
-      'sequence'
-      'heatmap'
-      'viewer'
-      'legend';
+      'sequence sequence'
+      'viewer viewer'
+      'heatmap legend';
   }
-
-  .heatmap-chart,
   .legend-panel {
-    max-width: none;
+    max-width: 240px;
+  }
+  .heatmap-chart {
+    max-width: 380px;
   }
 }
