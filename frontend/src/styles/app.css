@@ -672,7 +672,7 @@ input {
 .sequence-panel {
   grid-area: sequence;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 0;
   background: #f3f3f3;
 }
@@ -1107,13 +1107,15 @@ input {
 
 .molstar-sequence-host {
   position: relative;
-  height: 90px;
-  min-height: 90px;
+  height: 95px;
+  min-height: 72px;
   width: 100%;
   overflow: hidden;
   background: #f3f3f3;
   border: 0 !important;
   box-shadow: none !important;
+  max-height: 50vh;
+  resize: vertical;
 }
 
 .molstar-host {
@@ -1331,7 +1333,7 @@ input {
   }
 
   .legend-panel {
-    max-width: 420px;
+    max-width: 380px;
   }
 
   .heatmap-footer {
@@ -1350,19 +1352,19 @@ input {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
   .workspace-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 2fr;
     grid-template-areas:
-      'sequence'
-      'heatmap'
-      'viewer'
-      'legend';
+      'sequence sequence'
+      'viewer viewer'
+      'heatmap legend';
   }
-
-  .heatmap-chart,
   .legend-panel {
-    max-width: none;
+    max-width: 240px;
+  }
+  .heatmap-chart {
+    max-width: 380px;
   }
 
   .target-workspace-grid {
