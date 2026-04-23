@@ -90,15 +90,84 @@ function queriesWithColor(
   return residueIndicesToQueries(residues, indices).map((query) => ({ ...query, color }));
 }
 
-async function applyDefaultSequenceTheme(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
+async function applyDefaultSequenceTheme(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  usePLDDTs: boolean,
+) {
+  if (usePLDDTs) {
+    try {
+      await viewer.visual.sequenceColor({
+        data: [],
+        theme: {
+          name: 'plddt-confidence',
+          params: {},
+          themeStrength: 0.6,
+        },
+      });
+      return;
+    } catch {
+      console.log('PLDDT failed');
+    }
+  }
+
   await viewer.visual.sequenceColor({
     data: [],
     theme: {
-      name: 'plddt-confidence',
+      name: 'chain-id',
       params: {},
-      themeStrength: 1,
+      themeStrength: 0.6,
     },
   });
+}
+
+async function applyDefaultStructureTheme(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  usePLDDTs: boolean,
+) {
+  const plugin = viewer.plugin;
+  if (!plugin) return;
+
+  const themeName = usePLDDTs ? 'plddt-confidence' : 'chain-id';
+  const update = plugin.state.data.build();
+  let hasRepresentations = false;
+
+  for (const structure of plugin.managers.structure.hierarchy.selection.structures) {
+    for (const component of structure.components) {
+      for (const representation of component.representations) {
+        hasRepresentations = true;
+        update.to(representation.cell).update((old: any) => {
+          if (!old.colorTheme || old.colorTheme.name !== themeName) {
+            old.colorTheme = { name: themeName, params: {} };
+          }
+        });
+      }
+    }
+  }
+
+  if (hasRepresentations) {
+    await update.commit();
+  }
+}
+
+async function applyDefaultColors(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  props: MolstarPanelProps,
+) {
+  const usePLDDTs =
+    props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTToggleStatus && props.colorByPLDDTEnabled;
+  await applyDefaultSequenceTheme(viewer, usePLDDTs);
+  await applyDefaultStructureTheme(viewer, usePLDDTs);
+}
+
+async function applyDefaultColorsDeferred(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  props: MolstarPanelProps,
+) {
+  const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await raf();
+  await raf();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await applyDefaultColors(viewer, props);
 }
 
 async function applyPinnedPairSelection(
@@ -380,6 +449,8 @@ interface MolstarPanelProps {
   onSelectionResiduesChange?: (indices: number[]) => void;
   onFocusResiduesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
+  colorByPLDDTToggleStatus: boolean;
+  colorByPLDDTEnabled: boolean;
 }
 
 export function MolstarPanel(props: MolstarPanelProps) {
@@ -494,7 +565,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       await applyIllustrativeQuickStyle(viewerRef.current);
-      await applyDefaultSequenceTheme(viewerRef.current);
+      await clearStructureFocus(viewerRef.current);
+      await applyDefaultColorsDeferred(viewerRef.current, props);
       selectionModeRef.current = Boolean(viewerRef.current.plugin?.selectionMode);
 
       const snapshot = readSnapshotFromPayload(props.viewerStatePayload);
@@ -509,7 +581,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         }
         await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       }
-      await applyDefaultSequenceTheme(viewerRef.current);
+      await applyDefaultColors(viewerRef.current, props);
       if (selectedResiduesRef.current !== null) {
         await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
       }
@@ -619,7 +691,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       void (async () => {
         await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
         await viewer.visual.clearSelection();
-        await applyDefaultSequenceTheme(viewer);
+        await applyDefaultColors(viewer, props);
         if (selectedResiduesRef.current !== null) {
           await syncNativeSelection(viewer, props.bundle.residues, selectedResiduesRef.current, { force: true });
         }
@@ -643,9 +715,16 @@ export function MolstarPanel(props: MolstarPanelProps) {
     void (async () => {
       await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
       await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
-      await applyDefaultSequenceTheme(viewer);
+      await applyDefaultColors(viewer, props);
     })();
-  }, [props.brushSelection, props.bundle.residues, props.pinnedCell, props.pinnedResidues]);
+  }, [
+    props.brushSelection,
+    props.bundle.residues,
+    props.pinnedCell,
+    props.pinnedResidues,
+    props.colorByPLDDTToggleStatus,
+    props.colorByPLDDTEnabled,
+  ]);
 
   return (
     <>

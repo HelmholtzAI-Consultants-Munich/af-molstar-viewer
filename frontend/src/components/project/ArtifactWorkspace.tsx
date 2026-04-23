@@ -26,6 +26,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
     props.artifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD,
   );
   const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
+  const [colorByPLDDTToggleStatus, setColorByPLDDTToggleStatus] = useState(props.artifact.bundle.metadata.looksLikePLDDTs);
+  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState(props.artifact.bundle.metadata.looksLikePLDDTs);
 
   const interactionPerformance = useMemo(
     () => resolvePaeInteractionPerformance(props.artifact.bundle.residues.length),
@@ -48,6 +50,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       interactionPerformance={interactionPerformance}
       paeHoverSyncEnabled={paeHoverSyncEnabled}
       paePairSelectionEnabled={paePairSelectionEnabled}
+      colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
+      colorByPLDDTEnabled={colorByPLDDTEnabled}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
       onPinResidues={setPinnedResidues}
@@ -77,6 +81,16 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       onClearPairSelection={() => {
         setPinnedCell(null);
         setPinnedResidues([]);
+      }}
+      onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
+      onEnableColorByPLDDT={() => {
+        setColorByPLDDTEnabled((enabled) => {
+          const next = !enabled;
+          if (!next) {
+            setColorByPLDDTToggleStatus(false);
+          }
+          return next;
+        });
       }}
       onMolstarSelectionChange={props.onSelectionResiduesChange}
       onMolstarFocusChange={props.onFocusResiduesChange}

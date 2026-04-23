@@ -15,12 +15,16 @@ interface PaeHeatmapProps {
   interactionPerformance: PaeInteractionPerformanceSettings;
   hoverSyncEnabled: boolean;
   pairSelectionEnabled: boolean;
+  colorByPLDDTToggleStatus: boolean;
+  colorByPLDDTEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onClickCell: (cell: { x: number; y: number }) => void;
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
   onToggleHoverSync: () => void;
   onTogglePairSelection: () => void;
   onClearPairSelection: () => void;
+  onToggleColorByPLDDT: () => void;
+  onEnableColorByPLDDT: () => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -740,6 +744,22 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                     aria-label="pair click"
                     checked={props.pairSelectionEnabled}
                     onChange={props.onTogglePairSelection}
+                  />
+                  <span className="switch-track" aria-hidden="true">
+                    <span className="switch-thumb" />
+                  </span>
+                </span>
+              </label>
+              <label className="switch-field">
+                <span className="switch-label">pLDDT coloring</span>
+                <span className="switch-control">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="pLDDT color"
+                    disabled={!props.colorByPLDDTEnabled}
+                    checked={props.colorByPLDDTToggleStatus}
+                    onChange={props.onToggleColorByPLDDT}
                   />
                   <span className="switch-track" aria-hidden="true">
                     <span className="switch-thumb" />

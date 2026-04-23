@@ -23,6 +23,8 @@ function Harness() {
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
   const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(true);
   const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
+  const [colorByPLDDTToggleStatus, setColorByPLDDTToggleStatus] = useState(true);
+  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState(true);
 
   return (
     <Workspace
@@ -40,6 +42,8 @@ function Harness() {
       interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
       paeHoverSyncEnabled={paeHoverSyncEnabled}
       paePairSelectionEnabled={paePairSelectionEnabled}
+      colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
+      colorByPLDDTEnabled={colorByPLDDTEnabled}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
       onPinResidues={setPinnedResidues}
@@ -64,6 +68,17 @@ function Harness() {
           return next;
         })
       }
+      onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
+      onEnableColorByPLDDT={() => {
+        setColorByPLDDTEnabled((enabled) => {
+          const next = !enabled;  // make a new variable that is the other boolean
+          if (!next) {
+            // on disabling, also turn it off
+            setColorByPLDDTToggleStatus(false);
+          }
+          return next;
+        })
+      }}
       onClearPairSelection={() => {
         setPinnedCell(null);
         setPinnedResidues([]);
@@ -92,6 +107,8 @@ function TargetHarness() {
       interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
       paeHoverSyncEnabled
       paePairSelectionEnabled
+      colorByPLDDTToggleStatus
+      colorByPLDDTEnabled
       onHoverResidues={() => {}}
       onHoverCell={() => {}}
       onPinResidues={() => {}}
@@ -99,6 +116,8 @@ function TargetHarness() {
       onBrushSelectionChange={() => {}}
       onTogglePaeHoverSync={() => {}}
       onTogglePaePairSelection={() => {}}
+      onToggleColorByPLDDT={() => {}}
+      onEnableColorByPLDDT={() => {}}
       onClearPairSelection={() => {}}
       onViewerStateChange={() => {}}
     />

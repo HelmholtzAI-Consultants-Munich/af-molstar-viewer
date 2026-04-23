@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PaeHeatmap } from './PaeHeatmap';
 import { MolstarPanel } from './MolstarPanel';
 import { LegendPanel } from './LegendPanel';
@@ -22,6 +22,8 @@ interface WorkspaceProps {
   interactionPerformance: PaeInteractionPerformanceSettings;
   paeHoverSyncEnabled: boolean;
   paePairSelectionEnabled: boolean;
+  colorByPLDDTToggleStatus: boolean;
+  colorByPLDDTEnabled: boolean;
   onHoverResidues: (indices: number[]) => void;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onPinResidues: (indices: number[]) => void;
@@ -33,6 +35,8 @@ interface WorkspaceProps {
   onMolstarSelectionChange?: (indices: number[]) => void;
   onMolstarFocusChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
+  onToggleColorByPLDDT: () => void;
+  onEnableColorByPLDDT: () => void;
 }
 
 export function Workspace(props: WorkspaceProps) {
@@ -102,16 +106,18 @@ export function Workspace(props: WorkspaceProps) {
   return (
     <div className={`workspace-grid${props.viewerConfiguration === 'target' ? ' target-workspace-grid' : ''}`}>
       <MolstarPanel
-      viewerConfiguration={props.viewerConfiguration}
-      viewerStatePayload={props.viewerStatePayload}
-      bundle={props.bundle}
-      structureText={props.structureText}
+        viewerConfiguration={props.viewerConfiguration}
+        viewerStatePayload={props.viewerStatePayload}
+        bundle={props.bundle}
+        structureText={props.structureText}
         selectedResidues={props.selectedResidues}
         focusedResidues={props.focusedResidues}
         hoveredResidues={props.hoveredResidues}
         pinnedResidues={props.pinnedResidues}
         pinnedCell={props.pinnedCell}
         brushSelection={props.brushSelection}
+        colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
+        colorByPLDDTEnabled={props.colorByPLDDTEnabled}
         onHoverResidue={(index) => props.onHoverResidues(index === null ? [] : [index])}
         onClickResidue={(index) => {
           clearPendingHoverResidues();
@@ -138,6 +144,8 @@ export function Workspace(props: WorkspaceProps) {
             interactionPerformance={props.interactionPerformance}
             hoverSyncEnabled={props.paeHoverSyncEnabled}
             pairSelectionEnabled={props.paePairSelectionEnabled}
+            colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
+            colorByPLDDTEnabled={props.colorByPLDDTEnabled}
             onHoverCell={(cell) => {
               props.onHoverCell(cell);
               if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
@@ -157,6 +165,8 @@ export function Workspace(props: WorkspaceProps) {
               clearPendingHoverResidues();
               props.onClearPairSelection();
             }}
+            onToggleColorByPLDDT={props.onToggleColorByPLDDT}
+            onEnableColorByPLDDT={props.onEnableColorByPLDDT}
           />
           <LegendPanel bundle={props.bundle} />
         </>
