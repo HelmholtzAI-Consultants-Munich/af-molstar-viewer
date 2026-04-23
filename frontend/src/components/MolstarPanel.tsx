@@ -9,7 +9,6 @@ const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
 const VIEWER_STATE_DEBOUNCE_MS = 240;
 
 const MOLSTAR_RENDER_OPTIONS = {
-  alphafoldView: true,
   visualStyle: 'cartoon' as const,
   bgColor: { r: 255, g: 255, b: 255 },
   leftPanel: false,
@@ -488,6 +487,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
             format: props.bundle.structure.format,
             binary: false,
           },
+          alphafoldView: props.bundle.metadata.looksLikePLDDTs,
           ...MOLSTAR_RENDER_OPTIONS,
         },
       );

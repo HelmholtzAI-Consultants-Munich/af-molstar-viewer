@@ -6,6 +6,9 @@ interface LegendPanelProps {
 }
 
 export function LegendPanel(props: LegendPanelProps) {
+  // only show the legend if the bundle has pLDDTs
+  if (!props.bundle.metadata.looksLikePLDDTs) return null;
+
   const meanConfidence =
     props.bundle.residues.length > 0
       ? props.bundle.residues.reduce((total, residue) => total + residue.confidence, 0) / props.bundle.residues.length
