@@ -1,7 +1,7 @@
 export type PredictionSource = 'af2' | 'colabfold' | 'af3' | 'structure';
 export type MoleculeType = 'protein' | 'dna' | 'rna' | 'ligand' | 'unknown';
 export type ConfidenceCategory = 'very-high' | 'high' | 'low' | 'very-low';
-export type StructureFormat = 'cif' | 'mmcif' | 'pdb';
+export type StructureFormat = 'cif' | 'pdb' ;
 
 export interface WorkerInputFile {
   name: string;

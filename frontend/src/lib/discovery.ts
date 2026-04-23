@@ -16,7 +16,7 @@ function guessSource(group: Omit<DiscoveryGroup, 'suggestedSource' | 'unresolved
 }
 
 function isStructureFile(name: string): boolean {
-  return /\.(?:pdb|cif|mmcif)$/i.test(name);
+  return /\.(?:pdb|cif|mmcif|ent)$/i.test(name);
 }
 
 function isConfidenceJson(name: string): boolean {
