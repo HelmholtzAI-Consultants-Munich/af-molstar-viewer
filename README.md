@@ -1,25 +1,9 @@
 # AFDB-style Mol* Viewer
 
-Prototype local-first _all-vibe-coded_ web app for inspecting self-generated protein structure predictions just like in the AlphaFold database.  
+Prototype local-first, mostly vibe-coded web app for inspecting self-generated 
+protein structure predictions just like in the AlphaFold database.
 
 uses PDBe Mol*, adds an AlphaFold DB-style interactively linked pAE workspace.
-
-> [!NOTE] Future plans
-> - This will become a part of the Web UI for a larger project around BindCraft.
-> - There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre-or post-processing and orchestration.
-> - The Web UI should gain functionality to:
->   - display the structure of the target protein / template pair
->   - enable selecting the interface, i.e. binding hotspots
->   - enable cropping that protein
->   - show the generated binders
->   - show the AF2-predicted structures of the binders
->   - allow comparing the binders, maybe in separate connected views or with overlaying
->   - enable saving/exporting views from viewer panels as Mol* states
-
-### TODO
-- ask codex to evaluate architecture for this purpose
-- design choice: Mol* `Focus` should only ever be `target`, and not include `surroundings`
-- it might be nice if dragging a file onto the viewer panel would load that as well, but only in the viewer?
 
 ![demo](demo.gif)
 
@@ -120,3 +104,31 @@ Or from the repo root:
 make dev-backend
 make dev-frontend-http
 ```
+
+## Future Plans
+
+- This will become a part of the Web UI for a larger project around BindCraft.
+- There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre- or post-processing and orchestration.
+- The Web UI should gain functionality to:
+  - display the structure of the target protein / template pair
+  - enable selecting the interface, i.e. binding hotspots
+  - enable cropping that protein
+  - show the generated binders
+  - show the AF2-predicted structures of the binders
+  - allow comparing the binders, maybe in separate connected views or with overlaying
+  - enable saving/exporting views from viewer panels as Mol* states
+
+### TODO
+
+- the theme toggle is in the wrong place now, because pAE panel is not visible at all.
+- Mol* `Focus` is partially or completely lost when switching back to the target `pdb7xhf.ent`
+- selection no longer works for that file, either
+- drag onto viewer to load?
+- enable saving/exporting views from viewer panels as Mol* states
+
+## Attribution
+
+Reverse-engineered from the [AlphaFold database](https://alphafold.com/),
+which is under a [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)
+creative commons license and developed by [Google DeepMind](https://deepmind.google/)
+with [EMBL-EBI](https://www.ebi.ac.uk/).
