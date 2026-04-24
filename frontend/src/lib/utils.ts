@@ -41,7 +41,7 @@ export function createChains(residues: PolymerResidue[]): ChainTrack[] {
 
 export function normalizeStem(name: string): string {
   return name
-    .replace(/\.[^.]+$/, '')
+    // .replace(/\.[^.]+$/, '') // do not remove file extensions, as they can contain useful information (e.g. .pdb vs .cif)
     .replace(/(?:[-_])summary_confidences$/i, '')
     .replace(/(?:[-_])predicted_aligned_error(?:_v\d+)?(?:[-_].*)?$/i, '')
     .replace(/(?:[-_])model(?:_v\d+)?$/i, '')
@@ -55,6 +55,7 @@ export function summarizeResidueSelection(indices: number[]): number[] {
   return [...new Set(indices)].sort((a, b) => a - b);
 }
 
+// Format a selection of residues as a human-readable string, e.g. "A1-10,B5,C3-4". Optionally provide an emptyLabel to show when no residues are selected.
 export function formatResidueSelection(
   residues: PolymerResidue[],
   indices: number[],
