@@ -119,7 +119,7 @@ make dev-frontend-http
   - enable saving/exporting views from viewer panels as Mol* states
 
 ### TODO
-
+- selection does not become visible if the parent target was a PDB
 - the theme toggle is in the wrong place now, because pAE panel is not visible at all.
 - Mol* `Focus` is partially or completely lost when switching back to the target `pdb7xhf.ent`
 - selection no longer works for that file, either

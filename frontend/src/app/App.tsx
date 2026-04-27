@@ -44,14 +44,18 @@ function resolveInterfaceResidueIndices(
         ranges.some(
           (range) =>
             residue.chainId === range.chainId &&
-            ((residue.labelSeqId >= range.start && residue.labelSeqId <= range.end) ||
-              (residue.authSeqId !== undefined && residue.authSeqId >= range.start && residue.authSeqId <= range.end)),
+            residue.authSeqId !== undefined &&
+            residue.authSeqId >= range.start && 
+            residue.authSeqId <= range.end,
         ),
       )
       .map((residue) => residue.index);
-
-    return [...new Set(indices)].sort((left, right) => left - right);
+    
+    const auth_res_indices = [...new Set(indices)].sort((left, right) => left - right);
+    console.debug('resolveInterfaceResidueIndices turned input', input, 'to ranges', ranges, 'and output', auth_res_indices);
+    return auth_res_indices;
   } catch {
+    console.debug('resolveInterfaceResidueIndices broke at input ', input);
     return null;
   }
 }
@@ -148,6 +152,7 @@ export function App(props: AppProps) {
   };
 
   useEffect(() => {
+    console.log('bonk')
     let cancelled = false;
     const initialize = async () => {
       setLoading(true);
@@ -483,6 +488,7 @@ export function App(props: AppProps) {
               selectedResidues={selectedInterfaceResidues}
               focusedResidues={selectedTargetFocusResidues}
               onSelectionResiduesChange={(indices) => {
+                console.debug('onSelectionResiduesChange', indices);
                 const nextSelection = formatResidueSelection(selectedArtifact.bundle.residues, indices, {
                   emptyLabel: '',
                 });

@@ -56,14 +56,15 @@ export function summarizeResidueSelection(indices: number[]): number[] {
 }
 
 // Format a selection of residues as a human-readable string, e.g. "A1-10,B5,C3-4". Optionally provide an emptyLabel to show when no residues are selected.
+// This also translates from the internal residue indexing (residues array) to the author residue numbering (chainId + authSeqId) for better readability, and collapses consecutive residues into ranges (e.g. A1-10 instead of A1,A2,...,A10).
 export function formatResidueSelection(
   residues: PolymerResidue[],
   indices: number[],
   options: { emptyLabel?: string } = {},
 ): string {
-  const normalized = summarizeResidueSelection(indices)
-    .map((index) => residues[index])
-    .filter((residue): residue is PolymerResidue => Boolean(residue));
+  const sorted = summarizeResidueSelection(indices);
+  const normalized  = sorted.map((index) => residues[index])
+    .filter((r): r is PolymerResidue & { authSeqId: number } => r.authSeqId != null);
 
   if (normalized.length === 0) {
     return options.emptyLabel ?? 'No Mol* selection';
@@ -71,12 +72,12 @@ export function formatResidueSelection(
 
   const segments: string[] = [];
   let currentChain = normalized[0].chainId;
-  let startSeq = normalized[0].authSeqId ?? normalized[0].labelSeqId;
+  let startSeq = normalized[0].authSeqId; // ?? normalized[0].labelSeqId;
   let previousSeq = startSeq;
 
   for (const residue of normalized.slice(1)) {
     const chainId = residue.chainId;
-    const sequenceId = residue.authSeqId ?? residue.labelSeqId;
+    const sequenceId = residue.authSeqId; // ?? residue.labelSeqId;
     if (chainId === currentChain && sequenceId === previousSeq + 1) {
       previousSeq = sequenceId;
       continue;
@@ -89,5 +90,6 @@ export function formatResidueSelection(
   }
 
   segments.push(startSeq === previousSeq ? `${currentChain}${startSeq}` : `${currentChain}${startSeq}-${previousSeq}`);
+  console.debug('formatResidueSelection turned indices', indices, 'and residues', residues, 'into segments', segments);
   return segments.join(',');
 }

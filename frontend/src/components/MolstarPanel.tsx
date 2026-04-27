@@ -87,6 +87,7 @@ function queriesWithColor(
   indices: number[],
   color: string,
 ) {
+  // console.log('with color', color, 'for indices', indices);
   return residueIndicesToQueries(residues, indices).map((query) => ({ ...query, color }));
 }
 
@@ -394,6 +395,7 @@ async function syncNativeSelection(
   }
 
   viewer.plugin.managers.structure.selection.fromLoci('set', nextLoci, true);
+  // console.log('syncNativeSelection', indices, nextLoci)
 }
 
 async function syncNativeFocus(
@@ -656,7 +658,9 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
   useEffect(() => {
     if (!viewerRef.current) return;
+    // console.log('hoveredResidues / residues -- linked to pAE?', hoveredResidues, ' is position-in-seq');
     const queries = residueIndicesToQueries(props.bundle.residues, hoveredResidues);
+    // console.log('are you querying?', queries);
     if (queries.length === 0) {
       void viewerRef.current.visual.clearHighlight();
       return;
@@ -706,6 +710,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       void (async () => {
         await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
         await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
+        // console.log('pinnedCell')
         await viewer.visual.interactivityFocus({ data: residueIndicesToQueries(props.bundle.residues, props.pinnedResidues) });
         await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
       })();
