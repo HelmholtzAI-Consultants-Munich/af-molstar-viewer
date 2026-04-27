@@ -90,6 +90,6 @@ export function formatResidueSelection(
   }
 
   segments.push(startSeq === previousSeq ? `${currentChain}${startSeq}` : `${currentChain}${startSeq}-${previousSeq}`);
-  console.debug('formatResidueSelection turned indices', indices, 'and residues', residues, 'into segments', segments);
+  // console.debug('formatResidueSelection turned indices', indices, 'and residues', residues, 'into segments', segments);
   return segments.join(',');
 }

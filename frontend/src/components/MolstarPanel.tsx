@@ -675,7 +675,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     if (props.selectedResidues === null) return;
 
     void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues);
-  }, [props.bundle.residues, props.selectedResidues]);
+  }, [props.bundle.residues]); // kinda sus! props.selectedResidues or selectedResiduesRef.current kill the selection
 
   useEffect(() => {
     const viewer = viewerRef.current;

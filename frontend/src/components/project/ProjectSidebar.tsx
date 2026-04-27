@@ -222,7 +222,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             <span>target_interface_residues</span>
             <input
               value={props.interfaceDraft}
-              onChange={(event) => props.onInterfaceDraftChange(event.target.value)}
+              onChange={(event) => props.onInterfaceDraftChange(event.target.value)} // kinda sus! This is where the magic happens: as the user edits the textarea, we update the interface draft in the parent component, which in turn causes the molstar panel to update the target interface draft used for generating binders and validating refolding
               placeholder="A1-10,B20-22"
             />
           </label>

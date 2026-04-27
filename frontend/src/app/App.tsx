@@ -52,7 +52,7 @@ function resolveInterfaceResidueIndices(
       .map((residue) => residue.index);
     
     const auth_res_indices = [...new Set(indices)].sort((left, right) => left - right);
-    console.debug('resolveInterfaceResidueIndices turned input', input, 'to ranges', ranges, 'and output', auth_res_indices);
+    // console.debug('resolveInterfaceResidueIndices turned input', input, 'to ranges', ranges, 'and output', auth_res_indices);
     return auth_res_indices;
   } catch {
     console.debug('resolveInterfaceResidueIndices broke at input ', input);
@@ -152,7 +152,6 @@ export function App(props: AppProps) {
   };
 
   useEffect(() => {
-    console.log('bonk')
     let cancelled = false;
     const initialize = async () => {
       setLoading(true);
@@ -421,13 +420,16 @@ export function App(props: AppProps) {
             })
           }
           onInterfaceDraftChange={(value) => {
+            console.debug('onInterfaceDraftChange value', value);
             if (!selectedTarget) return;
             setTargetInterfaceDraft(selectedTarget.id, value);
           }}
           onSaveInterface={() =>
             void runMutation(async () => {
+              console.debug('onSaveInterface', interfaceDraft);
               if (!selectedTarget) return;
               const canonical = canonicalizeTargetInterfaceResidues(interfaceDraft);
+              console.debug('onSaveInterface canonical residues', canonical);
               const updated = await api.updateTargetInterface(project.id, selectedTarget.id, canonical);
               setProject(updated);
               setTargetInterfaceDraft(selectedTarget.id, canonical);
@@ -488,7 +490,7 @@ export function App(props: AppProps) {
               selectedResidues={selectedInterfaceResidues}
               focusedResidues={selectedTargetFocusResidues}
               onSelectionResiduesChange={(indices) => {
-                console.debug('onSelectionResiduesChange', indices);
+                console.debug('artifactworkspace onSelectionResiduesChange', indices);
                 const nextSelection = formatResidueSelection(selectedArtifact.bundle.residues, indices, {
                   emptyLabel: '',
                 });

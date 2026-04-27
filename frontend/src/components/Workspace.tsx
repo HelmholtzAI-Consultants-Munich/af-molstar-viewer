@@ -124,6 +124,8 @@ export function Workspace(props: WorkspaceProps) {
           props.onPinCell(null);
         }}
         onSelectionResiduesChange={(indices) => {
+          // kinda sus! This one is also a bit suspicous
+          console.log('molstarpanel onselectionchange', indices);
           clearPendingHoverResidues();
           props.onPinCell(null);
           props.onMolstarSelectionChange?.(indices);
