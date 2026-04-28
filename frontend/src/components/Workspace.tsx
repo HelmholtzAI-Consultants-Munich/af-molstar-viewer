@@ -5,7 +5,7 @@ import { LegendPanel } from './LegendPanel';
 import type { ViewerConfiguration } from '../domain/project-types';
 import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
-import { summarizeResidueSelection } from '../lib/utils';
+import { uniqueSortedNumbers } from '../lib/utils';
 
 interface WorkspaceProps {
   viewerConfiguration: ViewerConfiguration;
@@ -151,13 +151,13 @@ export function Workspace(props: WorkspaceProps) {
             onHoverCell={(cell) => {
               props.onHoverCell(cell);
               if (props.paeHoverSyncEnabled && props.pinnedCell === null) {
-                scheduleHoverResidues(cell ? summarizeResidueSelection([cell.x, cell.y]) : []);
+                scheduleHoverResidues(cell ? uniqueSortedNumbers([cell.x, cell.y]) : []);
               }
             }}
             onClickCell={(cell) => {
               clearPendingHoverResidues();
               props.onPinCell(cell);
-              props.onPinResidues(summarizeResidueSelection([cell.x, cell.y]));
+              props.onPinResidues(uniqueSortedNumbers([cell.x, cell.y]));
               props.onHoverResidues([]);
             }}
             onBrushSelectionChange={props.onBrushSelectionChange}

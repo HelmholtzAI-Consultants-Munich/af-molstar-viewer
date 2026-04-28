@@ -1,5 +1,5 @@
 import type { PolymerResidue } from '../types';
-import { summarizeResidueSelection } from '../utils';
+import { uniqueSortedNumbers } from '../utils';
 
 export interface MolstarResidueSelection {
   [key: string]: unknown;
@@ -17,7 +17,7 @@ export function residueIndicesToQueries(
   indices: number[],
   options: { focus?: boolean; colorNull?: boolean } = {},
 ): MolstarResidueSelection[] {
-  const unique = summarizeResidueSelection(indices);
+  const unique = uniqueSortedNumbers(indices);
   if (unique.length === 0) return [];
 
   const queries: MolstarResidueSelection[] = [];

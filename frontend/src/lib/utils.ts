@@ -51,7 +51,8 @@ export function normalizeStem(name: string): string {
     .replace(/(?:[-_])pae$/i, '');
 }
 
-export function summarizeResidueSelection(indices: number[]): number[] {
+export function uniqueSortedNumbers(indices: number[]): number[] {
+  // a new array with duplicates removed and values sorted from smallest to largest.
   return [...new Set(indices)].sort((a, b) => a - b);
 }
 
