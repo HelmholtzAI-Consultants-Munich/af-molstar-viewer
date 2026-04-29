@@ -24,7 +24,7 @@ export interface TargetArtifact {
   parent_target_id?: string | null;
   source_structure_id?: string | null;
   source_job_id?: string | null;
-  target_interface_residues: string;
+  selection: string;
   chain_ids: string[];
   viewer_asset_id: string;
 }

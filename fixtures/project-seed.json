@@ -21,7 +21,7 @@
       "name": "Q14145 uploaded target",
       "provenance": "uploaded",
       "source_structure_id": "source-uploaded-q14145",
-      "target_interface_residues": "A15-25",
+      "selection": "A15-25",
       "chain_ids": ["A"],
       "viewer_asset_id": "viewer-target-uploaded"
     },
@@ -31,7 +31,7 @@
       "provenance": "template_extracted",
       "source_structure_id": "source-template-multimer",
       "source_job_id": "job-template-seeded",
-      "target_interface_residues": "A1-2,B1-2",
+      "selection": "A1-2,B1-2",
       "chain_ids": ["A", "B"],
       "viewer_asset_id": "viewer-target-template"
     },
@@ -42,7 +42,7 @@
       "parent_target_id": "target-template",
       "source_structure_id": "source-template-multimer",
       "source_job_id": "job-crop-seeded",
-      "target_interface_residues": "A1-2",
+      "selection": "A1-2",
       "chain_ids": ["A"],
       "viewer_asset_id": "viewer-target-cropped"
     }

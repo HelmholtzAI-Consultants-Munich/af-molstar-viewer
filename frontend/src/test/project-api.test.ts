@@ -60,7 +60,7 @@ describe('project api fixtures', () => {
     const afterValidate = await api.getProject(project.id);
 
     expect(afterValidate.binder_validations).toHaveLength(2);
-    expect(afterValidate.targets[0].target_interface_residues).toBe('A1-10,B20-22');
+    expect(afterValidate.targets[0].selection).toBe('A1-10,B20-22');
   });
 
   it('stores viewer states per artifact and viewer configuration', async () => {
