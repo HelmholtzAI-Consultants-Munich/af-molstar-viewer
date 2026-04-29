@@ -81,7 +81,7 @@ def _write_filtered_structure(
     residue_ranges: list[ResidueRange],
     *,
     keep_selected: bool,
-) -> int:
+) -> tuple[int, list[str]]:
     if structure_file.suffix.lower() in {".cif", ".mmcif"}:
         return _write_filtered_mmcif_text(
             structure_file,
@@ -123,7 +123,7 @@ def _write_filtered_structure_with_biopython(
     structure = parser.get_structure(structure_file.stem, str(structure_file))
 
     class ResidueSelect(Select):
-        def accept_residue(self, residue) -> bool:  # type: ignore[override]
+        def accept_residue(self, residue) -> int:  # type: ignore[override]
             # Keep Biopython's original residue ids so edited structures preserve
             # numbering gaps such as A1, A5 after cutting away A2-4.
             return 1 if keep_residue(residue.get_parent().id, residue.id[1]) else 0

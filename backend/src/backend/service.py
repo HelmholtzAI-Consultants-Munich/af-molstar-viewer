@@ -14,6 +14,7 @@ from .models import (
     BinderValidation,
     FixtureCatalog,
     JobRef,
+    JobType,
     Project,
     SourceStructure,
     TargetArtifact,
