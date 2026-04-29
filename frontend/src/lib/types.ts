@@ -18,7 +18,7 @@ export interface PolymerResidue {
   chainId: string;
   entityId?: string;
   labelSeqId: number;
-  authSeqId?: number;
+  authSeqId: number;
   compId: string;
   code: string;
   confidence: number;

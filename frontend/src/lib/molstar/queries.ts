@@ -6,8 +6,8 @@ export interface MolstarResidueSelection {
   label_asym_id: string;
   beg_label_seq_id: number;
   end_label_seq_id: number;
-  beg_auth_seq_id?: number;
-  end_auth_seq_id?: number;
+  beg_auth_seq_id: number;
+  end_auth_seq_id: number;
   color?: string | null;
   focus?: boolean;
 }
