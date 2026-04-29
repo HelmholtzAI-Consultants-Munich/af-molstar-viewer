@@ -19,7 +19,8 @@ interface ProjectSidebarProps {
   onRemoveTarget: (targetId: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
-  onInterfaceDraftChange: (value: string) => void;
+  onInterfaceDraftFocus?: () => void;
+  onInterfaceDraftBlur?: () => void;
   onSaveInterface: () => void;
   onGenerateBinders: () => void;
   onValidateRefolding: () => void;
@@ -219,10 +220,11 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
             </button>
           </div>
           <label className="stacked-field">
-            <span>target_interface_residues</span>
+            <span>selection</span>
             <input
               value={props.interfaceDraft}
-              onChange={(event) => props.onInterfaceDraftChange(event.target.value)} // kinda sus! This is where the magic happens: as the user edits the textarea, we update the interface draft in the parent component, which in turn causes the molstar panel to update the target interface draft used for generating binders and validating refolding
+              onFocus={() => props.onInterfaceDraftFocus?.()}
+              onBlur={() => props.onInterfaceDraftBlur?.()}
               placeholder="A1-10,B20-22"
             />
           </label>
