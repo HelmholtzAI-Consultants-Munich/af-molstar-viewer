@@ -59,12 +59,13 @@ export function uniqueSortedNumbers(indices: number[]): number[] {
 // Format a selection of residues as a human-readable string, e.g. "A1-10,B5,C3-4". Optionally provide an emptyLabel to show when no residues are selected.
 // This also translates from the internal residue indexing (residues array) to the author residue numbering (chainId + authSeqId) for better readability, and collapses consecutive residues into ranges (e.g. A1-10 instead of A1,A2,...,A10).
 export function formatResidueSelection(
-  residues: PolymerResidue[],
-  indices: number[],
+  polymerResidues: PolymerResidue[],
+  residueIndices: number[],
   options: { emptyLabel?: string } = {},
 ): string {
-  const sorted = summarizeResidueSelection(indices);
-  const normalized  = sorted.map((index) => residues[index])
+  // TODO drop this in favour of a (potentially modified?) function in target-interface.ts
+  const normalized  = uniqueSortedNumbers(residueIndices)
+    .map((index) => polymerResidues[index])
     .filter((r): r is PolymerResidue & { authSeqId: number } => r.authSeqId != null);
 
   if (normalized.length === 0) {

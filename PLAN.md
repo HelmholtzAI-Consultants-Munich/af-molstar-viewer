@@ -30,7 +30,7 @@ This gives a clean model:
 
 ### Target semantics
 A `target` may contain one or more chains.
-A `target_interface_residues` selection may span multiple chains, for example `A1-10,B20-22`.
+A `selection` may span multiple chains, for example `A1-10,B20-22`.
 
 ### Template handling
 Treat a template as an import/use-case, not a persistent artifact kind.
@@ -59,7 +59,7 @@ Use:
 ### Selections
 Remove `SelectionKind`.
 Use a single persisted field/model:
-- `target_interface_residues`
+- `selection`
 
 Recommended representation:
 - canonical string form for API payloads, e.g. `A1-10,B20-22`
@@ -86,12 +86,12 @@ Recommended contract:
 
 - `POST /projects/:projectId/targets/from-template`
   - async operation
-  - input: `source_structure_id`, retained chain(s), optional initial `target_interface_residues`
+  - input: `source_structure_id`, retained chain(s), optional initial `selection`
   - output: job ref
   - result: new `target`
 
 - `POST /projects/:projectId/targets/:targetId/interface`
-  - save/update `target_interface_residues`
+  - save/update `selection`
   - input accepts multichain residue syntax like `A1-10,B20-22`
 
 - `POST /projects/:projectId/targets/:targetId/crop`
@@ -102,7 +102,7 @@ Recommended contract:
 
 - `POST /projects/:projectId/generate-binders`
   - async operation
-  - input: `target_id`, `target_interface_residues`, run parameters
+  - input: `target_id`, `selection`, run parameters
   - output: job ref
   - result: `binder_run` plus `binder_candidate` artifacts
 
@@ -204,7 +204,7 @@ Recommended fixture modes:
 
 - add reducer/state tests for target lineage and artifact replacement-free workflows
 - add API-client tests for:
-  - multichain `target_interface_residues`
+  - multichain `selection`
   - template-to-target job flow
   - crop-to-new-target job flow
   - `generate_binders`
@@ -221,7 +221,7 @@ Recommended fixture modes:
 
 - cropping is always a backend operation and yields a new canonical `target`
 - template extraction is also a backend-derived-target operation
-- `target_interface_residues` is the only selection concept needed in this plan
+- `selection` is the only selection concept needed in this plan
 - targets may contain multiple chains
 - side-by-side connected comparison remains the default comparison mode
 - a fixture-backed FastAPI is the preferred placeholder backend over frontend-only mocks

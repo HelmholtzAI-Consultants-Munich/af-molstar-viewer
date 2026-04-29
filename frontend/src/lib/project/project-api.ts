@@ -6,7 +6,7 @@ import type {
   ViewerStateSnapshot,
   WorkspaceProject,
 } from '../../domain/project-types';
-import { canonicalizeTargetInterfaceResidues } from '../../domain/target-interface';
+import { canonicalizeSelectionDraft } from '../../domain/target-interface';
 import { discoverGroups, loadBundle } from '../discovery';
 import type { WorkerInputFile } from '../types';
 import { createSeedProject, getGeneratedOutputs, resolveViewerArtifactSource } from './project-fixtures';
@@ -121,7 +121,9 @@ class LocalFixtureProjectApi implements ProjectApi {
     const project = this.requireProject(projectId);
     const target = project.targets.find((entry) => entry.id === targetId);
     if (!target) throw new Error(`Unknown target ${targetId}`);
-    target.target_interface_residues = canonicalizeTargetInterfaceResidues(targetInterfaceResidues);
+    // TODO rename the function
+    console.debug('[LocalFixtureProjectApi] update target interface requested')
+    target.selection = canonicalizeSelectionDraft(targetInterfaceResidues);
     return structuredClone(project);
   }
 
@@ -171,7 +173,7 @@ class LocalFixtureProjectApi implements ProjectApi {
     const project = this.requireProject(projectId);
     const target = project.targets.find((entry) => entry.id === targetId);
     if (!target) throw new Error(`Unknown target ${targetId}`);
-    target.target_interface_residues = canonicalizeTargetInterfaceResidues(targetInterfaceResidues);
+    target.selection = canonicalizeSelectionDraft(targetInterfaceResidues);
     const generated = getGeneratedOutputs();
     return this.createJob(projectId, 'generate_binders', 'Generating binder candidates from fixture outputs', () => {
       const binderRunId = `binder-run-${project.binder_runs.length + 1}`;
@@ -334,7 +336,7 @@ class LocalFixtureProjectApi implements ProjectApi {
       id: targetId,
       name,
       provenance: 'cropped',
-      target_interface_residues: '',
+      selection: '',
       chain_ids: this.deriveChainIdsForDerivedTarget(sourceTarget, sourceArtifact),
       parent_target_id: sourceTarget.id,
       viewer_asset_id: targetId,
@@ -417,7 +419,7 @@ class HttpProjectApi implements ProjectApi {
     await this.request(`/projects/${projectId}/targets/${targetId}/interface`, {
       method: 'POST',
       body: JSON.stringify({
-        target_interface_residues: targetInterfaceResidues,
+        selection: targetInterfaceResidues,
       }),
     });
     return this.getProject(projectId);
@@ -427,7 +429,7 @@ class HttpProjectApi implements ProjectApi {
     return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/crop-to-selection`, {
       method: 'POST',
       body: JSON.stringify({
-        target_interface_residues: targetInterfaceResidues,
+        selection: targetInterfaceResidues,
       }),
     });
   }
@@ -436,7 +438,7 @@ class HttpProjectApi implements ProjectApi {
     return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/cut-off-selection`, {
       method: 'POST',
       body: JSON.stringify({
-        target_interface_residues: targetInterfaceResidues,
+        selection: targetInterfaceResidues,
       }),
     });
   }
@@ -446,7 +448,7 @@ class HttpProjectApi implements ProjectApi {
       method: 'POST',
       body: JSON.stringify({
         target_id: targetId,
-        target_interface_residues: targetInterfaceResidues,
+        selection: targetInterfaceResidues,
       }),
     });
   }
@@ -522,7 +524,7 @@ function createUploadedTarget(files: WorkerInputFile[], targetId: string): { tar
     id: targetId,
     name: bundle.name,
     provenance: 'uploaded',
-    target_interface_residues: '',
+    selection: '',
     chain_ids: bundle.chains.map((chain) => chain.chainId),
     viewer_asset_id: targetId,
     parent_target_id: null,

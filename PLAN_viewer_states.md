@@ -2,12 +2,12 @@
 
 ## Summary
 
-The current implementation only persists a thin slice of viewer state: `target_interface_residues` as semantic selection text, plus focus as residue indices. That is why switching back to a target does not fully restore Mol* `Focus`, camera, or orientation. The Mol* “Session” feature is the right way forward here: it captures the real plugin/viewer state, not just residue lists.
+The current implementation only persists a thin slice of viewer state: `selection` as semantic selection text, plus focus as residue indices. That is why switching back to a target does not fully restore Mol* `Focus`, camera, or orientation. The Mol* “Session” feature is the right way forward here: it captures the real plugin/viewer state, not just residue lists.
 
 The plan is to keep semantic project state and Mol* viewer state as two separate layers:
 
 - semantic state stays explicit in the app/domain model
-  - `target_interface_residues` remains a target-owned field and stays linked to Mol* `selection`
+  - `selection` remains a target-owned field and stays linked to Mol* `selection`
 - viewer state moves to Mol* snapshots/sessions
   - one persisted viewer snapshot per artifact per viewer configuration
   - this restores focus, orientation, camera, and other Mol*-native state
@@ -35,7 +35,7 @@ This is the closest match to the “Session” behavior on molstar.org/viewer, a
 Keep these separate on purpose:
 
 Semantic project state:
-- `target_interface_residues`
+- `selection`
 - target provenance and identity
 - pipeline-stage metadata
 
@@ -47,7 +47,7 @@ Mol* viewer state:
 - other session-level plugin state
 
 Decision:
-- `target_interface_residues` remains the source of truth for the domain
+- `selection` remains the source of truth for the domain
 - Mol* snapshot is the source of truth for viewer restoration
 - the input field should continue to drive Mol* `selection`
 - snapshot restore should not overwrite the saved semantic interface string with unrelated transient viewer state
@@ -108,7 +108,7 @@ Recommended additions:
   - `label?`
   - `payload` as Mol* snapshot/session JSON
   - `updated_at`
-- keep `target_interface_residues` on the target artifact/project state
+- keep `selection` on the target artifact/project state
 
 Recommended rule:
 - residue-array `focusedResidues` should stop being the primary persistence mechanism
@@ -122,7 +122,7 @@ Add tests for these scenarios:
   - focus
   - camera/orientation
   - target-only focus mode
-- `target_interface_residues` stays target-local and still drives Mol* selection
+- `selection` stays target-local and still drives Mol* selection
 - turning Mol* selection mode off does not erase the input
 - turning selection mode back on re-applies the input-driven selection
 - restoring a snapshot for `target` does not accidentally enable `surroundings`
@@ -133,6 +133,6 @@ Add tests for these scenarios:
 
 - the Mol* variant currently in use can access the underlying snapshot/session manager through the PDBe wrapper, so Mol* “Session”-style persistence is feasible
 - automatic per-target restore is the default behavior for the `target` stage
-- `target_interface_residues` remains a semantic project field and should not be replaced by raw Mol* snapshot data
+- `selection` remains a semantic project field and should not be replaced by raw Mol* snapshot data
 - the current AFDB-style PAE workspace should be treated as an early `validate_refolding` viewer, not the long-term default `target` viewer
 - the first implementation should store JSON snapshot payloads in app/backend state; downloadable/importable `.molj` compatibility can come after that

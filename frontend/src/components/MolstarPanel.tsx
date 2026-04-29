@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { PAE_PAIR_SELECTION_COLOR, PAE_SELECTION_COLORS } from '../lib/constants';
-import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
+import { canonicalizeQueries, findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
-import { summarizeResidueSelection } from '../lib/utils';
+import { uniqueSortedNumbers } from '../lib/utils';
 
 const DEFAULT_FOCUS_COMPONENTS = ['target'] as const;
 const TARGET_ONLY_FOCUS_COMPONENTS = ['target'] as const;
@@ -343,8 +343,8 @@ async function readSelectionResidues(
     );
     if (match) selection.add(match.index);
   });
-
-  return summarizeResidueSelection([...selection]);
+  // console.debug('readSelectionResidues selection', selection);
+  return uniqueSortedNumbers([...selection]);
 }
 
 async function readFocusResidues(
@@ -367,8 +367,7 @@ async function readFocusResidues(
     );
     if (match) focus.add(match.index);
   });
-
-  return summarizeResidueSelection([...focus]);
+  return uniqueSortedNumbers([...focus]);
 }
 
 async function syncNativeSelection(
@@ -395,7 +394,7 @@ async function syncNativeSelection(
   }
 
   viewer.plugin.managers.structure.selection.fromLoci('set', nextLoci, true);
-  // console.log('syncNativeSelection', indices, nextLoci)
+  // console.log('syncNativeSelection', indices.length)
 }
 
 async function syncNativeFocus(
