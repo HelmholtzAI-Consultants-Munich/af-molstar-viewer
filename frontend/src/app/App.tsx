@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EXAMPLES } from './examples';
 import type { LoadedViewerArtifact, ViewerConfiguration, ViewerStateSnapshot, WorkspaceProject } from '../domain/project-types';
-import { canonicalizeTargetInterfaceResidues, parseTargetInterfaceResidues } from '../domain/target-interface';
+import { indicesAndResiduesToMatch, matchSelectionDraftAndResidues, selectionDraftAndArtifactToMatch } from '../domain/target-interface';
 import { ArtifactWorkspace } from '../components/project/ArtifactWorkspace';
 import { ProjectSidebar } from '../components/project/ProjectSidebar';
 import { loadViewerArtifact } from '../lib/project/load-viewer-artifact';
@@ -28,36 +28,6 @@ function readFileAsText(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error(`Unable to read ${file.name}`));
     reader.readAsText(file);
   });
-}
-
-function resolveInterfaceResidueIndices(
-  artifact: LoadedViewerArtifact | null,
-  input: string,
-): number[] | null {
-  if (!artifact) return null;
-  if (!input.trim()) return [];
-
-  try {
-    const ranges = parseTargetInterfaceResidues(input);
-    const indices = artifact.bundle.residues
-      .filter((residue) =>
-        ranges.some(
-          (range) =>
-            residue.chainId === range.chainId &&
-            residue.authSeqId !== undefined &&
-            residue.authSeqId >= range.start && 
-            residue.authSeqId <= range.end,
-        ),
-      )
-      .map((residue) => residue.index);
-    
-    const auth_res_indices = [...new Set(indices)].sort((left, right) => left - right);
-    // console.debug('resolveInterfaceResidueIndices turned input', input, 'to ranges', ranges, 'and output', auth_res_indices);
-    return auth_res_indices;
-  } catch {
-    console.debug('resolveInterfaceResidueIndices broke at input ', input);
-    return null;
-  }
 }
 
 function getLatestViewerState(
@@ -98,9 +68,11 @@ export function App(props: AppProps) {
   const [project, setProject] = useState<WorkspaceProject | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [compareValidationIds, setCompareValidationIds] = useState<string[]>([]);
-  const [targetInterfaceDrafts, setTargetInterfaceDrafts] = useState<Record<string, string>>({});
   const [viewerArtifacts, setViewerArtifacts] = useState<Record<string, LoadedViewerArtifact>>({});
-  const [viewerFocusSelections, setViewerFocusSelections] = useState<Record<string, number[]>>({});
+  const [draftByArtifact, setDraftByArtifact] = useState<Record<string, string>>({});
+  const [selectionByArtifact, setSelectionByArtifact] = useState<Record<string, number[] | null>>({});
+  const [isDraftFocused, setDraftFocused] = useState(false);
+  const [focusByArtifact, setFocusByArtifact] = useState<Record<string, number[]>>({});
   const [pendingDerivedTargetJobIds, setPendingDerivedTargetJobIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -111,31 +83,32 @@ export function App(props: AppProps) {
     .map((validationId) => project?.binder_validations.find((validation) => validation.id === validationId) ?? null)
     .filter((validation): validation is NonNullable<typeof validation> => validation !== null);
   const selectedArtifact = selectedTargetId ? viewerArtifacts[selectedTargetId] : null;
-  const interfaceDraft = selectedTarget ? (targetInterfaceDrafts[selectedTarget.id] ?? selectedTarget.target_interface_residues) : '';
-  const selectedInterfaceResidues = resolveInterfaceResidueIndices(selectedArtifact, interfaceDraft);
-  const selectedTargetFocusResidues = selectedTarget ? (viewerFocusSelections[selectedTarget.id] ?? []) : [];
+  const interfaceDraft = selectedTarget ? (draftByArtifact[selectedTarget.id] ?? selectedTarget.selection) : '';
+  const selectionResidues = selectedTarget && selectedArtifact ? (selectionByArtifact[selectedTarget.id] ?? matchSelectionDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).residueIndices ?? []) : [];
+  // const selectionResidues = selectedTarget && selectedArtifact ? matchDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).residueIndices : [];
+  const selectionString = selectedTarget && selectedArtifact ? matchSelectionDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).canonical : '';
+  const selectedTargetFocusResidues = selectedTarget ? (focusByArtifact[selectedTarget.id] ?? []) : [];
   const selectedTargetViewerState = getLatestViewerState(project, selectedTarget?.id ?? null, 'target');
-  const hasActiveSelection = Boolean(selectedInterfaceResidues && selectedInterfaceResidues.length > 0);
+  const hasActiveSelection = Boolean(selectionResidues && selectionResidues.length > 0);
   const selectedTargetMolstarFocus =
     selectedTarget && selectedArtifact
       ? formatResidueSelection(selectedArtifact.bundle.residues, selectedTargetFocusResidues, {
           emptyLabel: 'nothing focussed',
         })
       : 'nothing focussed';
-  const selectedTargetMolstarSelection =
-    selectedTarget && selectedArtifact
-      ? formatResidueSelection(selectedArtifact.bundle.residues, selectedInterfaceResidues ?? [], {
-          emptyLabel: 'nothing selected',
-        })
-      : 'nothing selected';
-
-  const setTargetInterfaceDraft = (targetId: string, value: string) => {
-    setTargetInterfaceDrafts((current) => ({
+  const selectedTargetMolstarSelection = selectedTarget ? selectionString || 'nothing selected' : 'nothing selected';
+  const saveDraftByArtifact = (targetId: string, value: string) => {
+    setDraftByArtifact((current) => ({
       ...current,
       [targetId]: value,
     }));
   };
-
+  const saveSelectionByArtifact = (targetId: string, value: number[] | null) => {
+    setSelectionByArtifact((current) => ({
+      ...current,
+      [targetId]: value,
+    }));
+  };
   const persistViewerState = async (
     artifactId: string,
     viewerConfiguration: ViewerConfiguration,
@@ -162,8 +135,11 @@ export function App(props: AppProps) {
         setProject(nextProject);
         const preferredTarget = nextProject.targets[0] ?? null;
         setSelectedTargetId(preferredTarget?.id ?? null);
-        setTargetInterfaceDrafts(
-          Object.fromEntries(nextProject.targets.map((target) => [target.id, target.target_interface_residues])),
+        setDraftByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, target.selection])),
+        );
+        setSelectionByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, null])),
         );
       } catch (appError) {
         if (!cancelled) {
@@ -181,9 +157,18 @@ export function App(props: AppProps) {
 
   useEffect(() => {
     if (!project) return;
-    setTargetInterfaceDrafts((current) => {
+    setDraftByArtifact((current) => {
       const next = Object.fromEntries(
-        project.targets.map((target) => [target.id, current[target.id] ?? target.target_interface_residues]),
+        project.targets.map((target) => [target.id, current[target.id] ?? target.selection]),
+      );
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setSelectionByArtifact((current) => {
+      const next = Object.fromEntries(
+        project.targets.map((target) => [target.id, current[target.id] ?? null]),
       );
       const same =
         Object.keys(next).length === Object.keys(current).length &&
@@ -297,7 +282,8 @@ export function App(props: AppProps) {
       setProject(result.project);
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
-      setTargetInterfaceDraft(result.target.id, result.target.target_interface_residues);
+      saveDraftByArtifact(result.target.id, result.target.selection);
+      saveSelectionByArtifact(result.target.id, null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload target');
     } finally {
@@ -325,7 +311,8 @@ export function App(props: AppProps) {
       setProject(result.project);
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
-      setTargetInterfaceDraft(result.target.id, result.target.target_interface_residues);
+      saveDraftByArtifact(result.target.id, result.target.selection);
+      saveSelectionByArtifact(result.target.id, null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load example');
     } finally {
@@ -350,9 +337,10 @@ export function App(props: AppProps) {
       setCompareValidationIds((current) =>
         current.filter((validationId) => !removedValidationIds.has(validationId) && updated.binder_validations.some((entry) => entry.id === validationId)),
       );
-      setTargetInterfaceDrafts((current) => omitKey(current, targetId));
+      setDraftByArtifact((current) => omitKey(current, targetId));
+      setSelectionByArtifact((current) => omitKey(current, targetId));
       setViewerArtifacts((current) => omitKey(current, targetId));
-      setViewerFocusSelections((current) => omitKey(current, targetId));
+      setFocusByArtifact((current) => omitKey(current, targetId));
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : 'Unable to remove target');
     } finally {

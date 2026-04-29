@@ -317,16 +317,23 @@ async function selectionLociFromResidues(
   const structure = getCurrentStructure(viewer);
   if (!structure) return null;
   const { QueryHelper } = await import('pdbe-molstar/lib/helpers.js');
-  return QueryHelper.getInteractivityLoci(residueIndicesToQueries(residues, indices), structure);
+  const queries = residueIndicesToQueries(residues, indices)
+  const loci = QueryHelper.getInteractivityLoci(queries, structure);
+  // console.debug('selectionLociFromResidues indices', indices, 
+  //   'became queries', canonicalizeQueries(queries), 
+  //   'and returned loci', loci.elements);
+  // looks good!
+  return loci;
 }
 
 async function readSelectionResidues(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
 ) {
+  // should this function be isolated somehow?
   const structure = getCurrentStructure(viewer);
   if (!structure) return [];
-
+  
   const [{ StructureElement, StructureProperties }] = await Promise.all([import('molstar/lib/mol-model/structure.js')]);
   const loci = viewer.plugin?.managers?.structure?.selection?.getLoci(structure);
   if (!loci || !StructureElement.Loci.is(loci) || StructureElement.Loci.isEmpty(loci)) return [];
@@ -458,6 +465,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
+  const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
@@ -582,10 +590,18 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       const selectionSubscription = viewerRef.current.plugin?.managers?.structure?.selection?.events?.changed?.subscribe(async () => {
         if (!viewerRef.current) return;
+        // this calls a molstar function with a method from here
+        // check if this looks correct
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
-        if (!selectionModeRef.current && indices.length === 0) return;
-        selectionCallbackRef.current?.(indices);
+        const previous = selectedResiduesRef.current ?? [];
+        console.log('molstar selection has', indices.length, 'while previous had', previous.length); // Here I can often see the selection shrinking; looping in step sizes such as 19 or 5 until the selection has disappeared in the blink of an eye.
+        if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
+          console.log('badumz') // doesn't happen in the shrinking loop of course, also not afterwards.
+          return;
+        }
+        selectionCallbackRef.current?.(indices);  // bad! This causes selections to immediately collapse for derived PDBs. If I comment the line, cropping no longer works. 
         if (selectionModeRef.current) {
+          console.log('persist') // This happens relatively often but seems ok.
           scheduleViewerStatePersist(viewerRef.current);
         }
       });
@@ -597,7 +613,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       });
       const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
         if (!viewerRef.current) return;
-        selectionModeRef.current = enabled;
+        selectionModeRef.current = enabled; // doesn't seem to matter much, but totally not sure.
         if (enabled && selectedResiduesRef.current !== null) {
           await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
         }
@@ -607,6 +623,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         scheduleViewerStatePersist(viewerRef.current);
       });
 
+      // can comment out thse three lines without damage
       const initialSelection = await readSelectionResidues(viewerRef.current, props.bundle.residues);
       if (selectionModeRef.current || initialSelection.length > 0) {
         selectionCallbackRef.current?.(initialSelection);
@@ -619,6 +636,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
           window.clearTimeout(persistTimeoutRef.current);
           persistTimeoutRef.current = null;
         }
+        console.log('flush') // this almost never happens, but I have no clue if it should
         void flushViewerState(viewerRef.current);
         selectionSubscription?.unsubscribe?.();
         focusSubscription?.unsubscribe?.();
