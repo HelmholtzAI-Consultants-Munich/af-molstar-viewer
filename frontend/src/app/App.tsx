@@ -403,42 +403,66 @@ export function App(props: AppProps) {
           }}
           onCropToSelection={() =>
             void runMutation(async () => {
+              // console.debug('crop to')
               if (!selectedTarget) return;
-              const canonicalSelection = canonicalizeTargetInterfaceResidues(interfaceDraft);
-              const job = await api.cropTargetToSelection(project.id, selectedTarget.id, canonicalSelection);
+              const job = await api.cropTargetToSelection(project.id, selectedTarget.id, draftByArtifact[selectedTarget.id]);
               setPendingDerivedTargetJobIds((current) => [...current, job.job_id]);
               await refreshProject(project.id);
             })
           }
           onCutOffSelection={() =>
             void runMutation(async () => {
+              // console.info('cut off');
               if (!selectedTarget) return;
-              const canonicalSelection = canonicalizeTargetInterfaceResidues(interfaceDraft);
-              const job = await api.cutSelectionOffTarget(project.id, selectedTarget.id, canonicalSelection);
+              const job = await api.cutSelectionOffTarget(project.id, selectedTarget.id, draftByArtifact[selectedTarget.id]);
               setPendingDerivedTargetJobIds((current) => [...current, job.job_id]);
               await refreshProject(project.id);
             })
           }
-          onInterfaceDraftChange={(value) => {
-            console.debug('onInterfaceDraftChange value', value);
-            if (!selectedTarget) return;
-            setTargetInterfaceDraft(selectedTarget.id, value);
+          onInterfaceDraftFocus={() => {
+            console.log('onInterfaceDraftFocus');
+            setDraftFocused(true);
+          }}
+          onInterfaceDraftBlur={() => {
+            // when the user leaves the input field behind, try to transform this into a selection
+            console.log('onInterfaceDraftBlur');
+            setDraftFocused(false);
+            if (!selectedTarget || !selectedArtifact) return;
+            try {
+              const match = matchSelectionDraftAndResidues(interfaceDraft, selectedArtifact.bundle.residues)
+              // when the match is empty, don't change the selection
+              if (match.canonical === '') return;
+              // save the text and numbers
+              saveDraftByArtifact(selectedTarget.id, match.canonical);
+              saveSelectionByArtifact(selectedTarget.id, match.residueIndices)
+
+              // TODO
+              // decide on the course of action when the match.canonical is empty
+              // is saving the canonical string enough? consider saving the match or removing the indices logic
+              // how to trigger the update of the molstar selection
+              // maybe need emptylabel logic
+            } catch {
+              console.error('onInterfaceDraftBlur errored out')
+              // if not resolvable, don't change the current selection and don't save the new draft
+            }
           }}
           onSaveInterface={() =>
             void runMutation(async () => {
-              console.debug('onSaveInterface', interfaceDraft);
               if (!selectedTarget) return;
-              const canonical = canonicalizeTargetInterfaceResidues(interfaceDraft);
-              console.debug('onSaveInterface canonical residues', canonical);
-              const updated = await api.updateTargetInterface(project.id, selectedTarget.id, canonical);
+              if (!selectedTarget || !selectedArtifact) return;
+              const match = selectionDraftAndArtifactToMatch(interfaceDraft, selectedArtifact);
+              if (!match) return;
+
+              const updated = await api.updateTargetInterface(project.id, selectedTarget.id, match.canonical);
               setProject(updated);
-              setTargetInterfaceDraft(selectedTarget.id, canonical);
+              saveDraftByArtifact(selectedTarget.id, match.canonical);
+              saveSelectionByArtifact(selectedTarget.id, match.residueIndices);
             })
           }
           onGenerateBinders={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;
-              await api.generateBinders(project.id, selectedTarget.id, interfaceDraft);
+              await api.generateBinders(project.id, selectedTarget.id, selectionString); // selectionString probably doesn't work
             })
           }
           onValidateRefolding={() =>
@@ -475,7 +499,7 @@ export function App(props: AppProps) {
               {selectedTarget && (
                 <div className="viewer-context-meta">
                   <span>{selectedTarget.provenance.replace('_', ' ')}</span>
-                  <span>{selectedTarget.target_interface_residues}</span>
+                  <span>{selectedTarget.selection}</span>
                 </div>
               )}
             </div>
@@ -487,17 +511,18 @@ export function App(props: AppProps) {
               artifact={selectedArtifact}
               viewerConfiguration="target"
               viewerStatePayload={selectedTargetViewerState?.payload ?? null}
-              selectedResidues={selectedInterfaceResidues}
+              selectedResidues={selectionResidues}
               focusedResidues={selectedTargetFocusResidues}
               onSelectionResiduesChange={(indices) => {
-                console.debug('artifactworkspace onSelectionResiduesChange', indices);
-                const nextSelection = formatResidueSelection(selectedArtifact.bundle.residues, indices, {
-                  emptyLabel: '',
-                });
-                setTargetInterfaceDraft(selectedArtifact.artifactId, nextSelection);
+                // This block was super important! Might still be able to be simplified?
+                console.log('triggering sel res change')
+                const targetId = selectedArtifact.artifactId;
+                const match = indicesAndResiduesToMatch(indices, selectedArtifact.bundle.residues);
+                saveDraftByArtifact(targetId, match.canonical)
+                saveSelectionByArtifact(targetId, match.residueIndices);
               }}
               onFocusResiduesChange={(indices) =>
-                setViewerFocusSelections((current) => ({
+                setFocusByArtifact((current) => ({
                   ...current,
                   [selectedArtifact.artifactId]: indices,
                 }))
