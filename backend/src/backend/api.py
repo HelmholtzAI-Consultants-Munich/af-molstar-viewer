@@ -88,9 +88,9 @@ def create_app() -> Any:
             raise HTTPException(status_code=404, detail=f"Unknown project {error.args[0]}") from error
 
     @app.post("/api/projects/{project_id}/targets/{target_id}/interface")
-    def update_target_interface(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
+    def update_selection(project_id: str, target_id: str, payload: dict[str, object]) -> dict[str, object]:
         try:
-            target = SERVICE.update_target_interface(project_id, target_id, str(payload.get("target_interface_residues", "")))
+            target = SERVICE.update_selection(project_id, target_id, str(payload.get("selection", "")))
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown entity {error.args[0]}") from error
         except ValueError as error:
@@ -111,7 +111,7 @@ def create_app() -> Any:
             job = SERVICE.create_crop_to_selection_job(
                 project_id,
                 target_id,
-                str(payload.get("target_interface_residues", "")))
+                str(payload.get("selection", "")))
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
         except ValueError as error:
@@ -124,7 +124,7 @@ def create_app() -> Any:
             job = SERVICE.create_cut_selection_off_target_job(
                 project_id,
                 target_id,
-                str(payload.get("target_interface_residues", "")))
+                str(payload.get("selection", "")))
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
         except ValueError as error:
@@ -137,7 +137,7 @@ def create_app() -> Any:
             job = SERVICE.create_generate_binders_job(
                 project_id=project_id,
                 target_id=str(payload.get("target_id", "")),
-                target_interface_residues=str(payload.get("target_interface_residues", "")),
+                selection=str(payload.get("selection", "")),
             )
         except (KeyError, ValueError) as error:
             status_code = 404 if isinstance(error, KeyError) else 400

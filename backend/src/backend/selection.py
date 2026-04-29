@@ -14,7 +14,7 @@ class ResidueRange:
     end: int
 
 
-def parse_target_interface_residues(selection: str) -> list[ResidueRange]:
+def parse_selection(selection: str) -> list[ResidueRange]:
     parts = [part.strip() for part in selection.split(",") if part.strip()]
     if not parts:
         raise ValueError("Selection cannot be empty")
@@ -35,8 +35,8 @@ def parse_target_interface_residues(selection: str) -> list[ResidueRange]:
     return ranges
 
 
-def canonicalize_target_interface_residues(selection: str) -> str:
-    ranges = parse_target_interface_residues(selection)
+def canonicalize_selection(selection: str) -> str:
+    ranges = parse_selection(selection)
     ranges.sort(key=lambda residue_range: (residue_range.chain_id, residue_range.start, residue_range.end))
     return ",".join(
         f"{residue_range.chain_id}{residue_range.start}"

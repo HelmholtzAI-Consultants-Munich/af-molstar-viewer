@@ -43,7 +43,7 @@ class TargetArtifact:
     id: str
     name: str
     provenance: TargetProvenance
-    target_interface_residues: str
+    selection: str
     chain_ids: list[str]
     viewer_asset_id: str
     parent_target_id: str | None = None

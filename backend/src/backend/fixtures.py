@@ -44,7 +44,7 @@ def load_fixture_catalog() -> FixtureCatalog:
                 parent_target_id=entry.get("parent_target_id"),
                 source_structure_id=entry.get("source_structure_id"),
                 source_job_id=entry.get("source_job_id"),
-                target_interface_residues=entry["target_interface_residues"],
+                selection=entry["selection"],
                 chain_ids=list(entry["chain_ids"]),
                 viewer_asset_id=entry["viewer_asset_id"],
             )

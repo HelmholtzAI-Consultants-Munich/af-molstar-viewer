@@ -23,7 +23,7 @@ from .models import (
     ViewerState,
 )
 from . import structure_edit
-from .selection import canonicalize_target_interface_residues, parse_target_interface_residues
+from .selection import canonicalize_selection, parse_selection
 
 
 class ProjectService:
@@ -68,10 +68,10 @@ class ProjectService:
     def list_targets(self, project_id: str) -> list[TargetArtifact]:
         return list(self.get_project(project_id).targets)
 
-    def update_target_interface(self, project_id: str, target_id: str, selection: str) -> TargetArtifact:
+    def update_selection(self, project_id: str, target_id: str, selection: str) -> TargetArtifact:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)
-        target.target_interface_residues = canonicalize_target_interface_residues(selection)
+        target.selection = canonicalize_selection(selection)
         return target
 
     def get_viewer_asset(self, project_id: str, artifact_id: str) -> ViewerAsset:
@@ -123,7 +123,7 @@ class ProjectService:
             id=target_id,
             name=name.strip(),
             provenance="uploaded",
-            target_interface_residues="",
+            selection="",
             chain_ids=list(chain_ids),
             viewer_asset_id=viewer_asset_id,
             source_structure_id=source_structure_id,
@@ -232,11 +232,11 @@ class ProjectService:
     def list_viewer_states(self, project_id: str) -> list[ViewerState]:
         return list(self.get_project(project_id).viewer_states)
 
-    def create_crop_to_selection_job(self, project_id: str, target_id: str, target_interface_residues: str) -> JobRef:
+    def create_crop_to_selection_job(self, project_id: str, target_id: str, selection: str) -> JobRef:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)
-        canonical_selection = canonicalize_target_interface_residues(target_interface_residues)
-        residue_ranges = parse_target_interface_residues(canonical_selection)
+        canonical_selection = canonicalize_selection(selection)
+        residue_ranges = parse_selection(canonical_selection)
         derived_target_id = f"target-{self._id_counters['target']}"
         self._id_counters["target"] += 1
         edit_result = structure_edit.crop_to_selection(
@@ -244,7 +244,7 @@ class ProjectService:
             target_id=target.id,
             target_name=target.name,
             structure_path=self._get_target_structure_path(project_id, target.id),
-            target_interface_residues=canonical_selection,
+            selection=canonical_selection,
             residue_ranges=residue_ranges,
             output_dir=str(self.runtime_dir / project_id / derived_target_id),
         )
@@ -267,12 +267,12 @@ class ProjectService:
         self,
         project_id: str,
         target_id: str,
-        target_interface_residues: str,
+        selection: str,
     ) -> JobRef:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)
-        canonical_selection = canonicalize_target_interface_residues(target_interface_residues)
-        residue_ranges = parse_target_interface_residues(canonical_selection)
+        canonical_selection = canonicalize_selection(selection)
+        residue_ranges = parse_selection(canonical_selection)
         derived_target_id = f"target-{self._id_counters['target']}"
         self._id_counters["target"] += 1
         edit_result = structure_edit.cut_selection_off_target(
@@ -280,7 +280,7 @@ class ProjectService:
             target_id=target.id,
             target_name=target.name,
             structure_path=self._get_target_structure_path(project_id, target.id),
-            target_interface_residues=canonical_selection,
+            selection=canonical_selection,
             residue_ranges=residue_ranges,
             output_dir=str(self.runtime_dir / project_id / derived_target_id),
         )
@@ -299,10 +299,10 @@ class ProjectService:
             produced={"targets": [derived_target], "viewer_assets": [derived_viewer_asset]},
         )
 
-    def create_generate_binders_job(self, project_id: str, target_id: str, target_interface_residues: str) -> JobRef:
+    def create_generate_binders_job(self, project_id: str, target_id: str, selection: str) -> JobRef:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)
-        target.target_interface_residues = canonicalize_target_interface_residues(target_interface_residues)
+        target.selection = canonicalize_selection(selection)
         binder_run_id = f"binder-run-{self._id_counters['binder_run']}"
         self._id_counters["binder_run"] += 1
         binder_run = BinderRun(
@@ -485,7 +485,7 @@ class ProjectService:
             id=derived_target_id,
             name=derived_name,
             provenance="cropped",
-            target_interface_residues="",
+            selection="",
             chain_ids=list(derived_chain_ids) if derived_chain_ids else list(source_target.chain_ids),
             viewer_asset_id=viewer_asset_id,
             parent_target_id=source_target.id,

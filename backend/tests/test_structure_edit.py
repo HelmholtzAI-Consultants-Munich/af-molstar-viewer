@@ -212,7 +212,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(_fixture_pdb_path()),
-                target_interface_residues="A1-2",
+                selection="A1-2",
                 residue_ranges=[ResidueRange(chain_id="A", start=1, end=2)],
                 output_dir=tmp_dir,
             )
@@ -229,7 +229,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(_fixture_pdb_path()),
-                target_interface_residues="A1-2",
+                selection="A1-2",
                 residue_ranges=[ResidueRange(chain_id="A", start=1, end=2)],
                 output_dir=tmp_dir,
             )
@@ -248,7 +248,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="A2-4",
+                selection="A2-4",
                 residue_ranges=[ResidueRange(chain_id="A", start=2, end=4)],
                 output_dir=tmp_dir,
             )
@@ -265,7 +265,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="A2-4",
+                selection="A2-4",
                 residue_ranges=[ResidueRange(chain_id="A", start=2, end=4)],
                 output_dir=tmp_dir,
             )
@@ -282,7 +282,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="B1",
+                selection="B1",
                 residue_ranges=[ResidueRange(chain_id="B", start=1, end=1)],
                 output_dir=tmp_dir,
             )
@@ -298,7 +298,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="B1",
+                selection="B1",
                 residue_ranges=[ResidueRange(chain_id="B", start=1, end=1)],
                 output_dir=tmp_dir,
             )
@@ -313,7 +313,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(_fixture_cif_path()),
-                target_interface_residues="A1-2",
+                selection="A1-2",
                 residue_ranges=[ResidueRange(chain_id="A", start=1, end=2)],
                 output_dir=tmp_dir,
             )
@@ -332,7 +332,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="A6-7",
+                selection="A6-7",
                 residue_ranges=[ResidueRange(chain_id="A", start=6, end=7)],
                 output_dir=tmp_dir,
             )
@@ -359,7 +359,7 @@ class StructureEditTests(unittest.TestCase):
                 target_id="target-1",
                 target_name="toy",
                 structure_path=str(source_path),
-                target_interface_residues="A6",
+                selection="A6",
                 residue_ranges=[ResidueRange(chain_id="A", start=6, end=6)],
                 output_dir=tmp_dir,
             )

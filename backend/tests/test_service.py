@@ -39,7 +39,7 @@ class ProjectServiceTests(unittest.TestCase):
         generate_job = service.create_generate_binders_job(
             project.id,
             target_id=target.id,
-            target_interface_residues="B20-22,A1-10",
+            selection="B20-22,A1-10",
         )
         time.sleep(0.9)
         resolved_generate = service.get_job(generate_job.job_id)
@@ -87,8 +87,8 @@ class ProjectServiceTests(unittest.TestCase):
         cut_call = mocked_cut.call_args.kwargs
         self.assertTrue(str(crop_call["structure_path"]).endswith("toy_ranked_0.pdb"))
         self.assertIn(".backend-data", str(crop_call["structure_path"]))
-        self.assertEqual(crop_call["target_interface_residues"], "A1-10,B20-22")
-        self.assertEqual(cut_call["target_interface_residues"], "A1-10,B20-22")
+        self.assertEqual(crop_call["selection"], "A1-10,B20-22")
+        self.assertEqual(cut_call["selection"], "A1-10,B20-22")
         self.assertEqual(crop_call["target_id"], target.id)
         self.assertEqual(cut_call["target_id"], target.id)
 
