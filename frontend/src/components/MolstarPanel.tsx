@@ -334,13 +334,8 @@ async function readSelectionResidues(
   const selection = new Set<number>();
   StructureElement.Loci.forEachLocation(loci, (location: unknown) => {
     const chainId = StructureProperties.chain.label_asym_id(location as never);
-    const labelSeqId = StructureProperties.residue.label_seq_id(location as never);
     const authSeqId = StructureProperties.residue.auth_seq_id(location as never);
-    const match = residues.find(
-      (residue) =>
-        residue.chainId === chainId &&
-        (residue.labelSeqId === labelSeqId || (authSeqId !== undefined && residue.authSeqId === authSeqId)),
-    );
+    const match = residues.find((residue) => residue.chainId === chainId && residue.authSeqId !== undefined && residue.authSeqId === authSeqId);
     if (match) selection.add(match.index);
   });
   // console.debug('readSelectionResidues selection', selection);
@@ -358,13 +353,8 @@ async function readFocusResidues(
   const focus = new Set<number>();
   StructureElement.Loci.forEachLocation(loci, (location: unknown) => {
     const chainId = StructureProperties.chain.label_asym_id(location as never);
-    const labelSeqId = StructureProperties.residue.label_seq_id(location as never);
     const authSeqId = StructureProperties.residue.auth_seq_id(location as never);
-    const match = residues.find(
-      (residue) =>
-        residue.chainId === chainId &&
-        (residue.labelSeqId === labelSeqId || (authSeqId !== undefined && residue.authSeqId === authSeqId)),
-    );
+    const match = residues.find((residue) => residue.chainId === chainId && residue.authSeqId !== undefined && residue.authSeqId === authSeqId);
     if (match) focus.add(match.index);
   });
   return uniqueSortedNumbers([...focus]);
