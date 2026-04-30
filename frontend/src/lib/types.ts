@@ -118,7 +118,7 @@ export interface ParsedResidue {
   chainId: string;
   entityId?: string;
   labelSeqId: number;
-  authSeqId?: number;
+  authSeqId: number;
   compId: string;
   moleculeType: MoleculeType;
   code: string;
