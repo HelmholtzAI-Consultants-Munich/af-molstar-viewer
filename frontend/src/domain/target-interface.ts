@@ -1,6 +1,5 @@
-import { PolymerResidue } from "../lib/types";
-import { uniqueSortedNumbers } from "../lib/utils";
 import type { LoadedViewerArtifact } from "./project-types";
+import type { PolymerResidue, ChainRange, RangeResidueMatch } from '../lib/types';
 
 const SEGMENT_PATTERN = /^(?<chain>[A-Za-z]+)(?<start>\d+)(?:-(?:(?<endChain>[A-Za-z]+))?(?<end>\d+))?$/;
 
@@ -17,12 +16,6 @@ export function sortResidues(residues: PolymerResidue[]): PolymerResidue[] {
   return unique.sort((a, b) => a.chainId.localeCompare(b.chainId) || a.authSeqId - b.authSeqId );
 }
 
-
-export interface ChainRange {
-  chainId: string;
-  start: number;
-  end: number;
-}
 
 export function sortMergeChainRanges(ranges: ChainRange[]): ChainRange[] {
   // Sort the ranges by chain and start position for easier merging and consistent canonicalization
@@ -67,8 +60,8 @@ export function selectionDraftToChainRanges(input: string): ChainRange[] {
     .map((segment) => segment.trim())
     .filter(Boolean);
   if (segments.length === 0) {
-    // throw new Error('Selection cannot be empty');
-    return [];
+    throw new Error('selectionDraftToChainRanges: Selection cannot be empty');
+    // return [];
   }
 
   // Parse each segment into a chain range, validating the format and semantics of each segment. 
@@ -121,14 +114,6 @@ export function residuesToChainRanges(residues: PolymerResidue[]): ChainRange[] 
   return ranges;
 }
 
-export interface RangeResidueMatch {
-  ranges: ChainRange[];
-  residues: PolymerResidue[];
-  authSeqIds: number[];
-  residueIndices: number[];
-  canonical: string;
-}
-
 
 export function matchChainRangesAndResidues(
   ranges: ChainRange[], 
@@ -153,7 +138,7 @@ export function matchChainRangesAndResidues(
       auth_seq_ids.push(residue.authSeqId!);
     }
   }
-  // should be in the correct order
+  // TODO should already be in the correct order
 
   // now re-build ranges and canonical string based on the filtered residues
   const filtered_ranges = residuesToChainRanges(filtered_residues);
@@ -185,7 +170,7 @@ export function indicesAndResiduesToMatch(
   // Validate indices and ensure they are within bounds
   for (const index of indices) {
     if (index < 0 || index >= residues.length) {
-      throw new Error(`Index out of bounds: ${index}`);
+      throw new Error(`indicesAndResiduesToMatch: Index out of bounds: ${index}`);
     }
   }
   // Filter residues based on the provided indices
@@ -217,40 +202,3 @@ export function selectionDraftAndArtifactToMatch(
   console.debug('selectionDraftAndArtifactToMatch turned input', input, 'to ranges', ranges, 'and output', match.residueIndices);
   return match
 }
-
-
-export function selectionDraftAndArtifactToMatch_bak(
-  input: string,
-  artifact: LoadedViewerArtifact | null, 
-): number[] | null {
-  throw new Error('Don\'t use this');
-  // This resolves a selection draft string like "A1-10,B20-22" to an array of 
-  // author residue indices, based on the residues available in the given artifact. 
-  // This is used for updating the actual selection of residues in Mol* 
-  // based on the user's input in the selection draft.
-  // TODO this completely ignores chainId for the selection? if the resulting indices are for running queries, they have to be zero-based?
-
-  if (!artifact) return null;
-  if (!input.trim()) return [];
-
-  try {
-    const ranges = selectionDraftToChainRanges(input);
-    const indices = artifact.bundle.residues
-      .filter((residue) => ranges.some(
-        (range) => residue.chainId === range.chainId &&
-          residue.authSeqId !== undefined &&
-          residue.authSeqId >= range.start &&
-          residue.authSeqId <= range.end
-      )
-      )
-      .map((residue) => residue.index);
-
-    const residueIndices = [...new Set(indices)].sort((left, right) => left - right);
-    console.debug('selectionDraftAndArtifactToMatch turned input', input, 'to ranges', ranges, 'and output', residueIndices);
-    return residueIndices;
-  } catch {
-    console.debug('selectionDraftAndArtifactToMatch broke at input ', input);
-    return null;
-  }
-}
-

@@ -38,6 +38,20 @@ export interface ChainTrack {
   residueEnd: number;
 }
 
+export interface ChainRange {
+  chainId: string;
+  start: number;
+  end: number;
+}
+
+export interface RangeResidueMatch {
+  ranges: ChainRange[];
+  residues: PolymerResidue[];
+  authSeqIds: number[];
+  residueIndices: number[];
+  canonical: string;
+}
+
 export interface PredictionBundle {
   id: string;
   name: string;

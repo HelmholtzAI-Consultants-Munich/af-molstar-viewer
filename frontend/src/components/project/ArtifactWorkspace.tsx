@@ -9,10 +9,11 @@ interface ArtifactWorkspaceProps {
   artifact: LoadedViewerArtifact;
   viewerConfiguration: ViewerConfiguration;
   viewerStatePayload?: Record<string, unknown> | null;
-  selectedResidues: number[] | null;
-  focusedResidues?: number[] | null;
-  onSelectionResiduesChange?: (indices: number[]) => void;
-  onFocusResiduesChange?: (indices: number[]) => void;
+  selectionIndices: number[] | null;
+  selectionSyncNonce?: number;
+  focusIndices?: number[] | null;
+  onSelectionIndicesChange?: (indices: number[]) => void;
+  onFocusIndicesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
 }
 
@@ -40,8 +41,9 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       viewerStatePayload={props.viewerStatePayload ?? null}
       bundle={props.artifact.bundle}
       structureText={props.artifact.structureText}
-      selectedResidues={props.selectedResidues}
-      focusedResidues={props.focusedResidues ?? null}
+      selectedResidues={props.selectionIndices}
+      selectionSyncNonce={props.selectionSyncNonce ?? 0}
+      focusedResidues={props.focusIndices ?? null}
       hoveredResidues={hoveredResidues}
       pinnedResidues={pinnedResidues}
       pinnedCell={pinnedCell}
@@ -92,8 +94,8 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
           return next;
         });
       }}
-      onMolstarSelectionChange={props.onSelectionResiduesChange}
-      onMolstarFocusChange={props.onFocusResiduesChange}
+      onMolstarSelectionChange={props.onSelectionIndicesChange}
+      onMolstarFocusChange={props.onFocusIndicesChange}
       onViewerStateChange={props.onViewerStateChange}
     />
   );

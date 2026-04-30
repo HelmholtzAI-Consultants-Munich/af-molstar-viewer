@@ -437,6 +437,7 @@ interface MolstarPanelProps {
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
+  selectionSyncNonce?: number;
   focusedResidues: number[] | null;
   hoveredResidues: number[];
   pinnedResidues: number[];
@@ -682,7 +683,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     if (props.selectedResidues === null) return;
 
     void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues);
-  }, [props.bundle.residues]); // kinda sus! props.selectedResidues or selectedResiduesRef.current kill the selection
+  }, [props.bundle.residues, props.selectionSyncNonce]);
 
   useEffect(() => {
     const viewer = viewerRef.current;

@@ -13,6 +13,7 @@ interface WorkspaceProps {
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
+  selectionSyncNonce?: number;
   focusedResidues: number[] | null;
   hoveredResidues: number[];
   pinnedResidues: number[];
@@ -111,6 +112,7 @@ export function Workspace(props: WorkspaceProps) {
         bundle={props.bundle}
         structureText={props.structureText}
         selectedResidues={props.selectedResidues}
+        selectionSyncNonce={props.selectionSyncNonce ?? 0}
         focusedResidues={props.focusedResidues}
         hoveredResidues={props.hoveredResidues}
         pinnedResidues={props.pinnedResidues}

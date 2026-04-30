@@ -1,4 +1,5 @@
-import { ChainRange, canonicalizeChainRanges } from '../../domain/target-interface';
+import { canonicalizeChainRanges } from '../../domain/target-interface';
+import { ChainRange } from '../types';
 import type { PolymerResidue } from '../types';
 import { uniqueSortedNumbers } from '../utils';
 

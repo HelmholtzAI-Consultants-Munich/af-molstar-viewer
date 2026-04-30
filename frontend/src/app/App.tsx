@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { EXAMPLES } from './examples';
 import type { LoadedViewerArtifact, ViewerConfiguration, ViewerStateSnapshot, WorkspaceProject } from '../domain/project-types';
 import { indicesAndResiduesToMatch, matchSelectionDraftAndResidues, selectionDraftAndArtifactToMatch } from '../domain/target-interface';
+import { RangeResidueMatch } from '../lib/types';
 import { ArtifactWorkspace } from '../components/project/ArtifactWorkspace';
 import { ProjectSidebar } from '../components/project/ProjectSidebar';
 import { loadViewerArtifact } from '../lib/project/load-viewer-artifact';
 import type { ProjectApi } from '../lib/project/project-api';
 import { createProjectApi } from '../lib/project/project-api';
 import type { WorkerInputFile } from '../lib/types';
-import { formatResidueSelection } from '../lib/utils';
 
 interface AppProps {
   api?: ProjectApi;
@@ -70,7 +70,9 @@ export function App(props: AppProps) {
   const [compareValidationIds, setCompareValidationIds] = useState<string[]>([]);
   const [viewerArtifacts, setViewerArtifacts] = useState<Record<string, LoadedViewerArtifact>>({});
   const [draftByArtifact, setDraftByArtifact] = useState<Record<string, string>>({});
-  const [selectionByArtifact, setSelectionByArtifact] = useState<Record<string, number[] | null>>({});
+  // const [selectionByArtifact, setSelectionByArtifact] = useState<Record<string, number[] | null>>({});
+  const [matchByArtifact, setMatchByArtifact] = useState<Record<string, RangeResidueMatch | null>>({});
+  const [selectionSyncNonce, setSelectionSyncNonce] = useState(0);
   const [isDraftFocused, setDraftFocused] = useState(false);
   const [focusByArtifact, setFocusByArtifact] = useState<Record<string, number[]>>({});
   const [pendingDerivedTargetJobIds, setPendingDerivedTargetJobIds] = useState<string[]>([]);
@@ -83,31 +85,40 @@ export function App(props: AppProps) {
     .map((validationId) => project?.binder_validations.find((validation) => validation.id === validationId) ?? null)
     .filter((validation): validation is NonNullable<typeof validation> => validation !== null);
   const selectedArtifact = selectedTargetId ? viewerArtifacts[selectedTargetId] : null;
-  const interfaceDraft = selectedTarget ? (draftByArtifact[selectedTarget.id] ?? selectedTarget.selection) : '';
-  const selectionResidues = selectedTarget && selectedArtifact ? (selectionByArtifact[selectedTarget.id] ?? matchSelectionDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).residueIndices ?? []) : [];
-  // const selectionResidues = selectedTarget && selectedArtifact ? matchDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).residueIndices : [];
-  const selectionString = selectedTarget && selectedArtifact ? matchSelectionDraftAndResidues(selectedTarget.selection, selectedArtifact.bundle.residues).canonical : '';
-  const selectedTargetFocusResidues = selectedTarget ? (focusByArtifact[selectedTarget.id] ?? []) : [];
   const selectedTargetViewerState = getLatestViewerState(project, selectedTarget?.id ?? null, 'target');
-  const hasActiveSelection = Boolean(selectionResidues && selectionResidues.length > 0);
-  const selectedTargetMolstarFocus =
-    selectedTarget && selectedArtifact
-      ? formatResidueSelection(selectedArtifact.bundle.residues, selectedTargetFocusResidues, {
-          emptyLabel: 'nothing focussed',
-        })
-      : 'nothing focussed';
-  const selectedTargetMolstarSelection = selectedTarget ? selectionString || 'nothing selected' : 'nothing selected';
+  const focusIndices = selectedTarget ? (focusByArtifact[selectedTarget.id] ?? []) : [];
+  const focusDisplayString = (() => {
+    if (!selectedTarget || !selectedArtifact) return '';
+    const canonical = indicesAndResiduesToMatch(focusIndices, selectedArtifact.bundle.residues).canonical;
+    return canonical ? `Focus: ${canonical}` : '';
+  })();
+
+  // how can I keep this one updated?
+  const selectionDraft = selectedTarget ? draftByArtifact[selectedTarget.id] : '';
+  
+  const match = selectedTarget ? matchByArtifact[selectedTarget.id] : null;
+  const selectionIndices = match ? match.residueIndices : [];
+  const selectionDisplayString = (() => {
+    if (!selectedTarget || !selectedArtifact) return '';
+    const canonical = indicesAndResiduesToMatch(selectionIndices, selectedArtifact.bundle.residues).canonical;
+    return canonical ? `Selection: ${canonical}` : '';
+  })();
+  const hasActiveSelection = match ? Boolean(match.residues.length > 0) : false;
+  
   const saveDraftByArtifact = (targetId: string, value: string) => {
     setDraftByArtifact((current) => ({
       ...current,
       [targetId]: value,
     }));
   };
-  const saveSelectionByArtifact = (targetId: string, value: number[] | null) => {
-    setSelectionByArtifact((current) => ({
+  const saveMatchByArtifact = (targetId: string, value: RangeResidueMatch| null) => {
+    setMatchByArtifact((current) => ({
       ...current,
       [targetId]: value,
     }));
+  };
+  const triggerSelectionSync = () => {
+    setSelectionSyncNonce((current) => current + 1);
   };
   const persistViewerState = async (
     artifactId: string,
@@ -138,7 +149,7 @@ export function App(props: AppProps) {
         setDraftByArtifact(
           Object.fromEntries(nextProject.targets.map((target) => [target.id, target.selection])),
         );
-        setSelectionByArtifact(
+        setMatchByArtifact(
           Object.fromEntries(nextProject.targets.map((target) => [target.id, null])),
         );
       } catch (appError) {
@@ -166,7 +177,7 @@ export function App(props: AppProps) {
         Object.entries(next).every(([targetId, value]) => current[targetId] === value);
       return same ? current : next;
     });
-    setSelectionByArtifact((current) => {
+    setMatchByArtifact((current) => {
       const next = Object.fromEntries(
         project.targets.map((target) => [target.id, current[target.id] ?? null]),
       );
@@ -283,7 +294,7 @@ export function App(props: AppProps) {
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
       saveDraftByArtifact(result.target.id, result.target.selection);
-      saveSelectionByArtifact(result.target.id, null);
+      saveMatchByArtifact(result.target.id, null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload target');
     } finally {
@@ -312,7 +323,7 @@ export function App(props: AppProps) {
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
       saveDraftByArtifact(result.target.id, result.target.selection);
-      saveSelectionByArtifact(result.target.id, null);
+      saveMatchByArtifact(result.target.id, null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load example');
     } finally {
@@ -338,7 +349,7 @@ export function App(props: AppProps) {
         current.filter((validationId) => !removedValidationIds.has(validationId) && updated.binder_validations.some((entry) => entry.id === validationId)),
       );
       setDraftByArtifact((current) => omitKey(current, targetId));
-      setSelectionByArtifact((current) => omitKey(current, targetId));
+      setMatchByArtifact((current) => omitKey(current, targetId));
       setViewerArtifacts((current) => omitKey(current, targetId));
       setFocusByArtifact((current) => omitKey(current, targetId));
     } catch (removeError) {
@@ -377,10 +388,10 @@ export function App(props: AppProps) {
         <ProjectSidebar
           project={project}
           selectedTargetId={selectedTargetId}
-          selectedTargetMolstarFocus={selectedTargetMolstarFocus}
-          selectedTargetMolstarSelection={selectedTargetMolstarSelection}
+          focusDisplayString={focusDisplayString}
+          selectionDisplayString={selectionDisplayString}
           hasActiveSelection={hasActiveSelection}
-          interfaceDraft={interfaceDraft}
+          selectionDraft={selectionDraft}
           compareValidationIds={compareValidationIds}
           busy={busy}
           onUploadTargetFiles={uploadTargetFiles}
@@ -407,50 +418,55 @@ export function App(props: AppProps) {
               await refreshProject(project.id);
             })
           }
-          onInterfaceDraftFocus={() => {
-            console.log('onInterfaceDraftFocus');
+          onDraftFocus={() => {
+            console.log('onDraftFocus');
             setDraftFocused(true);
           }}
-          onInterfaceDraftBlur={() => {
+          onDraftBlur={(value) => {
             // when the user leaves the input field behind, try to transform this into a selection
-            console.log('onInterfaceDraftBlur');
+            console.log('onDraftBlur 0');
             setDraftFocused(false);
             if (!selectedTarget || !selectedArtifact) return;
+            console.log('onDraftBlur 1');
             try {
-              const match = matchSelectionDraftAndResidues(interfaceDraft, selectedArtifact.bundle.residues)
+              saveDraftByArtifact(selectedTarget.id, value);
+              console.log('onDraftBlur 2', value, selectionDraft, selectedArtifact.bundle.residues.length);
+              // instead of value, I'd like to use selectionDraft below? is it too early?
+              const match = matchSelectionDraftAndResidues(value, selectedArtifact.bundle.residues)
               // when the match is empty, don't change the selection
               if (match.canonical === '') return;
               // save the text and numbers
+              console.log('onDraftBlur have non-zero match');
               saveDraftByArtifact(selectedTarget.id, match.canonical);
-              saveSelectionByArtifact(selectedTarget.id, match.residueIndices)
+              saveMatchByArtifact(selectedTarget.id, match);
+              triggerSelectionSync();
 
-              // TODO
-              // decide on the course of action when the match.canonical is empty
-              // is saving the canonical string enough? consider saving the match or removing the indices logic
-              // how to trigger the update of the molstar selection
-              // maybe need emptylabel logic
-            } catch {
-              console.error('onInterfaceDraftBlur errored out')
+            } catch (draftError) {
+              console.error('onInterfaceDraftBlur errored out', draftError);
+              setError(draftError instanceof Error ? draftError.message : 'Unable to resolve the selection draft.');
               // if not resolvable, don't change the current selection and don't save the new draft
+  
             }
           }}
           onSaveInterface={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;
               if (!selectedTarget || !selectedArtifact) return;
-              const match = selectionDraftAndArtifactToMatch(interfaceDraft, selectedArtifact);
+              const match = selectionDraftAndArtifactToMatch(selectionDraft, selectedArtifact);
               if (!match) return;
 
               const updated = await api.updateTargetInterface(project.id, selectedTarget.id, match.canonical);
               setProject(updated);
               saveDraftByArtifact(selectedTarget.id, match.canonical);
-              saveSelectionByArtifact(selectedTarget.id, match.residueIndices);
+              saveMatchByArtifact(selectedTarget.id, match);
+              triggerSelectionSync();
             })
           }
           onGenerateBinders={() =>
             void runMutation(async () => {
               if (!selectedTarget) return;
-              await api.generateBinders(project.id, selectedTarget.id, selectionString); // selectionString probably doesn't work
+              const payload = '';
+              await api.generateBinders(project.id, selectedTarget.id, payload);
             })
           }
           onValidateRefolding={() =>
@@ -499,17 +515,18 @@ export function App(props: AppProps) {
               artifact={selectedArtifact}
               viewerConfiguration="target"
               viewerStatePayload={selectedTargetViewerState?.payload ?? null}
-              selectedResidues={selectionResidues}
-              focusedResidues={selectedTargetFocusResidues}
-              onSelectionResiduesChange={(indices) => {
+              selectionIndices={selectionIndices}
+              selectionSyncNonce={selectionSyncNonce}
+              focusIndices={focusIndices}
+              onSelectionIndicesChange={(indices) => {
                 // This block was super important! Might still be able to be simplified?
-                console.log('triggering sel res change')
+                console.log('onSelectionIndicesChange')
                 const targetId = selectedArtifact.artifactId;
                 const match = indicesAndResiduesToMatch(indices, selectedArtifact.bundle.residues);
                 saveDraftByArtifact(targetId, match.canonical)
-                saveSelectionByArtifact(targetId, match.residueIndices);
+                saveMatchByArtifact(targetId, match);
               }}
-              onFocusResiduesChange={(indices) =>
+              onFocusIndicesChange={(indices) =>
                 setFocusByArtifact((current) => ({
                   ...current,
                   [selectedArtifact.artifactId]: indices,
@@ -549,8 +566,8 @@ export function App(props: AppProps) {
                           artifact={artifact}
                           viewerConfiguration="validate_refolding"
                           viewerStatePayload={getLatestViewerState(project, validation.id, 'validate_refolding')?.payload ?? null}
-                          selectedResidues={null}
-                          focusedResidues={null}
+                          selectionIndices={null}
+                          focusIndices={null}
                           onViewerStateChange={(payload) => {
                             void persistViewerState(validation.id, 'validate_refolding', 'Current validate refolding view', payload);
                           }}

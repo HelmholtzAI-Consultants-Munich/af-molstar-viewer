@@ -1,5 +1,5 @@
 import type { ChangeEvent, DragEvent } from 'react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Crop, Scissors, Trash2 } from 'lucide-react';
 import { EXAMPLES } from '../../app/examples';
 import type { WorkspaceProject } from '../../domain/project-types';
@@ -7,10 +7,10 @@ import type { WorkspaceProject } from '../../domain/project-types';
 interface ProjectSidebarProps {
   project: WorkspaceProject;
   selectedTargetId: string | null;
-  selectedTargetMolstarFocus: string;
-  selectedTargetMolstarSelection: string;
+  focusDisplayString: string;
+  selectionDisplayString: string;
   hasActiveSelection: boolean;
-  interfaceDraft: string;
+  selectionDraft: string;
   compareValidationIds: string[];
   busy: boolean;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
@@ -19,9 +19,9 @@ interface ProjectSidebarProps {
   onRemoveTarget: (targetId: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
-  onInterfaceDraftFocus?: () => void;
-  onInterfaceDraftBlur?: () => void;
-  onSaveInterface: () => void;
+  onDraftFocus?: () => void;
+  onDraftBlur?: (value: string) => void;
+  onSaveInterface: (value: string) => void;
   onGenerateBinders: () => void;
   onValidateRefolding: () => void;
   onSaveViewerState: () => void;
@@ -31,7 +31,13 @@ interface ProjectSidebarProps {
 export function ProjectSidebar(props: ProjectSidebarProps) {
   const targetInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingTargetFiles, setIsDraggingTargetFiles] = useState(false);
+  const [selectionDraft, setSelectionDraft] = useState(props.selectionDraft);
   const selectedTarget = props.project.targets.find((target) => target.id === props.selectedTargetId) ?? null;
+
+  useEffect(() => {
+    // console.debug('setSelectionDraft', props.selectionDraft);
+    setSelectionDraft(props.selectionDraft);
+  }, [props.selectionDraft]);
 
   const handleTargetFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? [...event.target.files] : [];
@@ -131,10 +137,10 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
                         <span>{target.provenance.replace('_', ' ')}, chains: {target.chain_ids.join(', ')}</span>
                       </div>
                       <div className="artifact-card-detail-row">
-                        <span className="artifact-card-selection">Focus: {props.selectedTargetMolstarFocus}</span>
+                        <span className="artifact-card-focus">{props.focusDisplayString}</span>
                       </div>
                       <div className="artifact-card-detail-row">
-                        <span className="artifact-card-selection">Selection: {props.selectedTargetMolstarSelection}</span>
+                        <span className="artifact-card-selection">{props.selectionDisplayString}</span>
                       </div>
                     </div>
                   )}
@@ -215,16 +221,17 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         <section className="panel project-section-panel">
           <div className="project-section-header">
             <h2>Target Interface</h2>
-            <button type="button" className="secondary-button" onClick={props.onSaveInterface} disabled={props.busy}>
+            <button type="button" className="secondary-button" onClick={() => props.onSaveInterface(props.selectionDraft)} disabled={props.busy}>
               Save
             </button>
           </div>
           <label className="stacked-field">
             <span>selection</span>
             <input
-              value={props.interfaceDraft}
-              onFocus={() => props.onInterfaceDraftFocus?.()}
-              onBlur={() => props.onInterfaceDraftBlur?.()}
+              value={selectionDraft}
+              onChange={(event) => setSelectionDraft(event.target.value)}
+              onFocus={() => props.onDraftFocus?.()}
+              onBlur={() => props.onDraftBlur?.(selectionDraft)}
               placeholder="A1-10,B20-22"
             />
           </label>
