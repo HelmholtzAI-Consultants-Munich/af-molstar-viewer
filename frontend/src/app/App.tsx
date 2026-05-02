@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EXAMPLES } from './examples';
 import type { LoadedViewerArtifact, ViewerConfiguration, ViewerStateSnapshot, WorkspaceProject } from '../domain/project-types';
-import { indicesAndResiduesToMatch, matchSelectionDraftAndResidues, selectionDraftAndArtifactToMatch } from '../domain/target-interface';
+import { canonicalizeChainRanges, indicesAndResiduesToMatch, matchChainRangesAndResidues, selectionDraftAndArtifactToMatch, selectionDraftToChainRanges } from '../domain/target-interface';
 import { RangeResidueMatch } from '../lib/types';
 import { ArtifactWorkspace } from '../components/project/ArtifactWorkspace';
 import { ProjectSidebar } from '../components/project/ProjectSidebar';
@@ -419,33 +419,36 @@ export function App(props: AppProps) {
             })
           }
           onDraftFocus={() => {
-            console.log('onDraftFocus');
+            // console.log('onDraftFocus');
             setDraftFocused(true);
           }}
           onDraftBlur={(value) => {
             // when the user leaves the input field behind, try to transform this into a selection
-            console.log('onDraftBlur 0');
+            // console.log('onDraftBlur');
             setDraftFocused(false);
             if (!selectedTarget || !selectedArtifact) return;
-            console.log('onDraftBlur 1');
             try {
               saveDraftByArtifact(selectedTarget.id, value);
-              console.log('onDraftBlur 2', value, selectionDraft, selectedArtifact.bundle.residues.length);
-              // instead of value, I'd like to use selectionDraft below? is it too early?
-              const match = matchSelectionDraftAndResidues(value, selectedArtifact.bundle.residues)
+              // TODO instead of value, I'd like to use selectionDraft below? is it too early?
+              const ranges = selectionDraftToChainRanges(value);
+              const rangeDisplayString = canonicalizeChainRanges(ranges);
+              const match = matchChainRangesAndResidues(ranges, selectedArtifact.bundle.residues);
               // when the match is empty, don't change the selection
               if (match.canonical === '') return;
               // save the text and numbers
-              console.log('onDraftBlur have non-zero match');
               saveDraftByArtifact(selectedTarget.id, match.canonical);
               saveMatchByArtifact(selectedTarget.id, match);
               triggerSelectionSync();
+              if (match.canonical === rangeDisplayString) {
+                setError(null);
+              } else {
+                throw new Error(`Not all listed residues found in structure: ${rangeDisplayString} → ${match.canonical}`);
+              }
 
             } catch (draftError) {
-              console.error('onInterfaceDraftBlur errored out', draftError);
+              console.warn('onInterfaceDraftBlur:', draftError);
               setError(draftError instanceof Error ? draftError.message : 'Unable to resolve the selection draft.');
               // if not resolvable, don't change the current selection and don't save the new draft
-  
             }
           }}
           onSaveInterface={() =>
