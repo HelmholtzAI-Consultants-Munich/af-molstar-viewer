@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { PAE_PAIR_SELECTION_COLOR, PAE_SELECTION_COLORS } from '../lib/constants';
-import { canonicalizeQueries, findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
+import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
 import { uniqueSortedNumbers } from '../lib/utils';
 
@@ -73,6 +73,8 @@ const MOLSTAR_ILLUSTRATIVE_STYLE = {
     },
   },
 };
+
+let persistedSequenceHostHeight: string | null = null;
 
 function residueSpan(start: number, end: number): number[] {
   return Array.from({ length: end - start + 1 }, (_, offset) => start + offset);
@@ -522,6 +524,9 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       sequenceHostRef.current.innerHTML = '';
       viewportHostRef.current.innerHTML = '';
+      if (persistedSequenceHostHeight) {
+        sequenceHostRef.current.style.height = persistedSequenceHostHeight;
+      }
       viewerRef.current = new PDBeMolstarPlugin();
       objectUrlRef.current = URL.createObjectURL(new Blob([props.structureText], { type: 'text/plain' }));
 
@@ -562,6 +567,14 @@ export function MolstarPanel(props: MolstarPanelProps) {
           ...MOLSTAR_RENDER_OPTIONS,
         },
       );
+      const sequenceHeightObserver =
+        typeof ResizeObserver === 'undefined'
+          ? null
+          : new ResizeObserver(() => {
+              if (!sequenceHostRef.current) return;
+              persistedSequenceHostHeight = `${sequenceHostRef.current.getBoundingClientRect().height}px`;
+            });
+      sequenceHeightObserver?.observe(sequenceHostRef.current);
 
       await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       await applyIllustrativeQuickStyle(viewerRef.current);
@@ -638,6 +651,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
           persistTimeoutRef.current = null;
         }
         console.log('flush') // this almost never happens, but I have no clue if it should
+        sequenceHeightObserver?.disconnect();
+        if (sequenceHostRef.current) {
+          persistedSequenceHostHeight = `${sequenceHostRef.current.getBoundingClientRect().height}px`;
+        }
         void flushViewerState(viewerRef.current);
         selectionSubscription?.unsubscribe?.();
         focusSubscription?.unsubscribe?.();
