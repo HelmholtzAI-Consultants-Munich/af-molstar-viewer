@@ -109,7 +109,7 @@ async function applyDefaultSequenceTheme(
       });
       return;
     } catch {
-      console.log('PLDDT failed');
+      console.warn('PLDDT failed');
     }
   }
 
@@ -393,7 +393,6 @@ async function syncNativeSelection(
   }
 
   viewer.plugin.managers.structure.selection.fromLoci('set', nextLoci, true);
-  // console.log('syncNativeSelection', indices.length)
 }
 
 async function syncNativeFocus(
@@ -439,6 +438,8 @@ interface MolstarPanelProps {
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
+  draftFocused: boolean;
+  selectionModeEnabled: boolean;
   selectionSyncNonce?: number;
   focusedResidues: number[] | null;
   hoveredResidues: number[];
@@ -448,6 +449,7 @@ interface MolstarPanelProps {
   onHoverResidue: (index: number | null) => void;
   onClickResidue: (index: number | null) => void;
   onSelectionResiduesChange?: (indices: number[]) => void;
+  onSelectionModeChange?: (enabled: boolean) => void;
   onFocusResiduesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
   colorByPLDDTToggleStatus: boolean;
@@ -463,11 +465,14 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const hoverCallbackRef = useRef(props.onHoverResidue);
   const clickCallbackRef = useRef(props.onClickResidue);
   const selectionCallbackRef = useRef(props.onSelectionResiduesChange);
+  const selectionModeCallbackRef = useRef(props.onSelectionModeChange);
   const focusCallbackRef = useRef(props.onFocusResiduesChange);
   const viewerStateCallbackRef = useRef(props.onViewerStateChange);
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
+  const selectionModeCallbacksReadyRef = useRef(false);
+  const suppressSelectionModeCallbacksUntilRef = useRef(0);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -477,12 +482,14 @@ export function MolstarPanel(props: MolstarPanelProps) {
     hoverCallbackRef.current = props.onHoverResidue;
     clickCallbackRef.current = props.onClickResidue;
     selectionCallbackRef.current = props.onSelectionResiduesChange;
+    selectionModeCallbackRef.current = props.onSelectionModeChange;
     focusCallbackRef.current = props.onFocusResiduesChange;
     viewerStateCallbackRef.current = props.onViewerStateChange;
   }, [
     props.onClickResidue,
     props.onHoverResidue,
     props.onSelectionResiduesChange,
+    props.onSelectionModeChange,
     props.onFocusResiduesChange,
     props.onViewerStateChange,
   ]);
@@ -495,8 +502,18 @@ export function MolstarPanel(props: MolstarPanelProps) {
     focusedResiduesRef.current = props.focusedResidues;
   }, [props.focusedResidues]);
 
+  const applySelectionModeToViewer = (
+    viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+    enabled: boolean,
+  ) => {
+    suppressSelectionModeCallbacksUntilRef.current = performance.now() + 500;
+    selectionModeRef.current = enabled;
+    viewer.selectionMode = enabled;
+  };
+
   useEffect(() => {
     let cancelled = false;
+    let disposed = false;
 
     const flushViewerState = async (viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin | null) => {
       if (!viewer || restoringViewerStateRef.current) return;
@@ -521,6 +538,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       if (!sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
       const { PDBeMolstarPlugin } = await import('pdbe-molstar/lib/viewer.js');
       if (cancelled || !sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
+      selectionModeCallbacksReadyRef.current = false;
 
       sequenceHostRef.current.innerHTML = '';
       viewportHostRef.current.innerHTML = '';
@@ -580,7 +598,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
       await applyIllustrativeQuickStyle(viewerRef.current);
       await clearStructureFocus(viewerRef.current);
       await applyDefaultColorsDeferred(viewerRef.current, props);
-      selectionModeRef.current = Boolean(viewerRef.current.plugin?.selectionMode);
 
       const snapshot = readSnapshotFromPayload(props.viewerStatePayload);
       if (snapshot && viewerRef.current.plugin?.state?.setSnapshot) {
@@ -595,41 +612,61 @@ export function MolstarPanel(props: MolstarPanelProps) {
         await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       }
       await applyDefaultColors(viewerRef.current, props);
-      if (selectedResiduesRef.current !== null) {
+      applySelectionModeToViewer(viewerRef.current, props.selectionModeEnabled);
+      if (!selectionModeRef.current) {
+        await viewerRef.current.visual.clearSelection();
+      }
+      if (selectionModeRef.current && selectedResiduesRef.current !== null) {
         await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
       }
       if (focusedResiduesRef.current !== null) {
         await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current);
       }
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      selectionModeCallbacksReadyRef.current = true;
 
       const selectionSubscription = viewerRef.current.plugin?.managers?.structure?.selection?.events?.changed?.subscribe(async () => {
+        if (disposed) return;
         if (!viewerRef.current) return;
-        // this calls a molstar function with a method from here
-        // check if this looks correct
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
         const previous = selectedResiduesRef.current ?? [];
-        console.log('molstar selection has', indices.length, 'while previous had', previous.length); // Here I can often see the selection shrinking; looping in step sizes such as 19 or 5 until the selection has disappeared in the blink of an eye.
+        // console.log('molstar selection has', indices.length, 'while previous had', previous.length); // Here I can often see the selection shrinking; looping in step sizes such as 19 or 5 until the selection has disappeared in the blink of an eye.
         if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
-          console.log('badumz') // doesn't happen in the shrinking loop of course, also not afterwards.
+          // it's the same selection as before
           return;
         }
+        if (!selectionModeRef.current && indices.length === 0 && previous.length > 0) {
+          // selection mode is off, the current selection is empty, previous one was non-empty. when is that case relevant again?
+          return;
+        }
+
         selectionCallbackRef.current?.(indices);  // bad! This causes selections to immediately collapse for derived PDBs. If I comment the line, cropping no longer works. 
         if (selectionModeRef.current) {
-          console.log('persist') // This happens relatively often but seems ok.
           scheduleViewerStatePersist(viewerRef.current);
         }
       });
       const focusSubscription = viewerRef.current.plugin?.managers?.structure?.focus?.behaviors?.current?.subscribe(async () => {
+        if (disposed) return;
         if (!viewerRef.current) return;
         const indices = await readFocusResidues(viewerRef.current, props.bundle.residues);
         focusCallbackRef.current?.(indices);
         scheduleViewerStatePersist(viewerRef.current);
       });
       const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
+        if (disposed) return;
         if (!viewerRef.current) return;
-        selectionModeRef.current = enabled; // doesn't seem to matter much, but totally not sure.
+        const now = performance.now();
+        if (now < suppressSelectionModeCallbacksUntilRef.current) {
+          return;
+        }
+        selectionModeRef.current = enabled;
+        if (selectionModeCallbacksReadyRef.current) {
+          selectionModeCallbackRef.current?.(enabled);
+        }
         if (enabled && selectedResiduesRef.current !== null) {
           await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+        } else if (!enabled) {
+          await viewerRef.current.visual.clearSelection();
         }
         scheduleViewerStatePersist(viewerRef.current);
       });
@@ -637,20 +674,21 @@ export function MolstarPanel(props: MolstarPanelProps) {
         scheduleViewerStatePersist(viewerRef.current);
       });
 
-      // can comment out thse three lines without damage
+      // can comment out these three lines without damage
       const initialSelection = await readSelectionResidues(viewerRef.current, props.bundle.residues);
-      if (selectionModeRef.current || initialSelection.length > 0) {
+      if (selectionModeRef.current && initialSelection.length > 0) {
         selectionCallbackRef.current?.(initialSelection);
       }
       const initialFocus = await readFocusResidues(viewerRef.current, props.bundle.residues);
       focusCallbackRef.current?.(initialFocus);
 
       return () => {
+        disposed = true;
+        selectionModeCallbacksReadyRef.current = false;
         if (persistTimeoutRef.current !== null) {
           window.clearTimeout(persistTimeoutRef.current);
           persistTimeoutRef.current = null;
         }
-        console.log('flush') // this almost never happens, but I have no clue if it should
         sequenceHeightObserver?.disconnect();
         if (sequenceHostRef.current) {
           persistedSequenceHostHeight = `${sequenceHostRef.current.getBoundingClientRect().height}px`;
@@ -685,7 +723,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
     if (!viewerRef.current) return;
     // console.log('hoveredResidues / residues -- linked to pAE?', hoveredResidues, ' is position-in-seq');
     const queries = residueIndicesToQueries(props.bundle.residues, hoveredResidues);
-    // console.log('are you querying?', queries);
     if (queries.length === 0) {
       void viewerRef.current.visual.clearHighlight();
       return;
@@ -697,10 +734,18 @@ export function MolstarPanel(props: MolstarPanelProps) {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
-    if (props.selectedResidues === null) return;
+    if (viewer.selectionMode !== props.selectionModeEnabled) {
+      applySelectionModeToViewer(viewer, props.selectionModeEnabled);
+    }
+
+    if (props.selectedResidues === null) return; // || !selectionModeRef.current would return too often
+    if (!props.selectionModeEnabled) {
+      void viewer.visual.clearSelection();
+      return;
+    }
 
     void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues);
-  }, [props.bundle.residues, props.selectionSyncNonce]);
+  }, [props.bundle.residues, props.selectedResidues, props.selectionSyncNonce, props.draftFocused, props.selectionModeEnabled]);
 
   useEffect(() => {
     const viewer = viewerRef.current;

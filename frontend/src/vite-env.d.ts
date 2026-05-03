@@ -62,5 +62,6 @@ declare module 'pdbe-molstar/lib/viewer.js' {
         selectColor?: boolean;
       }): Promise<void>;
     };
+    selectionMode?:boolean;
   }
 }

@@ -10,9 +10,12 @@ interface ArtifactWorkspaceProps {
   viewerConfiguration: ViewerConfiguration;
   viewerStatePayload?: Record<string, unknown> | null;
   selectionIndices: number[] | null;
+  draftFocused: boolean;
+  selectionEnabled: boolean;
   selectionSyncNonce?: number;
   focusIndices?: number[] | null;
   onSelectionIndicesChange?: (indices: number[]) => void;
+  onSelectionModeChange?: (enabled: boolean) => void;
   onFocusIndicesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
 }
@@ -36,12 +39,14 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
   );
 
   return (
-      <Workspace
+    <Workspace
       viewerConfiguration={props.viewerConfiguration}
       viewerStatePayload={props.viewerStatePayload ?? null}
       bundle={props.artifact.bundle}
       structureText={props.artifact.structureText}
       selectedResidues={props.selectionIndices}
+      draftFocused={props.draftFocused}
+      selectionModeEnabled={props.selectionEnabled}
       selectionSyncNonce={props.selectionSyncNonce ?? 0}
       focusedResidues={props.focusIndices ?? null}
       hoveredResidues={hoveredResidues}
@@ -95,6 +100,7 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
         });
       }}
       onMolstarSelectionChange={props.onSelectionIndicesChange}
+      onMolstarSelectionModeChange={props.onSelectionModeChange}
       onMolstarFocusChange={props.onFocusIndicesChange}
       onViewerStateChange={props.onViewerStateChange}
     />

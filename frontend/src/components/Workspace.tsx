@@ -13,6 +13,8 @@ interface WorkspaceProps {
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
+  draftFocused: boolean;
+  selectionModeEnabled: boolean;
   selectionSyncNonce?: number;
   focusedResidues: number[] | null;
   hoveredResidues: number[];
@@ -34,6 +36,7 @@ interface WorkspaceProps {
   onTogglePaePairSelection: () => void;
   onClearPairSelection: () => void;
   onMolstarSelectionChange?: (indices: number[]) => void;
+  onMolstarSelectionModeChange?: (enabled: boolean) => void;
   onMolstarFocusChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
   onToggleColorByPLDDT: () => void;
@@ -112,6 +115,8 @@ export function Workspace(props: WorkspaceProps) {
         bundle={props.bundle}
         structureText={props.structureText}
         selectedResidues={props.selectedResidues}
+        draftFocused={props.draftFocused}
+        selectionModeEnabled={props.selectionModeEnabled}
         selectionSyncNonce={props.selectionSyncNonce ?? 0}
         focusedResidues={props.focusedResidues}
         hoveredResidues={props.hoveredResidues}
@@ -126,12 +131,11 @@ export function Workspace(props: WorkspaceProps) {
           props.onPinCell(null);
         }}
         onSelectionResiduesChange={(indices) => {
-          // kinda sus! This one is also a bit suspicous
-          console.log('molstarpanel onselectionchange', indices);
           clearPendingHoverResidues();
           props.onPinCell(null);
           props.onMolstarSelectionChange?.(indices);
         }}
+        onSelectionModeChange={props.onMolstarSelectionModeChange}
         onFocusResiduesChange={props.onMolstarFocusChange}
         onViewerStateChange={props.onViewerStateChange}
       />
