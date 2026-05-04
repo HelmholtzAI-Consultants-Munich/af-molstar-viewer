@@ -87,27 +87,23 @@ export function findResidueIndexFromMolstarEvent(
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   };
-  // const matchByLabel = (sequenceId: number | null) =>
-  //   sequenceId === null ? undefined : residuesInChain.find((entry) => entry.labelSeqId === sequenceId);
+  const matchByLabel = (sequenceId: number | null) =>
+    sequenceId === null ? undefined : residuesInChain.find((entry) => entry.labelSeqId === sequenceId);
   const matchByAuth = (sequenceId: number | null) =>
     sequenceId === null ? undefined : residuesInChain.find((entry) => entry.authSeqId === sequenceId);
 
-  // const labelSeqId = parseSequenceId(eventData.label_seq_id);
-  // const residueNumber = parseSequenceId(eventData.residueNumber);
-  // const seqId = parseSequenceId(eventData.seq_id);
+  const labelSeqId = parseSequenceId(eventData.label_seq_id);
+  const residueNumber = parseSequenceId(eventData.residueNumber);
+  const seqId = parseSequenceId(eventData.seq_id);
   const authSeqId = parseSequenceId(eventData.auth_seq_id);
 
   const residue =
-    // matchByLabel(labelSeqId) ??
-    // matchByLabel(residueNumber) ??
-    // matchByAuth(authSeqId) ??
-    // matchByLabel(seqId) ??
-    // matchByAuth(residueNumber) ??
-    // matchByAuth(seqId);
-    // // matchByAuth(authSeqId) ??
-    // // matchByAuth(residueNumber) ??
-    // // matchByAuth(seqId)
-    matchByAuth(authSeqId);
+    matchByLabel(labelSeqId) ??
+    matchByLabel(residueNumber) ??
+    matchByAuth(authSeqId) ??
+    matchByLabel(seqId) ??
+    matchByAuth(residueNumber) ??
+    matchByAuth(seqId);
 
   // console.log('findResidueIndexFromMolstarEvent', residue?.index, 'on chain', chainId, 'with', residuesInChain.length, 'aa');
   return residue?.index ?? null;

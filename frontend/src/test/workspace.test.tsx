@@ -33,6 +33,8 @@ function Harness() {
       bundle={bundle}
       structureText="ATOM"
       selectedResidues={[]}
+      draftFocused={false}
+      selectionModeEnabled={false}
       focusedResidues={[]}
       hoveredResidues={hoveredResidues}
       pinnedResidues={pinnedResidues}
@@ -98,6 +100,8 @@ function TargetHarness() {
       bundle={bundle}
       structureText="ATOM"
       selectedResidues={[]}
+      draftFocused={false}
+      selectionModeEnabled={false}
       focusedResidues={[]}
       hoveredResidues={[]}
       pinnedResidues={[]}

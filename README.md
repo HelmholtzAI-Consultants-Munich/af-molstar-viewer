@@ -110,21 +110,20 @@ make dev-frontend-http
 - This will become a part of the Web UI for a larger project around BindCraft.
 - There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre- or post-processing and orchestration.
 - The Web UI should gain functionality to:
-  - display the structure of the target protein / template pair
-  - enable selecting the interface, i.e. binding hotspots
-  - enable cropping that protein
+  - display the structure of the target protein / template pair (check)
+  - enable selecting the interface, i.e. binding hotspots (check)
+  - enable cropping that protein (via backend and API) (check)
   - show the generated binders
   - show the AF2-predicted structures of the binders
   - allow comparing the binders, maybe in separate connected views or with overlaying
   - enable saving/exporting views from viewer panels as Mol* states
 
 ### TODO
-- selection does not become visible if the parent target was a PDB
-- the theme toggle is in the wrong place now, because pAE panel is not visible at all.
-- Mol* `Focus` is partially or completely lost when switching back to the target `pdb7xhf.ent`
-- selection no longer works for that file, either
-- drag onto viewer to load?
-- enable saving/exporting views from viewer panels as Mol* states
+- enable saving/exporting views from viewer panels as Mol* states, and the structure files directly
+- enable pLDDT/chain-id theme toggling for the target
+- all the `byartifact` props could go somewhere, and pLDDT/chain-id theme should be a byartifact thing as well
+- maybe show the pAE panel again, as a drawer on the right?
+- low prio: drag structures onto **viewer** can load as well, not just target drop zone?
 
 ## Attribution
 

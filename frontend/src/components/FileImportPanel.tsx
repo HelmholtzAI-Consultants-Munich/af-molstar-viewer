@@ -1,7 +1,7 @@
 import type { ChangeEvent, DragEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
 import type { DiscoveryGroup, WorkerInputFile } from '../lib/types';
-import { EXAMPLES } from '../app/examples';
+import { EXAMPLES } from '../features/import/examples';
 
 interface FileImportPanelProps {
   groups: DiscoveryGroup[];

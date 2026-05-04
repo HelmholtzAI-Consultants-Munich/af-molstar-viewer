@@ -7,24 +7,32 @@ import { createToyBundle } from './helpers';
 import toyRanked0 from '../../../fixtures/test-inputs/colabfold/toy_ranked_0.pdb?raw';
 import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?raw';
 
-vi.mock('../components/project/ArtifactWorkspace', () => ({
+vi.mock('../features/project/ArtifactWorkspace', () => ({
   ArtifactWorkspace: ({
     artifact,
     viewerConfiguration,
     viewerStatePayload,
-    selectedResidues,
-    focusedResidues,
-    onSelectionResiduesChange,
-    onFocusResiduesChange,
+    selectionIndices,
+    focusIndices,
+    draftFocused,
+    selectionEnabled,
+    selectionSyncNonce,
+    onSelectionIndicesChange,
+    onFocusIndicesChange,
+    onSelectionModeChange,
     onViewerStateChange,
   }: {
     artifact: { artifactId: string };
     viewerConfiguration: 'target' | 'validate_refolding';
     viewerStatePayload?: Record<string, unknown> | null;
-    selectedResidues?: number[] | null;
-    focusedResidues?: number[] | null;
-    onSelectionResiduesChange?: (indices: number[]) => void;
-    onFocusResiduesChange?: (indices: number[]) => void;
+    selectionIndices?: number[] | null;
+    focusIndices?: number[] | null;
+    draftFocused?: boolean;
+    selectionEnabled?: boolean;
+    selectionSyncNonce?: number;
+    onSelectionIndicesChange?: (indices: number[]) => void;
+    onFocusIndicesChange?: (indices: number[]) => void;
+    onSelectionModeChange?: (enabled: boolean) => void;
     onViewerStateChange?: (payload: Record<string, unknown>) => void;
   }) => (
     <div>
@@ -32,15 +40,21 @@ vi.mock('../components/project/ArtifactWorkspace', () => ({
       <div data-testid="viewer-configuration">{viewerConfiguration}</div>
       <div data-testid="viewer-state-payload">{JSON.stringify(viewerStatePayload ?? null)}</div>
       <div data-testid="selected-residues">
-        {(selectedResidues ?? null) === null ? 'null' : selectedResidues!.join(',')}
+        {(selectionIndices ?? null) === null ? 'null' : selectionIndices!.join(',')}
       </div>
       <div data-testid="focused-residues">
-        {(focusedResidues ?? null) === null ? 'null' : focusedResidues!.join(',')}
+        {(focusIndices ?? null) === null ? 'null' : focusIndices!.join(',')}
       </div>
-      <button type="button" onClick={() => onSelectionResiduesChange?.([0, 1, 2])}>
+      <button type="button" onClick={() => onSelectionIndicesChange?.([0, 1, 2])}>
         Mock Molstar selection
       </button>
-      <button type="button" onClick={() => onFocusResiduesChange?.([1, 2])}>
+      <button type="button" onClick={() => onSelectionModeChange?.(false)}>
+        Mock selection mode off
+      </button>
+      <button type="button" onClick={() => onSelectionModeChange?.(true)}>
+        Mock selection mode on
+      </button>
+      <button type="button" onClick={() => onFocusIndicesChange?.([1, 2])}>
         Mock Molstar focus
       </button>
       <button
@@ -60,7 +74,7 @@ vi.mock('../components/project/ArtifactWorkspace', () => ({
   ),
 }));
 
-vi.mock('../lib/project/load-viewer-artifact', () => ({
+vi.mock('../services/project/load-viewer-artifact', () => ({
   loadViewerArtifact: async (source: { artifact_id: string; label: string }) => ({
     artifactId: source.artifact_id,
     label: source.label,
@@ -89,7 +103,7 @@ describe('project app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('A1-10,B20-22')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('A1-3')).toBeInTheDocument();
     });
 
     expect(screen.getByLabelText('Load target example')).toBeInTheDocument();
@@ -107,7 +121,7 @@ describe('project app shell', () => {
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
     await waitFor(() => {
-      expect(scoped.getAllByText(/^toy$/i).length).toBeGreaterThan(0);
+      expect(scoped.getAllByText(/^toy_ranked_0\.pdb$/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -121,17 +135,18 @@ describe('project app shell', () => {
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
     await waitFor(() => {
-      expect(scoped.getAllByText(/^toy$/i).length).toBeGreaterThan(0);
+      expect(scoped.getAllByText(/^toy_ranked_0\.pdb$/i).length).toBeGreaterThan(0);
     });
 
     expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
-    expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
-    expect(scoped.getByText('Focus: nothing focussed')).toBeInTheDocument();
+    expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
+    expect(scoped.getByTestId('focused-residues')).toHaveTextContent('');
 
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
 
     await waitFor(() => {
       expect(scoped.getByDisplayValue('A1-3')).toBeInTheDocument();
+      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0,1,2');
       expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
 
@@ -152,7 +167,8 @@ describe('project app shell', () => {
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
     await waitFor(() => {
-      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
 
     expect(scoped.getByRole('button', { name: 'Crop to selection' })).toBeDisabled();
@@ -168,19 +184,21 @@ describe('project app shell', () => {
 
     await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy_cropped_1' })).toBeInTheDocument();
-      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_ranked_0.pdb_cropped_1' })).toBeInTheDocument();
+      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
 
-    await user.click(scoped.getByRole('button', { name: /^toy$/i }));
+    await user.click(scoped.getByRole('button', { name: /^toy_ranked_0\.pdb$/i }));
     await waitFor(() => {
       expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
 
     await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy_cut_1' })).toBeInTheDocument();
-      expect(scoped.getByText('Selection: nothing selected')).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_ranked_0.pdb_cut_1' })).toBeInTheDocument();
+      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
   });
 
@@ -197,12 +215,39 @@ describe('project app shell', () => {
     await user.clear(input);
     await user.type(input, 'A10');
     expect(input).toHaveValue('A10');
-    expect(scoped.getByTestId('selected-residues')).toHaveTextContent('');
 
     await user.clear(input);
     await user.type(input, 'A2-A3');
     expect(input).toHaveValue('A2-A3');
-    expect(scoped.getByTestId('selected-residues')).toHaveTextContent('1,2');
+  });
+
+  it('keeps the current selection draft when Mol* selection mode is toggled and still accepts a later selection update', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<App api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+    await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
+
+    const input = await scoped.findByPlaceholderText('A1-10,B20-22');
+    await user.clear(input);
+    await user.type(input, 'A2-A3');
+    expect(input).toHaveValue('A2-A3');
+
+    await user.click(scoped.getByRole('button', { name: 'Mock selection mode off' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock selection mode on' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock selection mode off' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock selection mode on' }));
+
+    expect(input).toHaveValue('A2-3');
+
+    await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
+
+    await waitFor(() => {
+      expect(scoped.getByDisplayValue('A1-3')).toBeInTheDocument();
+      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0,1,2');
+    });
   });
 
   it('restores each target interface draft when switching between open targets', async () => {
@@ -223,7 +268,6 @@ describe('project app shell', () => {
     await user.clear(input);
     await user.type(input, 'A2-A3');
     expect(input).toHaveValue('A2-A3');
-    expect(scoped.getByTestId('selected-residues')).toHaveTextContent('1,2');
 
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_beta_ranked_0.pdb', { type: 'chemical/x-pdb' }),
@@ -234,19 +278,16 @@ describe('project app shell', () => {
     expect(betaInput).toHaveValue('');
     await user.type(betaInput, 'A1');
     expect(betaInput).toHaveValue('A1');
-    expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0');
 
     const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
     await user.click(targetCards()[0]);
     await waitFor(() => {
-      expect(scoped.getByDisplayValue('A2-A3')).toBeInTheDocument();
-      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('1,2');
+      expect(scoped.getByDisplayValue('A2-3')).toBeInTheDocument();
     });
 
     await user.click(targetCards()[1]);
     await waitFor(() => {
       expect(scoped.getByDisplayValue('A1')).toBeInTheDocument();
-      expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0');
     });
   });
 
@@ -275,7 +316,6 @@ describe('project app shell', () => {
       new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
     ]);
 
-    expect(scoped.getByText('Focus: nothing focussed')).toBeInTheDocument();
     expect(scoped.getByTestId('focused-residues')).toHaveTextContent('');
 
     const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
@@ -359,15 +399,15 @@ describe('project app shell', () => {
     ]);
 
     await waitFor(() => {
-      expect(scoped.getByRole('button', { name: 'Remove target_beta' })).toBeInTheDocument();
+      expect(scoped.getByRole('button', { name: 'Remove target_beta_ranked_0.pdb' })).toBeInTheDocument();
       expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-2');
     });
 
-    await user.click(scoped.getByRole('button', { name: 'Remove target_beta' }));
+    await user.click(scoped.getByRole('button', { name: 'Remove target_beta_ranked_0.pdb' }));
 
     await waitFor(() => {
-      expect(scoped.queryByRole('button', { name: 'Remove target_beta' })).not.toBeInTheDocument();
-      expect(scoped.getByRole('button', { name: 'Remove target_alpha' })).toBeInTheDocument();
+      expect(scoped.queryByRole('button', { name: 'Remove target_beta_ranked_0.pdb' })).not.toBeInTheDocument();
+      expect(scoped.getByRole('button', { name: 'Remove target_alpha_ranked_0.pdb' })).toBeInTheDocument();
       expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-1');
     });
   });

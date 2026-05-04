@@ -114,7 +114,7 @@ export function parseMmCifStructure(text: string): ParsedStructure {
     const entityId = getValue(row, atomSite, '_atom_site.label_entity_id');
     const labelSeqId = Number(getValue(row, atomSite, '_atom_site.label_seq_id'));
     const authSeqIdRaw = getValue(row, atomSite, '_atom_site.auth_seq_id');
-    const authSeqId = authSeqIdRaw === '?' ? undefined : Number(authSeqIdRaw);
+    const authSeqId = Number.isFinite(Number(authSeqIdRaw)) ? Number(authSeqIdRaw) : labelSeqId;
     const compId = getValue(row, atomSite, '_atom_site.label_comp_id') || getValue(row, atomSite, '_atom_site.auth_comp_id');
     const moleculeType = classifyChemCompType(chemType.get(compId), compId);
     const atomStart = currentAtoms[0] ?? 0;

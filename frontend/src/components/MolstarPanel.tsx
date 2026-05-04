@@ -75,6 +75,12 @@ const MOLSTAR_ILLUSTRATIVE_STYLE = {
 };
 
 let persistedSequenceHostHeight: string | null = null;
+const DEBUG_MOLSTAR_SELECTION = true;
+
+function debugMolstarSelection(...args: unknown[]) {
+  if (!DEBUG_MOLSTAR_SELECTION) return;
+  console.debug('[MolstarSelection]', ...args);
+}
 
 function residueSpan(start: number, end: number): number[] {
   return Array.from({ length: end - start + 1 }, (_, offset) => start + offset);
@@ -435,6 +441,7 @@ async function captureViewerState(viewer: import('pdbe-molstar/lib/viewer.js').P
 interface MolstarPanelProps {
   viewerConfiguration: 'target' | 'validate_refolding';
   viewerStatePayload: Record<string, unknown> | null;
+  selectionDraft: string;
   bundle: PredictionBundle;
   structureText: string;
   selectedResidues: number[] | null;
@@ -472,7 +479,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
   const selectionModeCallbacksReadyRef = useRef(false);
-  const suppressSelectionModeCallbacksUntilRef = useRef(0);
+  const suppressSelectionCallbacksDepthRef = useRef(0);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -506,9 +513,21 @@ export function MolstarPanel(props: MolstarPanelProps) {
     viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
     enabled: boolean,
   ) => {
-    suppressSelectionModeCallbacksUntilRef.current = performance.now() + 500;
     selectionModeRef.current = enabled;
     viewer.selectionMode = enabled;
+    const selectionModeBehavior = viewer.plugin?.behaviors?.interaction?.selectionMode as {
+      next?: (value: boolean) => void;
+    } | null | undefined;
+    selectionModeBehavior?.next?.(enabled);
+  };
+
+  const suppressSelectionCallbacks = async (action: () => Promise<void> | void) => {
+    suppressSelectionCallbacksDepthRef.current += 1;
+    try {
+      await action();
+    } finally {
+      suppressSelectionCallbacksDepthRef.current = Math.max(0, suppressSelectionCallbacksDepthRef.current - 1);
+    }
   };
 
   useEffect(() => {
@@ -630,16 +649,32 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (!viewerRef.current) return;
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
         const previous = selectedResiduesRef.current ?? [];
+        debugMolstarSelection('selection changed', {
+          enabled: selectionModeRef.current,
+          previous,
+          next: indices,
+          draftFocused: props.draftFocused,
+          selectionDraft: props.selectionDraft,
+          selectionSyncNonce: props.selectionSyncNonce,
+        });
         // console.log('molstar selection has', indices.length, 'while previous had', previous.length); // Here I can often see the selection shrinking; looping in step sizes such as 19 or 5 until the selection has disappeared in the blink of an eye.
         if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
+          debugMolstarSelection('selection changed ignored: identical');
           // it's the same selection as before
           return;
         }
-        if (!selectionModeRef.current && indices.length === 0 && previous.length > 0) {
-          // selection mode is off, the current selection is empty, previous one was non-empty. when is that case relevant again?
+        if (suppressSelectionCallbacksDepthRef.current > 0) {
+          debugMolstarSelection('selection changed ignored: suppressed');
+          return;
+        }
+        if (!selectionModeRef.current) {
+          debugMolstarSelection('selection changed ignored: selection mode off');
+          // Turning selection mode off triggers transient Mol* selection events while the viewer clears its native
+          // highlight. Those are not user edits, so keep the last authoritative draft intact.
           return;
         }
 
+        debugMolstarSelection('selection changed forwarded', indices);
         selectionCallbackRef.current?.(indices);  // bad! This causes selections to immediately collapse for derived PDBs. If I comment the line, cropping no longer works. 
         if (selectionModeRef.current) {
           scheduleViewerStatePersist(viewerRef.current);
@@ -656,17 +691,28 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (disposed) return;
         if (!viewerRef.current) return;
         const now = performance.now();
-        if (now < suppressSelectionModeCallbacksUntilRef.current) {
-          return;
-        }
+        debugMolstarSelection('selection mode event', {
+          enabled,
+          previous: selectionModeRef.current,
+          now,
+          ready: selectionModeCallbacksReadyRef.current,
+          selectedResidues: selectedResiduesRef.current,
+          draftFocused: props.draftFocused,
+          selectionDraft: props.selectionDraft,
+        });
         selectionModeRef.current = enabled;
         if (selectionModeCallbacksReadyRef.current) {
+          debugMolstarSelection('selection mode callback forwarded', enabled);
           selectionModeCallbackRef.current?.(enabled);
         }
         if (enabled && selectedResiduesRef.current !== null) {
-          await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+          debugMolstarSelection('selection mode enabled; resyncing selection', selectedResiduesRef.current);
+          await suppressSelectionCallbacks(() =>
+            syncNativeSelection(viewerRef.current!, props.bundle.residues, selectedResiduesRef.current, { force: true }),
+          );
         } else if (!enabled) {
-          await viewerRef.current.visual.clearSelection();
+          debugMolstarSelection('selection mode disabled; clearing native selection');
+          await suppressSelectionCallbacks(() => viewerRef.current!.visual.clearSelection());
         }
         scheduleViewerStatePersist(viewerRef.current);
       });
@@ -740,11 +786,11 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
     if (props.selectedResidues === null) return; // || !selectionModeRef.current would return too often
     if (!props.selectionModeEnabled) {
-      void viewer.visual.clearSelection();
+      void suppressSelectionCallbacks(() => viewer.visual.clearSelection());
       return;
     }
 
-    void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues);
+    void suppressSelectionCallbacks(() => syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues));
   }, [props.bundle.residues, props.selectedResidues, props.selectionSyncNonce, props.draftFocused, props.selectionModeEnabled]);
 
   useEffect(() => {

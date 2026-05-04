@@ -229,7 +229,7 @@ class LocalFixtureProjectApi implements ProjectApi {
     if (record.job.status === 'running' && elapsed >= 650) {
       record.job.status = 'succeeded';
       record.job.finished_at = Date.now();
-      record.apply();
+      record.apply(record.job);
       this.jobs.delete(jobId);
     }
     this.syncProjectJobs();

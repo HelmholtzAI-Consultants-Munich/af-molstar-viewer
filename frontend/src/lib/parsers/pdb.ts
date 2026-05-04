@@ -47,7 +47,7 @@ export function parsePdbStructure(text: string): ParsedStructure {
         labelSeqId: nextLabel,
         // labelSeqId: Number.isFinite(authResSeq) ? authResSeq : nextLabel,
         // Preserve author numbering (resSeq) as authSeqId; do not expose iCode outside the parser
-        authSeqId: Number.isFinite(authResSeq) ? authResSeq : undefined,
+        authSeqId: Number.isFinite(authResSeq) ? authResSeq : nextLabel,
         compId,
         moleculeType,
         entityId: String(nextLabel),
