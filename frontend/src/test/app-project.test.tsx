@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { App } from '../app/App';
+import { ProjectPage } from '../pages/ProjectPage';
 import { createProjectApi } from '../lib/project/project-api';
 import { createToyBundle } from './helpers';
 import toyRanked0 from '../../../fixtures/test-inputs/colabfold/toy_ranked_0.pdb?raw';
@@ -87,7 +87,7 @@ describe('project app shell', () => {
   it('starts empty and lets you upload a target before saving interface residues', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
 
     await screen.findByText(/BindCraft Workspace Demo/i);
     expect(screen.getByText(/No targets yet/i)).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('project app shell', () => {
   it('keeps examples available without loading one by default', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -128,7 +128,7 @@ describe('project app shell', () => {
   it('links Mol* selection to the interface input and shows both selection and focus on the selected target card', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -160,7 +160,7 @@ describe('project app shell', () => {
   it('shows crop and cut selection tools on the active target card and activates each derived target after the stubbed backend actions', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -205,7 +205,7 @@ describe('project app shell', () => {
   it('keeps in-progress typing stable and maps repeated-chain range syntax into Mol* selection', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -224,7 +224,7 @@ describe('project app shell', () => {
   it('keeps the current selection draft when Mol* selection mode is toggled and still accepts a later selection update', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -253,7 +253,7 @@ describe('project app shell', () => {
   it('restores each target interface draft when switching between open targets', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -294,7 +294,7 @@ describe('project app shell', () => {
   it('restores each target focus when switching between open targets', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -329,7 +329,7 @@ describe('project app shell', () => {
   it('restores per-target viewer snapshots and keeps target and validate-refolding states separate', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
@@ -383,7 +383,7 @@ describe('project app shell', () => {
   it('removes a target from the sidebar and falls back to another open target', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
-    const { container } = render(<App api={api} />);
+    const { container } = render(<ProjectPage api={api} />);
     const scoped = within(container);
 
     await scoped.findByText(/BindCraft Workspace Demo/i);

@@ -1,7 +1,7 @@
 import type { ChangeEvent, DragEvent } from 'react';
 import { useRef, useState, useEffect } from 'react';
 import { Crop, Scissors, Trash2 } from 'lucide-react';
-import { EXAMPLES } from '../../app/examples';
+import { EXAMPLES } from '../../features/import/examples';
 import type { WorkspaceProject } from '../../domain/project-types';
 
 interface ProjectSidebarProps {
