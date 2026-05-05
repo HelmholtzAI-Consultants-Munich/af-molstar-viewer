@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from pathlib import Path
-import re
 import shutil
 import time
 from typing import Any
@@ -25,6 +24,32 @@ from .models import (
 )
 from . import structure_edit
 from .selection import canonicalize_selection, parse_selection
+
+
+def next_derived_target_name(source_name: str, existing_target_names: list[str], operation: str) -> str:
+    source_path = Path(source_name)
+    stem_parts = source_path.stem.split("_")
+    extension = source_path.suffix
+
+    same_operation = len(stem_parts) >= 2 and stem_parts[-2] == operation and stem_parts[-1].isdigit()
+    prefix_parts = stem_parts[:-2] + [operation] if same_operation else stem_parts + [operation]
+
+    next_index = 1
+    for target_name in existing_target_names:
+        target_path = Path(target_name)
+        if target_path.suffix != extension:
+            continue
+        target_parts = target_path.stem.split("_")
+        if len(target_parts) != len(prefix_parts) + 1:
+            continue
+        if target_parts[: len(prefix_parts)] != prefix_parts:
+            continue
+        suffix = target_parts[-1]
+        if not suffix.isdigit():
+            continue
+        next_index = max(next_index, int(suffix) + 1)
+
+    return f"{'_'.join(prefix_parts)}_{next_index}{extension}"
 
 
 class ProjectService:
@@ -480,7 +505,7 @@ class ProjectService:
         derived_structure_path: str,
         derived_chain_ids: list[str],
     ) -> tuple[TargetArtifact, ViewerAsset]:
-        derived_name = self._create_derived_target_name(project, source_target.name, operation)
+        derived_name = next_derived_target_name(source_target.name, [target.name for target in project.targets], operation)
         viewer_asset_id = f"viewer-{derived_target_id}"
         derived_target = TargetArtifact(
             id=derived_target_id,
@@ -505,23 +530,6 @@ class ProjectService:
             ],
         )
         return derived_target, derived_viewer_asset
-
-    def _create_derived_target_name(self, project: Project, source_name: str, operation: str) -> str:
-        base_name = re.sub(r"_(?:cropped|cut)_\d+$", "", source_name)
-        pattern = re.compile(rf"^{re.escape(base_name)}_{re.escape(operation)}_(\d+)$")
-        next_index = (
-            max(
-                (
-                    int(match.group(1))
-                    for target in project.targets
-                    for match in [pattern.match(target.name)]
-                    if match is not None
-                ),
-                default=0,
-            )
-            + 1
-        )
-        return f"{base_name}_{operation}_{next_index}"
 
 
 def serialize_project(project: Project, jobs: list[JobRef] | None = None) -> dict[str, Any]:

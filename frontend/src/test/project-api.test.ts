@@ -38,8 +38,8 @@ describe('project api fixtures', () => {
     expect(resolvedCrop.target_ids).toHaveLength(1);
     expect(resolvedCut.target_ids).toHaveLength(1);
     expect(refreshed.targets).toHaveLength(project.targets.length + 2);
-    expect(refreshed.targets.at(-2)?.name).toBe('toy_ranked_0.pdb_cropped_1');
-    expect(refreshed.targets.at(-1)?.name).toBe('toy_ranked_0.pdb_cut_1');
+    expect(refreshed.targets.at(-2)?.name).toBe('toy_ranked_0_cropped_1.pdb');
+    expect(refreshed.targets.at(-1)?.name).toBe('toy_ranked_0_cut_1.pdb');
   });
 
   it('generates binders and validates refolding through async jobs', async () => {

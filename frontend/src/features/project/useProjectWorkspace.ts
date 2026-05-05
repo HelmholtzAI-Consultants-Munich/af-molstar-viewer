@@ -24,6 +24,20 @@ interface UseProjectWorkspaceOptions {
   api?: ProjectApi;
 }
 
+function downloadTextFile(filename: string, content: string, mimeType = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 function isActiveJob(status: WorkspaceProject['jobs'][number]['status']) {
   return status === 'queued' || status === 'running';
 }
@@ -84,6 +98,9 @@ export interface ProjectWorkspaceState {
   onSaveInterface: (value: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
+  onDownloadStructure: () => void;
+  onDownloadViewerState: () => void;
+  onNativeViewerStateDownloadReady: (download: (() => void) | null) => void;
   onGenerateBinders: (selectionDraft: string) => void;
   onValidateRefolding: () => void;
   onSaveViewerState: () => void;
@@ -110,6 +127,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   const [focusByArtifact, setFocusByArtifact] = useState<Record<string, number[]>>({});
   const liveSelectionDraftRef = useRef<string>('');
   const [pendingDerivedTargetJobIds, setPendingDerivedTargetJobIds] = useState<string[]>([]);
+  const downloadViewerStateHandlerRef = useRef<(() => void) | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -493,6 +511,19 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       await refreshProject(project!.id);
     });
 
+  const onDownloadStructure = () => {
+    if (!selectedTarget || !selectedArtifact) return;
+    downloadTextFile(selectedTarget.name, selectedArtifact.structureText);
+  };
+
+  const onDownloadViewerState = () => {
+    downloadViewerStateHandlerRef.current?.();
+  };
+
+  const onNativeViewerStateDownloadReady = (download: (() => void) | null) => {
+    downloadViewerStateHandlerRef.current = download;
+  };
+
   const onGenerateBinders = (selectionDraft: string) =>
     void runMutation(async () => {
       if (!selectedTarget) return;
@@ -591,6 +622,9 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     onSaveInterface,
     onCropToSelection,
     onCutOffSelection,
+    onDownloadStructure,
+    onDownloadViewerState,
+    onNativeViewerStateDownloadReady,
     onGenerateBinders,
     onValidateRefolding,
     onSaveViewerState,

@@ -40,6 +40,7 @@ interface WorkspaceProps {
   onMolstarSelectionModeChange?: (enabled: boolean) => void;
   onMolstarFocusChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
+  onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
   onToggleColorByPLDDT: () => void;
   onEnableColorByPLDDT: () => void;
 }
@@ -140,6 +141,7 @@ export function Workspace(props: WorkspaceProps) {
         onSelectionModeChange={props.onMolstarSelectionModeChange}
         onFocusResiduesChange={props.onMolstarFocusChange}
         onViewerStateChange={props.onViewerStateChange}
+        onNativeViewerStateDownloadReady={props.onNativeViewerStateDownloadReady}
       />
       {props.viewerConfiguration === 'validate_refolding' && (
         <>

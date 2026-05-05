@@ -54,6 +54,8 @@ export function ProjectPage(props: ProjectPageProps) {
           }}
           onCropToSelection={workspace.onCropToSelection}
           onCutOffSelection={workspace.onCutOffSelection}
+          onDownloadStructure={workspace.onDownloadStructure}
+          onDownloadViewerState={workspace.onDownloadViewerState}
           onDraftFocus={workspace.onDraftFocus}
           onDraftChange={workspace.onDraftChange}
           onDraftBlur={workspace.onDraftBlur}
@@ -100,6 +102,7 @@ export function ProjectPage(props: ProjectPageProps) {
               onViewerStateChange={(payload) => {
                 workspace.onViewerStateChange(workspace.selectedArtifact!.artifactId, 'target', 'Current target view', payload);
               }}
+              onNativeViewerStateDownloadReady={workspace.onNativeViewerStateDownloadReady}
             />
           ) : (
             <section className="panel empty-panel">

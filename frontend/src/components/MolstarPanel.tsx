@@ -432,6 +432,13 @@ async function captureViewerState(viewer: import('pdbe-molstar/lib/viewer.js').P
   };
 }
 
+async function downloadViewerStateZip(viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin) {
+  const plugin = viewer.plugin;
+  if (!plugin) return;
+  const { PluginCommands } = await import('molstar/lib/mol-plugin/commands.js');
+  await PluginCommands.State.Snapshots.DownloadToFile(plugin, { type: 'zip' });
+}
+
 interface MolstarPanelProps {
   viewerConfiguration: 'target' | 'validate_refolding';
   viewerStatePayload: Record<string, unknown> | null;
@@ -453,6 +460,7 @@ interface MolstarPanelProps {
   onSelectionModeChange?: (enabled: boolean) => void;
   onFocusResiduesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
+  onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
   colorByPLDDTToggleStatus: boolean;
   colorByPLDDTEnabled: boolean;
 }
@@ -469,6 +477,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const selectionModeCallbackRef = useRef(props.onSelectionModeChange);
   const focusCallbackRef = useRef(props.onFocusResiduesChange);
   const viewerStateCallbackRef = useRef(props.onViewerStateChange);
+  const nativeViewerStateDownloadReadyRef = useRef(props.onNativeViewerStateDownloadReady);
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
@@ -486,6 +495,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     selectionModeCallbackRef.current = props.onSelectionModeChange;
     focusCallbackRef.current = props.onFocusResiduesChange;
     viewerStateCallbackRef.current = props.onViewerStateChange;
+    nativeViewerStateDownloadReadyRef.current = props.onNativeViewerStateDownloadReady;
   }, [
     props.onClickResidue,
     props.onHoverResidue,
@@ -493,6 +503,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     props.onSelectionModeChange,
     props.onFocusResiduesChange,
     props.onViewerStateChange,
+    props.onNativeViewerStateDownloadReady,
   ]);
 
   useEffect(() => {
@@ -559,6 +570,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
         sequenceHostRef.current.style.height = persistedSequenceHostHeight;
       }
       viewerRef.current = new PDBeMolstarPlugin();
+      nativeViewerStateDownloadReadyRef.current?.(() => {
+        if (!viewerRef.current) return;
+        void downloadViewerStateZip(viewerRef.current);
+      });
       objectUrlRef.current = URL.createObjectURL(new Blob([props.structureText], { type: 'text/plain' }));
 
       const handleHover = (event: Event) => {
@@ -701,6 +716,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       return () => {
         disposed = true;
         selectionModeCallbacksReadyRef.current = false;
+        nativeViewerStateDownloadReadyRef.current?.(null);
         if (persistTimeoutRef.current !== null) {
           window.clearTimeout(persistTimeoutRef.current);
           persistTimeoutRef.current = null;

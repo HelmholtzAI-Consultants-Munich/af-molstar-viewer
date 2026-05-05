@@ -19,6 +19,7 @@ interface ArtifactWorkspaceProps {
   onSelectionModeChange?: (enabled: boolean) => void;
   onFocusIndicesChange?: (indices: number[]) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
+  onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
 }
 
 export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
@@ -105,6 +106,7 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       onMolstarSelectionModeChange={props.onSelectionModeChange}
       onMolstarFocusChange={props.onFocusIndicesChange}
       onViewerStateChange={props.onViewerStateChange}
+      onNativeViewerStateDownloadReady={props.onNativeViewerStateDownloadReady}
     />
   );
 }

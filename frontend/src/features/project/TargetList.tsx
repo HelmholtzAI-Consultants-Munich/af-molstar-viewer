@@ -1,6 +1,6 @@
 import type { ChangeEvent, DragEvent } from 'react';
 import { useRef, useState } from 'react';
-import { Crop, Scissors, Trash2 } from 'lucide-react';
+import { Crop, Scissors, Trash2, View, Save } from 'lucide-react';
 import { EXAMPLES } from '../import/examples';
 import type { WorkspaceProject } from '../../domain/project';
 
@@ -17,6 +17,8 @@ interface TargetListProps {
   onRemoveTarget: (targetId: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
+  onDownloadStructure: () => void;
+  onDownloadViewerState: () => void;
 }
 
 export function TargetList(props: TargetListProps) {
@@ -159,6 +161,34 @@ export function TargetList(props: TargetListProps) {
                     }}
                   >
                     <Scissors size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              {target.id === props.selectedTargetId && (
+                <div className="artifact-card-download-actions">
+                  <button
+                    type="button"
+                    className="artifact-card-tool"
+                    aria-label="download structure"
+                    title="download structure"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onDownloadStructure();
+                    }}
+                  >
+                    <Save size={14} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="artifact-card-tool"
+                    aria-label="download Mol* session"
+                    title="download Mol* session"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onDownloadViewerState();
+                    }}
+                  >
+                    <View size={14} aria-hidden="true" />
                   </button>
                 </div>
               )}

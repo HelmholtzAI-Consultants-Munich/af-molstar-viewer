@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectPage } from '../pages/ProjectPage';
 import { createProjectApi } from '../lib/project/project-api';
 import { createToyBundle } from './helpers';
 import toyRanked0 from '../../../fixtures/test-inputs/colabfold/toy_ranked_0.pdb?raw';
 import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?raw';
+
+const nativeViewerDownloadSpy = vi.fn();
 
 vi.mock('../features/project/ArtifactWorkspace', () => ({
   ArtifactWorkspace: ({
@@ -21,6 +23,7 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     onFocusIndicesChange,
     onSelectionModeChange,
     onViewerStateChange,
+    onNativeViewerStateDownloadReady,
   }: {
     artifact: { artifactId: string };
     viewerConfiguration: 'target' | 'validate_refolding';
@@ -34,6 +37,7 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     onFocusIndicesChange?: (indices: number[]) => void;
     onSelectionModeChange?: (enabled: boolean) => void;
     onViewerStateChange?: (payload: Record<string, unknown>) => void;
+    onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
   }) => (
     <div>
       <div data-testid="artifact-workspace">{artifact.artifactId}</div>
@@ -70,6 +74,9 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
       >
         Mock viewer state
       </button>
+      <button type="button" onClick={() => onNativeViewerStateDownloadReady?.(nativeViewerDownloadSpy)}>
+        Mock native download ready
+      </button>
     </div>
   ),
 }));
@@ -84,6 +91,11 @@ vi.mock('../services/project/load-viewer-artifact', () => ({
 }));
 
 describe('project app shell', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    nativeViewerDownloadSpy.mockClear();
+  });
+
   it('starts empty and lets you upload a target before saving interface residues', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
@@ -184,7 +196,7 @@ describe('project app shell', () => {
 
     await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy_ranked_0.pdb_cropped_1' })).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cropped_1.pdb' })).toBeInTheDocument();
       expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
@@ -196,7 +208,7 @@ describe('project app shell', () => {
 
     await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
     await waitFor(() => {
-      expect(scoped.getByRole('heading', { name: 'toy_ranked_0.pdb_cut_1' })).toBeInTheDocument();
+      expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cut_1.pdb' })).toBeInTheDocument();
       expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
@@ -378,6 +390,42 @@ describe('project app shell', () => {
       expect(scoped.getAllByTestId('viewer-configuration').at(-1)).toHaveTextContent('validate_refolding');
       expect(scoped.getAllByTestId('viewer-state-payload').at(-1)).toHaveTextContent('null');
     });
+  });
+
+  it('shows download structure and Mol* state actions under the cut-off button for the selected target', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<ProjectPage api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(window.URL, 'createObjectURL', { value: createObjectURL, configurable: true });
+    Object.defineProperty(window.URL, 'revokeObjectURL', { value: revokeObjectURL, configurable: true });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
+    ]);
+
+    await user.click(scoped.getByRole('button', { name: 'Mock native download ready' }));
+
+    await user.click(scoped.getByRole('button', { name: 'Mock viewer state' }));
+    await waitFor(() => {
+      expect(scoped.getByTestId('viewer-state-payload')).toHaveTextContent('"tag":"target-1-target"');
+    });
+
+    await user.click(scoped.getByRole('button', { name: /download structure/i }));
+    await user.click(scoped.getByRole('button', { name: /download mol\* session/i }));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(nativeViewerDownloadSpy).toHaveBeenCalledTimes(1);
   });
 
   it('removes a target from the sidebar and falls back to another open target', async () => {

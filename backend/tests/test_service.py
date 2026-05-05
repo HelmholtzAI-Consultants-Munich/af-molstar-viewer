@@ -5,7 +5,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from backend.service import ProjectService
+from backend.service import ProjectService, next_derived_target_name
 
 
 def upload_toy_target(service: ProjectService, project_id: str):
@@ -79,8 +79,8 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(len(resolved_crop.target_ids), 1)
         self.assertEqual(len(resolved_cut.target_ids), 1)
         self.assertEqual(len(refreshed.targets), initial_count + 2)
-        self.assertEqual(refreshed.targets[-2].name, "toy_cropped_1")
-        self.assertEqual(refreshed.targets[-1].name, "toy_cut_1")
+        self.assertEqual(refreshed.targets[-2].name, "toy_ranked_0_cropped_1.pdb")
+        self.assertEqual(refreshed.targets[-1].name, "toy_ranked_0_cut_1.pdb")
         mocked_crop.assert_called_once()
         mocked_cut.assert_called_once()
         crop_call = mocked_crop.call_args.kwargs
@@ -91,6 +91,40 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(cut_call["selection"], "A1-10,B20-22")
         self.assertEqual(crop_call["target_id"], target.id)
         self.assertEqual(cut_call["target_id"], target.id)
+
+    def test_create_derived_target_name_uses_flat_crop_root_and_nested_cuts(self) -> None:
+        self.assertEqual(next_derived_target_name("AF-3-model_v6.pdb", [], "cropped"), "AF-3-model_v6_cropped_1.pdb")
+        self.assertEqual(
+            next_derived_target_name(
+                "AF-3-model_v6_cropped_1.pdb",
+                ["AF-3-model_v6_cropped_1.pdb"],
+                "cropped",
+            ),
+            "AF-3-model_v6_cropped_2.pdb",
+        )
+        self.assertEqual(
+            next_derived_target_name(
+                "AF-3-model_v6_cropped_2.pdb",
+                [
+                    "AF-3-model_v6_cropped_1.pdb",
+                    "AF-3-model_v6_cropped_2.pdb",
+                ],
+                "cut",
+            ),
+            "AF-3-model_v6_cropped_2_cut_1.pdb",
+        )
+        self.assertEqual(
+            next_derived_target_name(
+                "AF-3-model_v6_cropped_2_cut_1.pdb",
+                [
+                    "AF-3-model_v6_cropped_1.pdb",
+                    "AF-3-model_v6_cropped_2.pdb",
+                    "AF-3-model_v6_cropped_2_cut_1.pdb",
+                ],
+                "cropped",
+            ),
+            "AF-3-model_v6_cropped_2_cut_1_cropped_1.pdb",
+        )
 
     def test_remove_parent_target_after_crop_keeps_derived_target_and_cleans_runtime_dir(self) -> None:
         service = ProjectService()

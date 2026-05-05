@@ -11,6 +11,34 @@ import { discoverGroups, loadBundle } from '../discovery';
 import type { WorkerInputFile } from '../types';
 import { createSeedProject, getGeneratedOutputs, resolveViewerArtifactSource } from './project-fixtures';
 
+export function nextDerivedTargetName(
+  sourceName: string,
+  existingTargetNames: string[],
+  operation: 'cropped' | 'cut',
+) {
+  const lastDot = sourceName.lastIndexOf('.');
+  const stem = lastDot > 0 ? sourceName.slice(0, lastDot) : sourceName;
+  const extension = lastDot > 0 ? sourceName.slice(lastDot) : '';
+  const stemParts = stem.split('_');
+  const isDigits = (value: string) => value.length > 0 && Array.from(value).every((char) => char >= '0' && char <= '9');
+  const sameOperation = stemParts.length >= 2 && stemParts[stemParts.length - 2] === operation && isDigits(stemParts[stemParts.length - 1] ?? '');
+  const prefix = sameOperation ? [...stemParts.slice(0, -2), operation] : [...stemParts, operation];
+  const nextIndex = existingTargetNames.reduce((max, targetName) => {
+    const targetLastDot = targetName.lastIndexOf('.');
+    const targetStem = targetLastDot > 0 ? targetName.slice(0, targetLastDot) : targetName;
+    const targetExtension = targetLastDot > 0 ? targetName.slice(targetLastDot) : '';
+    if (targetExtension !== extension) return max;
+    const targetStemParts = targetStem.split('_');
+    if (targetStemParts.length !== prefix.length + 1) return max;
+    if (!prefix.every((part, index) => targetStemParts[index] === part)) return max;
+    const suffix = targetStemParts[targetStemParts.length - 1];
+    if (!isDigits(suffix)) return max;
+    return Math.max(max, Number.parseInt(suffix, 10));
+  }, 0) + 1;
+
+  return `${prefix.join('_')}_${nextIndex}${extension}`;
+}
+
 export interface ProjectApi {
   createProject(): Promise<WorkspaceProject>;
   getProject(projectId: string): Promise<WorkspaceProject>;
@@ -330,7 +358,11 @@ class LocalFixtureProjectApi implements ProjectApi {
     const sourceArtifact =
       this.uploadedViewerArtifacts.get(sourceTarget.id) ?? resolveViewerArtifactSource(sourceTarget.id);
     const targetId = `target-${this.targetCounter++}`;
-    const name = this.createDerivedTargetName(project, sourceTarget.name, operation);
+    const name = nextDerivedTargetName(
+      sourceTarget.name,
+      project.targets.map((target) => target.name),
+      operation,
+    );
     const target: TargetArtifact = {
       ...sourceTarget,
       id: targetId,
@@ -352,21 +384,6 @@ class LocalFixtureProjectApi implements ProjectApi {
       })),
     };
     return { target, viewerArtifactSource };
-  }
-
-  private createDerivedTargetName(
-    project: WorkspaceProject,
-    sourceName: string,
-    operation: 'cropped' | 'cut',
-  ) {
-    const baseName = sourceName.replace(/_(?:cropped|cut)_\d+$/i, '');
-    const pattern = new RegExp(`^${escapeRegExp(baseName)}_${operation}_(\\d+)$`, 'i');
-    const nextIndex =
-      project.targets.reduce((max, target) => {
-        const match = target.name.match(pattern);
-        return match ? Math.max(max, Number.parseInt(match[1] ?? '0', 10)) : max;
-      }, 0) + 1;
-    return `${baseName}_${operation}_${nextIndex}`;
   }
 
   private deriveChainIdsForDerivedTarget(sourceTarget: TargetArtifact, sourceArtifact: ViewerArtifactSource) {
@@ -562,8 +579,4 @@ function deriveUploadedTargetMetadata(files: WorkerInputFile[]) {
     name: bundle.name,
     chainIds: bundle.chains.map((chain) => chain.chainId),
   };
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
