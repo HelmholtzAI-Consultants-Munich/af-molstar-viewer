@@ -89,7 +89,6 @@ function queriesWithColor(
   indices: number[],
   color: string,
 ) {
-  // console.log('with color', color, 'for indices', indices);
   return residueIndicesToQueries(residues, indices).map((query) => ({ ...query, color }));
 }
 
@@ -173,7 +172,16 @@ async function applyDefaultColorsDeferred(
   await raf();
   await raf();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  await applyDefaultColors(viewer, props);
+  try {
+    await applyDefaultColors(viewer, props);
+  } catch (error) {
+    console.warn('[MolstarDefaultColorsDeferredFailed]', {
+      structureFile: props.bundle.structure.fileName,
+      format: props.bundle.structure.format,
+      usePLDDTs: props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTToggleStatus && props.colorByPLDDTEnabled,
+      error,
+    });
+  }
 }
 
 async function applyPinnedPairSelection(
@@ -326,24 +334,16 @@ async function selectionLociFromResidues(
   const queries = residueIndicesToQueries(residues, indices, {
     includeLabelSeqId: options?.includeLabelSeqId ?? true,
   });
-  const loci = QueryHelper.getInteractivityLoci(queries, structure);
-  console.debug('[MolstarReplayQuery]', {
-    includeLabelSeqId: options?.includeLabelSeqId ?? true,
-    indices,
-    queries,
-    lociElementCount: Array.isArray((loci as any)?.elements) ? (loci as any).elements.length : null,
-  });
-  return loci;
+  return QueryHelper.getInteractivityLoci(queries, structure);
 }
 
 async function readSelectionResidues(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
 ) {
-  // should this function be isolated somehow?
   const structure = getCurrentStructure(viewer);
   if (!structure) return [];
-  
+
   const [{ StructureElement, StructureProperties }] = await Promise.all([import('molstar/lib/mol-model/structure.js')]);
   const loci = viewer.plugin?.managers?.structure?.selection?.getLoci(structure);
   if (!loci || !StructureElement.Loci.is(loci) || StructureElement.Loci.isEmpty(loci)) return [];
@@ -355,7 +355,6 @@ async function readSelectionResidues(
     const match = residues.find((residue) => residue.chainId === chainId && residue.authSeqId !== undefined && residue.authSeqId === authSeqId);
     if (match) selection.add(match.index);
   });
-  // console.debug('readSelectionResidues selection', selection);
   return uniqueSortedNumbers([...selection]);
 }
 
@@ -479,7 +478,6 @@ interface MolstarPanelProps {
 }
 
 export function MolstarPanel(props: MolstarPanelProps) {
-  const instanceIdRef = useRef(Math.random().toString(36).slice(2, 8));
   const shellRef = useRef<HTMLDivElement>(null);
   const sequenceHostRef = useRef<HTMLDivElement>(null);
   const viewportHostRef = useRef<HTMLDivElement>(null);
@@ -494,8 +492,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const nativeViewerStateDownloadReadyRef = useRef(props.onNativeViewerStateDownloadReady);
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
-  const selectionModeRef = useRef(false);
-  const announcedSelectionModeRef = useRef(false);
   const selectionModeCallbacksReadyRef = useRef(false);
   const pendingSelectionModeRef = useRef<boolean | null>(null);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
@@ -533,7 +529,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
     viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
     enabled: boolean,
   ) => {
-    selectionModeRef.current = enabled;
     viewer.selectionMode = enabled;
     const selectionModeBehavior = viewer.plugin?.behaviors?.interaction?.selectionMode as {
       next?: (value: boolean) => void;
@@ -543,16 +538,12 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
   const emitSelectionModeChange = (enabled: boolean) => {
     if (!selectionModeCallbacksReadyRef.current) {
-      if (enabled === false && pendingSelectionModeRef.current === true) {
-        console.debug('[MolstarSelectionModeQueuedIgnored]', { enabled, pending: pendingSelectionModeRef.current });
-        return;
+      if (enabled || pendingSelectionModeRef.current === null) {
+        pendingSelectionModeRef.current = enabled;
       }
-      pendingSelectionModeRef.current = enabled;
-      console.debug('[MolstarSelectionModeQueued]', { enabled });
       return;
     }
     pendingSelectionModeRef.current = null;
-    announcedSelectionModeRef.current = enabled;
     selectionModeCallbackRef.current?.(enabled);
   };
 
@@ -583,11 +574,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
       if (!sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
       const { PDBeMolstarPlugin } = await import('pdbe-molstar/lib/viewer.js');
       if (cancelled || !sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
-      console.debug('[MolstarMount]', {
-        instanceId: instanceIdRef.current,
-        artifactId: props.bundle.structure.fileName,
-        structureFormat: props.bundle.structure.format,
-      });
       selectionModeCallbacksReadyRef.current = false;
 
       sequenceHostRef.current.innerHTML = '';
@@ -642,17 +628,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
         if (disposed) return;
         if (!viewerRef.current) return;
-        selectionModeRef.current = enabled;
-        console.debug('[MolstarSelectionModeEvent]', {
-          instanceId: instanceIdRef.current,
-          artifactId: props.bundle.structure.fileName,
-          enabled,
-          announcedSelectionMode: announcedSelectionModeRef.current,
-          ready: selectionModeCallbacksReadyRef.current,
-        });
-        if (announcedSelectionModeRef.current !== enabled) {
-          emitSelectionModeChange(enabled);
-        }
+        emitSelectionModeChange(enabled);
         if (!selectionModeCallbacksReadyRef.current) {
           return;
         }
@@ -669,17 +645,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         scheduleViewerStatePersist(viewerRef.current);
       });
       selectionModeCallbacksReadyRef.current = true;
-      console.debug('[MolstarSelectionModeReady]', {
-        instanceId: instanceIdRef.current,
-        artifactId: props.bundle.structure.fileName,
-        queuedSelectionMode: pendingSelectionModeRef.current,
-        liveSelectionMode: viewerRef.current.selectionMode,
-        announcedSelectionMode: announcedSelectionModeRef.current,
-      });
-      const queuedSelectionMode = pendingSelectionModeRef.current ?? viewerRef.current.selectionMode;
-      if (queuedSelectionMode !== announcedSelectionModeRef.current) {
-        emitSelectionModeChange(queuedSelectionMode);
-      }
+      emitSelectionModeChange(pendingSelectionModeRef.current ?? viewerRef.current.selectionMode ?? false);
       const sequenceHeightObserver =
         typeof ResizeObserver === 'undefined'
           ? null
@@ -706,16 +672,16 @@ export function MolstarPanel(props: MolstarPanelProps) {
         }
         await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       }
-      await applyDefaultColorsDeferred(viewerRef.current, props);  // super important that this one is deferred!
+      await applyDefaultColorsDeferred(viewerRef.current, props);
       applySelectionModeToViewer(viewerRef.current, props.selectionModeEnabled);
       if (pendingSelectionModeRef.current === null) {
         pendingSelectionModeRef.current = props.selectionModeEnabled;
       }
-      if (!selectionModeRef.current) {
+      if (!viewerRef.current.selectionMode) {
         lastAppliedSelectionRef.current = [];
         await viewerRef.current.visual.clearSelection();
       }
-      if (selectionModeRef.current && selectedResiduesRef.current !== null) {
+      if (viewerRef.current.selectionMode && selectedResiduesRef.current !== null) {
         lastAppliedSelectionRef.current = [...selectedResiduesRef.current];
         await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, {
           force: true,
@@ -734,19 +700,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (!viewerRef.current) return;
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
         const previous = selectedResiduesRef.current ?? [];
-        const structure = getCurrentStructure(viewerRef.current);
-        const nativeSelection = structure ? viewerRef.current.plugin?.managers?.structure?.selection?.getLoci(structure) : null;
         const liveSelectionMode = viewerRef.current.selectionMode;
-        if (selectionModeRef.current !== liveSelectionMode) {
-          selectionModeRef.current = liveSelectionMode;
-        }
-        console.debug('[MolstarSelectionChanged]', {
-          nativeSelection,
-          indices,
-          previous,
-          selectionMode: liveSelectionMode,
-          lastAppliedSelection: lastAppliedSelectionRef.current,
-        });
         if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
           // it's the same selection as before
           return;
@@ -760,13 +714,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
           lastAppliedSelectionRef.current = null;
           return;
         }
-        if (announcedSelectionModeRef.current !== liveSelectionMode) {
-          console.debug('[MolstarSelectionModeRecovered]', {
-            liveSelectionMode,
-            announcedSelectionMode: announcedSelectionModeRef.current,
-          });
-          emitSelectionModeChange(liveSelectionMode);
-        }
         if (!liveSelectionMode) {
           // Turning selection mode off triggers transient Mol* selection events while the viewer clears its native
           // highlight. Those are not user edits, so keep the last authoritative draft intact.
@@ -774,7 +721,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         }
 
         selectionCallbackRef.current?.(indices);
-        if (selectionModeRef.current) {
+        if (liveSelectionMode) {
           scheduleViewerStatePersist(viewerRef.current);
         }
       });
@@ -789,9 +736,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
         scheduleViewerStatePersist(viewerRef.current);
       });
 
-      // can comment out these three lines without damage
       const initialSelection = await readSelectionResidues(viewerRef.current, props.bundle.residues);
-      if (selectionModeRef.current && initialSelection.length > 0) {
+      if (viewerRef.current.selectionMode && initialSelection.length > 0) {
         selectionCallbackRef.current?.(initialSelection);
       }
       const initialFocus = await readFocusResidues(viewerRef.current, props.bundle.residues);
@@ -799,10 +745,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       return () => {
         disposed = true;
-        console.debug('[MolstarCleanup]', {
-          instanceId: instanceIdRef.current,
-          artifactId: props.bundle.structure.fileName,
-        });
         selectionModeCallbacksReadyRef.current = false;
         nativeViewerStateDownloadReadyRef.current?.(null);
         if (persistTimeoutRef.current !== null) {
@@ -841,7 +783,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
   useEffect(() => {
     if (!viewerRef.current) return;
-    // console.log('hoveredResidues / residues -- linked to pAE?', hoveredResidues, ' is position-in-seq');
     const queries = residueIndicesToQueries(props.bundle.residues, hoveredResidues);
     if (queries.length === 0) {
       void viewerRef.current.visual.clearHighlight();
@@ -858,20 +799,13 @@ export function MolstarPanel(props: MolstarPanelProps) {
       applySelectionModeToViewer(viewer, props.selectionModeEnabled);
     }
 
-    if (props.selectedResidues === null) return; // || !selectionModeRef.current would return too often
+    if (props.selectedResidues === null) return;
     if (!props.selectionModeEnabled) {
       lastAppliedSelectionRef.current = [];
       void viewer.visual.clearSelection();
       return;
     }
 
-    console.debug('[MolstarSelectionReplay]', {
-      structureFile: props.bundle.structure.fileName,
-      format: props.bundle.structure.format,
-      selectedResidues: props.selectedResidues,
-      selectionSyncNonce: props.selectionSyncNonce,
-      draftFocused: props.draftFocused,
-    });
     lastAppliedSelectionRef.current = [...props.selectedResidues];
     void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues, {
       includeLabelSeqId: props.bundle.structure.format !== 'pdb',
@@ -916,7 +850,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
       void (async () => {
         await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
         await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
-        // console.log('pinnedCell')
         await viewer.visual.interactivityFocus({ data: residueIndicesToQueries(props.bundle.residues, props.pinnedResidues) });
         await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
       })();

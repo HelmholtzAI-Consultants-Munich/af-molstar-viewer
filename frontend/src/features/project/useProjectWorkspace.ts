@@ -54,10 +54,6 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
-function debugLiveSelectionDraft(...args: unknown[]) {
-  console.debug('[LiveSelectionDraft]', ...args);
-}
-
 function omitKey<T>(record: Record<string, T>, keyToOmit: string) {
   const { [keyToOmit]: _omitted, ...rest } = record;
   return rest;
@@ -175,7 +171,6 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     if (!value && selectedTargetIdRef.current !== targetId) {
       return;
     }
-    console.log('saveSelectionEnabledByArtifact', targetId, value, selectedTargetIdRef.current);
     setSelectionEnabledByArtifact((current) => ({
       ...current,
       [targetId]: value,
@@ -184,13 +179,6 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   };
 
   const triggerSelectionSync = () => {
-    console.debug('[MolstarSelectionState]', {
-      selectedTargetId: selectedTargetIdRef.current,
-      selectionEnabled,
-      selectionIndices,
-      selectionDisplayString,
-      hasActiveSelection,
-    });
     setSelectionSyncNonce((current) => current + 1);
   };
 
@@ -459,12 +447,6 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
 
   const onDraftChange = (value: string) => {
     liveSelectionDraftRef.current = value;
-    if (selectedTarget) {
-      debugLiveSelectionDraft('draft input changed', {
-        targetId: selectedTarget.id,
-        liveSelectionDraft: value,
-      });
-    }
   };
 
   const onDraftBlur = (value: string) => {
@@ -560,16 +542,6 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     if (!selectedTarget || !selectedArtifact) return;
     const targetId = selectedTarget.id;
     const resolvedMatch = indicesAndResiduesToMatch(indices, selectedArtifact.bundle.residues);
-    console.debug('[WorkspaceSelectionUpdate]', {
-      targetId,
-      targetName: selectedTarget.name,
-      provenance: selectedTarget.provenance,
-      structureFile: selectedArtifact.bundle.structure.fileName,
-      format: selectedArtifact.bundle.structure.format,
-      indices,
-      canonical: resolvedMatch.canonical,
-      authSeqIds: resolvedMatch.authSeqIds,
-    });
     saveDraftByArtifact(targetId, resolvedMatch.canonical);
     saveMatchByArtifact(targetId, resolvedMatch);
   };
