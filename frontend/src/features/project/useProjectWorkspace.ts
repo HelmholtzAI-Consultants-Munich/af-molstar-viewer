@@ -453,7 +453,8 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
 
   const onDraftFocus = () => {
     setDraftFocused(true);
-    if (selectedTarget) saveSelectionEnabledByArtifact(selectedTarget.id, true);
+    const targetId = selectedTargetIdRef.current;
+    if (targetId) saveSelectionEnabledByArtifact(targetId, true);
   };
 
   const onDraftChange = (value: string) => {
@@ -574,8 +575,9 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   };
 
   const onSelectionModeChange = (enabled: boolean) => {
-    if (!selectedTarget) return;
-    saveSelectionEnabledByArtifact(selectedTarget.id, enabled);
+    const targetId = selectedTargetIdRef.current;
+    if (!targetId) return;
+    saveSelectionEnabledByArtifact(targetId, enabled);
   };
 
   const onFocusIndicesChange = (indices: number[]) => {

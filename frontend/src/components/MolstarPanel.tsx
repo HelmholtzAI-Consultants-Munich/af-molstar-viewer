@@ -138,6 +138,9 @@ async function applyDefaultStructureTheme(
     for (const component of structure.components) {
       for (const representation of component.representations) {
         hasRepresentations = true;
+        if (!representation.cell) {
+          continue;
+        }
         update.to(representation.cell).update((old: any) => {
           if (!old.colorTheme || old.colorTheme.name !== themeName) {
             old.colorTheme = { name: themeName, params: {} };
@@ -476,6 +479,7 @@ interface MolstarPanelProps {
 }
 
 export function MolstarPanel(props: MolstarPanelProps) {
+  const instanceIdRef = useRef(Math.random().toString(36).slice(2, 8));
   const shellRef = useRef<HTMLDivElement>(null);
   const sequenceHostRef = useRef<HTMLDivElement>(null);
   const viewportHostRef = useRef<HTMLDivElement>(null);
@@ -491,7 +495,9 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const selectedResiduesRef = useRef(props.selectedResidues);
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
+  const announcedSelectionModeRef = useRef(false);
   const selectionModeCallbacksReadyRef = useRef(false);
+  const pendingSelectionModeRef = useRef<boolean | null>(null);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -535,6 +541,21 @@ export function MolstarPanel(props: MolstarPanelProps) {
     selectionModeBehavior?.next?.(enabled);
   };
 
+  const emitSelectionModeChange = (enabled: boolean) => {
+    if (!selectionModeCallbacksReadyRef.current) {
+      if (enabled === false && pendingSelectionModeRef.current === true) {
+        console.debug('[MolstarSelectionModeQueuedIgnored]', { enabled, pending: pendingSelectionModeRef.current });
+        return;
+      }
+      pendingSelectionModeRef.current = enabled;
+      console.debug('[MolstarSelectionModeQueued]', { enabled });
+      return;
+    }
+    pendingSelectionModeRef.current = null;
+    announcedSelectionModeRef.current = enabled;
+    selectionModeCallbackRef.current?.(enabled);
+  };
+
   useEffect(() => {
     let cancelled = false;
     let disposed = false;
@@ -562,6 +583,11 @@ export function MolstarPanel(props: MolstarPanelProps) {
       if (!sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
       const { PDBeMolstarPlugin } = await import('pdbe-molstar/lib/viewer.js');
       if (cancelled || !sequenceHostRef.current || !viewportHostRef.current || !shellRef.current) return;
+      console.debug('[MolstarMount]', {
+        instanceId: instanceIdRef.current,
+        artifactId: props.bundle.structure.fileName,
+        structureFormat: props.bundle.structure.format,
+      });
       selectionModeCallbacksReadyRef.current = false;
 
       sequenceHostRef.current.innerHTML = '';
@@ -613,6 +639,47 @@ export function MolstarPanel(props: MolstarPanelProps) {
           ...MOLSTAR_RENDER_OPTIONS,
         },
       );
+      const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
+        if (disposed) return;
+        if (!viewerRef.current) return;
+        selectionModeRef.current = enabled;
+        console.debug('[MolstarSelectionModeEvent]', {
+          instanceId: instanceIdRef.current,
+          artifactId: props.bundle.structure.fileName,
+          enabled,
+          announcedSelectionMode: announcedSelectionModeRef.current,
+          ready: selectionModeCallbacksReadyRef.current,
+        });
+        if (announcedSelectionModeRef.current !== enabled) {
+          emitSelectionModeChange(enabled);
+        }
+        if (!selectionModeCallbacksReadyRef.current) {
+          return;
+        }
+        if (enabled && selectedResiduesRef.current !== null) {
+          lastAppliedSelectionRef.current = [...selectedResiduesRef.current];
+          await syncNativeSelection(viewerRef.current!, props.bundle.residues, selectedResiduesRef.current, {
+            force: true,
+            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+          });
+        } else if (!enabled) {
+          lastAppliedSelectionRef.current = [];
+          await viewerRef.current!.visual.clearSelection();
+        }
+        scheduleViewerStatePersist(viewerRef.current);
+      });
+      selectionModeCallbacksReadyRef.current = true;
+      console.debug('[MolstarSelectionModeReady]', {
+        instanceId: instanceIdRef.current,
+        artifactId: props.bundle.structure.fileName,
+        queuedSelectionMode: pendingSelectionModeRef.current,
+        liveSelectionMode: viewerRef.current.selectionMode,
+        announcedSelectionMode: announcedSelectionModeRef.current,
+      });
+      const queuedSelectionMode = pendingSelectionModeRef.current ?? viewerRef.current.selectionMode;
+      if (queuedSelectionMode !== announcedSelectionModeRef.current) {
+        emitSelectionModeChange(queuedSelectionMode);
+      }
       const sequenceHeightObserver =
         typeof ResizeObserver === 'undefined'
           ? null
@@ -639,8 +706,11 @@ export function MolstarPanel(props: MolstarPanelProps) {
         }
         await setStructureFocusComponents(viewerRef.current, TARGET_ONLY_FOCUS_COMPONENTS);
       }
-      await applyDefaultColors(viewerRef.current, props);
+      await applyDefaultColorsDeferred(viewerRef.current, props);  // super important that this one is deferred!
       applySelectionModeToViewer(viewerRef.current, props.selectionModeEnabled);
+      if (pendingSelectionModeRef.current === null) {
+        pendingSelectionModeRef.current = props.selectionModeEnabled;
+      }
       if (!selectionModeRef.current) {
         lastAppliedSelectionRef.current = [];
         await viewerRef.current.visual.clearSelection();
@@ -658,7 +728,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
         });
       }
       await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-      selectionModeCallbacksReadyRef.current = true;
 
       const selectionSubscription = viewerRef.current.plugin?.managers?.structure?.selection?.events?.changed?.subscribe(async () => {
         if (disposed) return;
@@ -667,11 +736,15 @@ export function MolstarPanel(props: MolstarPanelProps) {
         const previous = selectedResiduesRef.current ?? [];
         const structure = getCurrentStructure(viewerRef.current);
         const nativeSelection = structure ? viewerRef.current.plugin?.managers?.structure?.selection?.getLoci(structure) : null;
+        const liveSelectionMode = viewerRef.current.selectionMode;
+        if (selectionModeRef.current !== liveSelectionMode) {
+          selectionModeRef.current = liveSelectionMode;
+        }
         console.debug('[MolstarSelectionChanged]', {
           nativeSelection,
           indices,
           previous,
-          selectionMode: selectionModeRef.current,
+          selectionMode: liveSelectionMode,
           lastAppliedSelection: lastAppliedSelectionRef.current,
         });
         if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
@@ -687,13 +760,20 @@ export function MolstarPanel(props: MolstarPanelProps) {
           lastAppliedSelectionRef.current = null;
           return;
         }
-        if (!selectionModeRef.current) {
+        if (announcedSelectionModeRef.current !== liveSelectionMode) {
+          console.debug('[MolstarSelectionModeRecovered]', {
+            liveSelectionMode,
+            announcedSelectionMode: announcedSelectionModeRef.current,
+          });
+          emitSelectionModeChange(liveSelectionMode);
+        }
+        if (!liveSelectionMode) {
           // Turning selection mode off triggers transient Mol* selection events while the viewer clears its native
           // highlight. Those are not user edits, so keep the last authoritative draft intact.
           return;
         }
 
-        selectionCallbackRef.current?.(indices);  // bad! This causes selections to immediately collapse for derived PDBs. If I comment the line, cropping no longer works. 
+        selectionCallbackRef.current?.(indices);
         if (selectionModeRef.current) {
           scheduleViewerStatePersist(viewerRef.current);
         }
@@ -703,26 +783,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (!viewerRef.current) return;
         const indices = await readFocusResidues(viewerRef.current, props.bundle.residues);
         focusCallbackRef.current?.(indices);
-        scheduleViewerStatePersist(viewerRef.current);
-      });
-      const selectionModeSubscription = viewerRef.current.plugin?.behaviors?.interaction?.selectionMode?.subscribe(async (enabled: boolean) => {
-        if (disposed) return;
-        if (!viewerRef.current) return;
-        const now = performance.now();
-        selectionModeRef.current = enabled;
-        if (selectionModeCallbacksReadyRef.current) {
-          selectionModeCallbackRef.current?.(enabled);
-        }
-        if (enabled && selectedResiduesRef.current !== null) {
-          lastAppliedSelectionRef.current = [...selectedResiduesRef.current];
-          await syncNativeSelection(viewerRef.current!, props.bundle.residues, selectedResiduesRef.current, {
-            force: true,
-            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
-          });
-        } else if (!enabled) {
-          lastAppliedSelectionRef.current = [];
-          await viewerRef.current!.visual.clearSelection();
-        }
         scheduleViewerStatePersist(viewerRef.current);
       });
       const cameraSubscription = viewerRef.current.plugin?.canvas3d?.camera?.stateChanged?.subscribe(() => {
@@ -739,6 +799,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
       return () => {
         disposed = true;
+        console.debug('[MolstarCleanup]', {
+          instanceId: instanceIdRef.current,
+          artifactId: props.bundle.structure.fileName,
+        });
         selectionModeCallbacksReadyRef.current = false;
         nativeViewerStateDownloadReadyRef.current?.(null);
         if (persistTimeoutRef.current !== null) {
