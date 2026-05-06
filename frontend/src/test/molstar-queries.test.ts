@@ -19,6 +19,20 @@ describe('molstar queries', () => {
     ]);
   });
 
+  it('can omit label residue ranges for PDB replay', () => {
+    const bundle = createToyBundle();
+
+    const queries = residueIndicesToQueries(bundle.residues, [0, 1], { includeLabelSeqId: false });
+
+    expect(queries).toEqual([
+      {
+        label_asym_id: 'A',
+        beg_auth_seq_id: 1,
+        end_auth_seq_id: 2,
+      },
+    ]);
+  });
+
   it('prefers residueNumber over seq_id when mapping Mol* hover/click events', () => {
     const residues = [
       {

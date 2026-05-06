@@ -383,6 +383,15 @@ class LocalFixtureProjectApi implements ProjectApi {
         url: file.url,
       })),
     };
+    console.debug('[DerivedTargetCreated]', {
+      sourceTargetId: sourceTarget.id,
+      sourceTargetName: sourceTarget.name,
+      sourceChains: sourceTarget.chain_ids,
+      derivedTargetId: targetId,
+      derivedName: name,
+      derivedChains: target.chain_ids,
+      sourceFiles: sourceArtifact.files.map((file) => file.name),
+    });
     return { target, viewerArtifactSource };
   }
 
@@ -556,6 +565,14 @@ function createUploadedTarget(files: WorkerInputFile[], targetId: string): { tar
       text: file.text,
     })),
   };
+  console.debug('[UploadedTargetCreated]', {
+    targetId,
+    name: bundle.name,
+    structureFile: bundle.structure.fileName,
+    format: bundle.structure.format,
+    residueCount: bundle.residues.length,
+    chainIds: bundle.chains.map((chain) => chain.chainId),
+  });
   return { target, viewerArtifactSource };
 }
 

@@ -315,16 +315,21 @@ async function selectionLociFromResidues(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
   indices: number[],
+  options?: { includeLabelSeqId?: boolean },
 ) {
   const structure = getCurrentStructure(viewer);
   if (!structure) return null;
   const { QueryHelper } = await import('pdbe-molstar/lib/helpers.js');
-  const queries = residueIndicesToQueries(residues, indices)
+  const queries = residueIndicesToQueries(residues, indices, {
+    includeLabelSeqId: options?.includeLabelSeqId ?? true,
+  });
   const loci = QueryHelper.getInteractivityLoci(queries, structure);
-  // console.debug('selectionLociFromResidues indices', indices, 
-  //   'became queries', canonicalizeQueries(queries), 
-  //   'and returned loci', loci.elements);
-  // looks good!
+  console.debug('[MolstarReplayQuery]', {
+    includeLabelSeqId: options?.includeLabelSeqId ?? true,
+    indices,
+    queries,
+    lociElementCount: Array.isArray((loci as any)?.elements) ? (loci as any).elements.length : null,
+  });
   return loci;
 }
 
@@ -373,14 +378,16 @@ async function syncNativeSelection(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
   indices: number[],
-  options?: { force?: boolean },
+  options?: { force?: boolean; includeLabelSeqId?: boolean },
 ) {
   const structure = getCurrentStructure(viewer);
   if (!structure || !viewer.plugin?.managers?.structure?.selection) return;
 
   const [{ StructureElement }, nextLoci] = await Promise.all([
     import('molstar/lib/mol-model/structure.js'),
-    selectionLociFromResidues(viewer, residues, indices),
+    selectionLociFromResidues(viewer, residues, indices, {
+      includeLabelSeqId: options?.includeLabelSeqId ?? true,
+    }),
   ]);
 
   if (!nextLoci) return;
@@ -399,6 +406,7 @@ async function syncNativeFocus(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
   indices: number[],
+  options?: { includeLabelSeqId?: boolean },
 ) {
   if (!viewer.plugin?.managers?.structure?.focus) return;
   if (indices.length === 0) {
@@ -406,7 +414,9 @@ async function syncNativeFocus(
     return;
   }
 
-  const loci = await selectionLociFromResidues(viewer, residues, indices);
+  const loci = await selectionLociFromResidues(viewer, residues, indices, {
+    includeLabelSeqId: options?.includeLabelSeqId ?? true,
+  });
   if (!loci) return;
   viewer.plugin.managers.structure.focus.setFromLoci(loci);
 }
@@ -482,7 +492,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const focusedResiduesRef = useRef(props.focusedResidues);
   const selectionModeRef = useRef(false);
   const selectionModeCallbacksReadyRef = useRef(false);
-  const suppressSelectionCallbacksDepthRef = useRef(0);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -524,15 +533,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
       next?: (value: boolean) => void;
     } | null | undefined;
     selectionModeBehavior?.next?.(enabled);
-  };
-
-  const suppressSelectionCallbacks = async (action: () => Promise<void> | void) => {
-    suppressSelectionCallbacksDepthRef.current += 1;
-    try {
-      await action();
-    } finally {
-      suppressSelectionCallbacksDepthRef.current = Math.max(0, suppressSelectionCallbacksDepthRef.current - 1);
-    }
   };
 
   useEffect(() => {
@@ -642,13 +642,20 @@ export function MolstarPanel(props: MolstarPanelProps) {
       await applyDefaultColors(viewerRef.current, props);
       applySelectionModeToViewer(viewerRef.current, props.selectionModeEnabled);
       if (!selectionModeRef.current) {
+        lastAppliedSelectionRef.current = [];
         await viewerRef.current.visual.clearSelection();
       }
       if (selectionModeRef.current && selectedResiduesRef.current !== null) {
-        await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, { force: true });
+        lastAppliedSelectionRef.current = [...selectedResiduesRef.current];
+        await syncNativeSelection(viewerRef.current, props.bundle.residues, selectedResiduesRef.current, {
+          force: true,
+          includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+        });
       }
       if (focusedResiduesRef.current !== null) {
-        await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current);
+        await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current, {
+          includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+        });
       }
       await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
       selectionModeCallbacksReadyRef.current = true;
@@ -658,12 +665,26 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (!viewerRef.current) return;
         const indices = await readSelectionResidues(viewerRef.current, props.bundle.residues);
         const previous = selectedResiduesRef.current ?? [];
-        // console.log('molstar selection has', indices.length, 'while previous had', previous.length); // Here I can often see the selection shrinking; looping in step sizes such as 19 or 5 until the selection has disappeared in the blink of an eye.
+        const structure = getCurrentStructure(viewerRef.current);
+        const nativeSelection = structure ? viewerRef.current.plugin?.managers?.structure?.selection?.getLoci(structure) : null;
+        console.debug('[MolstarSelectionChanged]', {
+          nativeSelection,
+          indices,
+          previous,
+          selectionMode: selectionModeRef.current,
+          lastAppliedSelection: lastAppliedSelectionRef.current,
+        });
         if (previous.length === indices.length && previous.every((value, index) => value === indices[index])) {
           // it's the same selection as before
           return;
         }
-        if (suppressSelectionCallbacksDepthRef.current > 0) {
+        const expectedSelection = lastAppliedSelectionRef.current;
+        if (
+          expectedSelection !== null &&
+          expectedSelection.length === indices.length &&
+          expectedSelection.every((value, index) => value === indices[index])
+        ) {
+          lastAppliedSelectionRef.current = null;
           return;
         }
         if (!selectionModeRef.current) {
@@ -693,11 +714,14 @@ export function MolstarPanel(props: MolstarPanelProps) {
           selectionModeCallbackRef.current?.(enabled);
         }
         if (enabled && selectedResiduesRef.current !== null) {
-          await suppressSelectionCallbacks(() =>
-            syncNativeSelection(viewerRef.current!, props.bundle.residues, selectedResiduesRef.current, { force: true }),
-          );
+          lastAppliedSelectionRef.current = [...selectedResiduesRef.current];
+          await syncNativeSelection(viewerRef.current!, props.bundle.residues, selectedResiduesRef.current, {
+            force: true,
+            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+          });
         } else if (!enabled) {
-          await suppressSelectionCallbacks(() => viewerRef.current!.visual.clearSelection());
+          lastAppliedSelectionRef.current = [];
+          await viewerRef.current!.visual.clearSelection();
         }
         scheduleViewerStatePersist(viewerRef.current);
       });
@@ -772,11 +796,22 @@ export function MolstarPanel(props: MolstarPanelProps) {
 
     if (props.selectedResidues === null) return; // || !selectionModeRef.current would return too often
     if (!props.selectionModeEnabled) {
-      void suppressSelectionCallbacks(() => viewer.visual.clearSelection());
+      lastAppliedSelectionRef.current = [];
+      void viewer.visual.clearSelection();
       return;
     }
 
-    void suppressSelectionCallbacks(() => syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues));
+    console.debug('[MolstarSelectionReplay]', {
+      structureFile: props.bundle.structure.fileName,
+      format: props.bundle.structure.format,
+      selectedResidues: props.selectedResidues,
+      selectionSyncNonce: props.selectionSyncNonce,
+      draftFocused: props.draftFocused,
+    });
+    lastAppliedSelectionRef.current = [...props.selectedResidues];
+    void syncNativeSelection(viewer, props.bundle.residues, props.selectedResidues, {
+      includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+    });
   }, [props.bundle.residues, props.selectedResidues, props.selectionSyncNonce, props.draftFocused, props.selectionModeEnabled]);
 
   useEffect(() => {
@@ -799,10 +834,15 @@ export function MolstarPanel(props: MolstarPanelProps) {
         await viewer.visual.clearSelection();
         await applyDefaultColors(viewer, props);
         if (selectedResiduesRef.current !== null) {
-          await syncNativeSelection(viewer, props.bundle.residues, selectedResiduesRef.current, { force: true });
+          await syncNativeSelection(viewer, props.bundle.residues, selectedResiduesRef.current, {
+            force: true,
+            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+          });
         }
         if (focusedResiduesRef.current !== null) {
-          await syncNativeFocus(viewer, props.bundle.residues, focusedResiduesRef.current);
+          await syncNativeFocus(viewer, props.bundle.residues, focusedResiduesRef.current, {
+            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+          });
         }
       })();
       return;

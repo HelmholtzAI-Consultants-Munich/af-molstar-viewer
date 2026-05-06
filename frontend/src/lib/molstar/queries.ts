@@ -26,10 +26,11 @@ export function canonicalizeQueries(queries: MolstarResidueSelection[]) : string
 export function residueIndicesToQueries(
   residues: PolymerResidue[],
   indices: number[],
-  options: { focus?: boolean; colorNull?: boolean } = {},
+  options: { focus?: boolean; colorNull?: boolean; includeLabelSeqId?: boolean } = {},
 ): MolstarResidueSelection[] {
   const unique = uniqueSortedNumbers(indices);
   if (unique.length === 0) return [];
+  const includeLabelSeqId = options.includeLabelSeqId ?? true;
 
   const queries: MolstarResidueSelection[] = [];
   let startResidue = residues[unique[0]];
@@ -47,8 +48,12 @@ export function residueIndicesToQueries(
     }
     queries.push({
       label_asym_id: startResidue.chainId,
-      beg_label_seq_id: startResidue.labelSeqId,
-      end_label_seq_id: previousResidue.labelSeqId,
+      ...(includeLabelSeqId
+        ? {
+            beg_label_seq_id: startResidue.labelSeqId,
+            end_label_seq_id: previousResidue.labelSeqId,
+          }
+        : {}),
       beg_auth_seq_id: startResidue.authSeqId,
       end_auth_seq_id: previousResidue.authSeqId,
       ...(options.colorNull ? { color: null } : {}),
@@ -60,8 +65,12 @@ export function residueIndicesToQueries(
 
   queries.push({
     label_asym_id: startResidue.chainId,
-    beg_label_seq_id: startResidue.labelSeqId,
-    end_label_seq_id: previousResidue.labelSeqId,
+    ...(includeLabelSeqId
+      ? {
+          beg_label_seq_id: startResidue.labelSeqId,
+          end_label_seq_id: previousResidue.labelSeqId,
+        }
+      : {}),
     beg_auth_seq_id: startResidue.authSeqId,
     end_auth_seq_id: previousResidue.authSeqId,
     ...(options.colorNull ? { color: null } : {}),

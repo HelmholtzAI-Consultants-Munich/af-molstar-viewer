@@ -146,7 +146,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     return canonical ? `Focus: ${canonical}` : '';
   })();
 
-  const selectionDraft = selectedTarget ? (draftByArtifact[selectedTarget.id] ?? selectedTarget.selection ?? '') : '';
+  const selectionDraft = selectedTarget ? (draftByArtifact[selectedTarget.id] ?? '') : '';
   const match = selectedTarget ? matchByArtifact[selectedTarget.id] : null;
   const selectionIndices = match ? match.residueIndices : null;
   const selectionEnabled = selectedTarget ? (selectionEnabledByArtifact[selectedTarget.id] ?? false) : false;
@@ -175,13 +175,22 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     if (!value && selectedTargetIdRef.current !== targetId) {
       return;
     }
+    console.log('saveSelectionEnabledByArtifact', targetId, value, selectedTargetIdRef.current);
     setSelectionEnabledByArtifact((current) => ({
       ...current,
       [targetId]: value,
     }));
+    triggerSelectionSync();
   };
 
   const triggerSelectionSync = () => {
+    console.debug('[MolstarSelectionState]', {
+      selectedTargetId: selectedTargetIdRef.current,
+      selectionEnabled,
+      selectionIndices,
+      selectionDisplayString,
+      hasActiveSelection,
+    });
     setSelectionSyncNonce((current) => current + 1);
   };
 
@@ -215,9 +224,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
         setProject(nextProject);
         const preferredTarget = nextProject.targets[0] ?? null;
         setSelectedTargetId(preferredTarget?.id ?? null);
-        setDraftByArtifact(
-          Object.fromEntries(nextProject.targets.map((target) => [target.id, target.selection])),
-        );
+        setDraftByArtifact(Object.fromEntries(nextProject.targets.map((target) => [target.id, ''])));
         setMatchByArtifact(
           Object.fromEntries(nextProject.targets.map((target) => [target.id, null])),
         );
@@ -242,7 +249,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     if (!project) return;
     setDraftByArtifact((current) => {
       const next = Object.fromEntries(
-        project.targets.map((target) => [target.id, current[target.id] ?? target.selection]),
+        project.targets.map((target) => [target.id, current[target.id] ?? '']),
       );
       const same =
         Object.keys(next).length === Object.keys(current).length &&
@@ -377,7 +384,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       setProject(result.project);
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
-      saveDraftByArtifact(result.target.id, result.target.selection);
+      saveDraftByArtifact(result.target.id, '');
       saveMatchByArtifact(result.target.id, null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload target');
@@ -406,7 +413,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       setProject(result.project);
       setSelectedTargetId(result.target.id);
       setCompareValidationIds([]);
-      saveDraftByArtifact(result.target.id, result.target.selection);
+      saveDraftByArtifact(result.target.id, '');
       saveMatchByArtifact(result.target.id, null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load example');
@@ -552,6 +559,16 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     if (!selectedTarget || !selectedArtifact) return;
     const targetId = selectedTarget.id;
     const resolvedMatch = indicesAndResiduesToMatch(indices, selectedArtifact.bundle.residues);
+    console.debug('[WorkspaceSelectionUpdate]', {
+      targetId,
+      targetName: selectedTarget.name,
+      provenance: selectedTarget.provenance,
+      structureFile: selectedArtifact.bundle.structure.fileName,
+      format: selectedArtifact.bundle.structure.format,
+      indices,
+      canonical: resolvedMatch.canonical,
+      authSeqIds: resolvedMatch.authSeqIds,
+    });
     saveDraftByArtifact(targetId, resolvedMatch.canonical);
     saveMatchByArtifact(targetId, resolvedMatch);
   };

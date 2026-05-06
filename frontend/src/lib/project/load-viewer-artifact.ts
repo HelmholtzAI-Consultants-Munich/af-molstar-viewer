@@ -27,6 +27,14 @@ export async function loadViewerArtifact(source: ViewerArtifactSource): Promise<
   if (!structureText) {
     throw new Error(`Missing structure text for ${bundle.structure.fileName}`);
   }
+  console.debug('[ViewerArtifactLoaded]', {
+    artifactId: source.artifact_id,
+    label: source.label,
+    structureFile: bundle.structure.fileName,
+    format: bundle.structure.format,
+    residueCount: bundle.residues.length,
+    chainIds: bundle.chains.map((chain) => chain.chainId),
+  });
   return {
     artifactId: source.artifact_id,
     label: source.label,
