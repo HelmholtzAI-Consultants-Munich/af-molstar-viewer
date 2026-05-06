@@ -52,6 +52,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         focusDisplayString={props.focusDisplayString}
         selectionDisplayString={props.selectionDisplayString}
         hasActiveSelection={props.hasActiveSelection}
+        selectionDraft={props.selectionDraft}
         busy={props.busy}
         onUploadTargetFiles={props.onUploadTargetFiles}
         onLoadExample={props.onLoadExample}
@@ -63,6 +64,9 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         onCutOffSelection={props.onCutOffSelection}
         onDownloadStructure={props.onDownloadStructure}
         onDownloadViewerState={props.onDownloadViewerState}
+        onDraftFocus={props.onDraftFocus}
+        onDraftChange={props.onDraftChange}
+        onDraftBlur={props.onDraftBlur}
       />
 
       <TargetInterfaceEditor
@@ -76,20 +80,20 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         onGenerateBinders={props.onGenerateBinders}
       />
 
-      <BinderList project={props.project} busy={props.busy} onValidateRefolding={props.onValidateRefolding} />
+      {/* <BinderList project={props.project} busy={props.busy} onValidateRefolding={props.onValidateRefolding} /> */}
 
-      <ValidationList
+      {/* <ValidationList
         project={props.project}
         compareValidationIds={props.compareValidationIds}
         busy={props.busy}
         canSaveViewerState={selectedTarget !== null}
         onSaveViewerState={props.onSaveViewerState}
         onToggleValidationCompare={props.onToggleValidationCompare}
-      />
+      /> */}
 
-      <JobList project={props.project} />
+      {/* <JobList project={props.project} /> */}
 
-      <SavedViewerStates project={props.project} />
+      {/* <SavedViewerStates project={props.project} /> */}
     </aside>
   );
 }

@@ -60,8 +60,8 @@ export function selectionDraftToChainRanges(input: string): ChainRange[] {
     .map((segment) => segment.trim())
     .filter(Boolean);
   if (segments.length === 0) {
-    throw new Error('Selection cannot be empty');
-    // return [];
+    // throw new Error('Selection cannot be empty');
+    return [];
   }
 
   // Parse each segment into a chain range, validating the format and semantics of each segment. 

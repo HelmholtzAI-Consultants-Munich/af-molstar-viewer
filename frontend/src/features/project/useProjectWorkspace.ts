@@ -609,6 +609,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     onSelectTarget,
     onToggleValidationCompare,
     onDraftFocus,
+    onDraftChange,
     onDraftBlur,
     onSaveInterface,
     onCropToSelection,

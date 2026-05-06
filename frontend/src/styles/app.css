@@ -81,6 +81,11 @@ input {
   min-width: 0;
 }
 
+.target-section-header {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .project-section-actions {
   display: flex;
   gap: 0.6rem;
@@ -284,6 +289,7 @@ input {
 .target-section-actions {
   flex-direction: column;
   align-items: flex-end;
+  justify-content: flex-start;
 }
 
 .target-primary-actions {
@@ -348,6 +354,7 @@ input {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .compact-list {
@@ -503,6 +510,24 @@ input {
 
 .control-select-prediction {
   grid-area: select-prediction;
+}
+
+
+hr {
+  border: none;
+  border-bottom: 1px dashed var(--button-border);
+  background: #fafafa;
+  color: #4f4f4f;
+}
+
+.tertiary-button {
+  border-radius: 3px;
+  padding: 0rem 0.5rem;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: #222;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
 .primary-button,

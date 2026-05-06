@@ -25,12 +25,10 @@ export function TargetInterfaceEditor(props: TargetInterfaceEditorProps) {
     <section className="panel project-section-panel">
       <div className="project-section-header">
         <h2>Target Interface</h2>
-        <button type="button" className="secondary-button" onClick={() => props.onSaveInterface(selectionDraft)} disabled={props.busy}>
-          Save
-        </button>
+
       </div>
       <label className="stacked-field">
-        <span>selection</span>
+        <span>input a / edit the selection</span>
         <input
           value={selectionDraft}
           onChange={(event) => {
@@ -44,6 +42,9 @@ export function TargetInterfaceEditor(props: TargetInterfaceEditorProps) {
         />
       </label>
       <div className="project-button-row">
+        <button type="button" className="secondary-button" onClick={() => props.onSaveInterface(selectionDraft)} disabled={props.busy}>
+          Save
+        </button>
         <button type="button" className="primary-button" onClick={() => props.onGenerateBinders(selectionDraft)} disabled={props.busy}>
           Generate binders
         </button>

@@ -1,6 +1,5 @@
-import type { ChangeEvent, DragEvent } from 'react';
-import { useRef, useState } from 'react';
-import { Crop, Scissors, Trash2, View, Save } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { Crop, Scissors, Trash2, View, Save, Upload } from 'lucide-react';
 import { EXAMPLES } from '../import/examples';
 import type { WorkspaceProject } from '../../domain/project';
 
@@ -10,6 +9,7 @@ interface TargetListProps {
   focusDisplayString: string;
   selectionDisplayString: string;
   hasActiveSelection: boolean;
+  selectionDraft: string;
   busy: boolean;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
   onLoadExample: (exampleId: string) => Promise<void>;
@@ -19,11 +19,20 @@ interface TargetListProps {
   onCutOffSelection: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
+  onDraftFocus?: () => void;
+  onDraftChange?: (value: string) => void;
+  onDraftBlur?: (value: string) => void;
 }
 
 export function TargetList(props: TargetListProps) {
   const targetInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingTargetFiles, setIsDraggingTargetFiles] = useState(false);
+  const selectedTarget = props.project.targets.find((target) => target.id === props.selectedTargetId) ?? null;
+  const [selectionDraft, setSelectionDraft] = useState(props.selectionDraft);
+
+  useEffect(() => {
+    setSelectionDraft(props.selectionDraft);
+  }, [props.selectionDraft]);
 
   const handleTargetFileInput = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? [...event.target.files] : [];
@@ -63,13 +72,19 @@ export function TargetList(props: TargetListProps) {
         <h2>Targets</h2>
         <div className="project-section-actions target-section-actions">
           <div className="target-primary-actions">
-            <button type="button" className="secondary-button" onClick={() => targetInputRef.current?.click()} disabled={props.busy}>
-              upload
+            <button type="button"
+              className="tertiary-button"
+              aria-label={"Upload a target"}
+              title={"Upload a target"}
+              onClick={() => targetInputRef.current?.click()} 
+              disabled={props.busy}>
+              <Upload size={14} aria-hidden="true" />
             </button>
             <label className="target-example-select-shell">
               <span className="sr-only">Load target example</span>
               <select
                 aria-label="Load target example"
+                title={"Load target example"}
                 className="select-input target-example-select"
                 defaultValue=""
                 onChange={(event) => {
@@ -210,6 +225,27 @@ export function TargetList(props: TargetListProps) {
           ))
         )}
       </div>
+      {/* This is actually hidden */}
+      {false && selectedTarget && ( 
+        <div>
+          {/* <hr /> */}
+          <label className="stacked-field">
+            {/* <strong>selection edit / input</strong> */}
+            <input
+              value={selectionDraft}
+              title={"edit / input a selection"}
+              onChange={(event) => {
+                const next = event.target.value;
+                setSelectionDraft(next);
+                props.onDraftChange?.(next);
+              }}
+              onFocus={() => props.onDraftFocus?.()}
+              onBlur={(event) => props.onDraftBlur?.(event.currentTarget.value)}
+              placeholder="A1-10,B20-22"
+            />
+          </label>
+        </div>
+      )}
       <input
         ref={targetInputRef}
         hidden
