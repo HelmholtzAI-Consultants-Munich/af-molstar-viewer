@@ -123,73 +123,73 @@ export function TargetList(props: TargetListProps) {
                 )}
               </button>
               {target.id === props.selectedTargetId && (
-                <div className="artifact-card-tools">
-                  <button
-                    type="button"
-                    className="artifact-card-tool"
-                    aria-label={`Remove ${target.name}`}
-                    title={`Remove ${target.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onRemoveTarget(target.id);
-                    }}
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="artifact-card-tool"
-                    aria-label="Crop to selection"
-                    title="crop to selection"
-                    disabled={!props.hasActiveSelection}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onCropToSelection();
-                    }}
-                  >
-                    <Crop size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="artifact-card-tool"
-                    aria-label="Cut off selection"
-                    title="cut off selection"
-                    disabled={!props.hasActiveSelection}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onCutOffSelection();
-                    }}
-                  >
-                    <Scissors size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              )}
-              {target.id === props.selectedTargetId && (
-                <div className="artifact-card-download-actions">
-                  <button
-                    type="button"
-                    className="artifact-card-tool"
-                    aria-label="download structure"
-                    title="download structure"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onDownloadStructure();
-                    }}
-                  >
-                    <Save size={14} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="artifact-card-tool"
-                    aria-label="download Mol* session"
-                    title="download Mol* session"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onDownloadViewerState();
-                    }}
-                  >
-                    <View size={14} aria-hidden="true" />
-                  </button>
+                <div className="artifact-card-actions">
+                  <div className="artifact-card-tools">
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="Crop to selection"
+                      title="crop to selection"
+                      disabled={!props.hasActiveSelection}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onCropToSelection();
+                      }}
+                    >
+                      <Crop size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="Cut off selection"
+                      title="cut off selection"
+                      disabled={!props.hasActiveSelection}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onCutOffSelection();
+                      }}
+                    >
+                      <Scissors size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label={`Remove ${target.name}`}
+                      title={`Remove ${target.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onRemoveTarget(target.id);
+                      }}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div className="artifact-card-download-actions">
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="download structure"
+                      title="download structure"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onDownloadStructure();
+                      }}
+                    >
+                      <Save size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="download Mol* session"
+                      title="download Mol* session"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onDownloadViewerState();
+                      }}
+                    >
+                      <View size={14} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               )}
               {target.id !== props.selectedTargetId && (
