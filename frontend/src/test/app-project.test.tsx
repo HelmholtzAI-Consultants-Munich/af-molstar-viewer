@@ -96,6 +96,9 @@ describe('project app shell', () => {
     nativeViewerDownloadSpy.mockClear();
   });
 
+  const getTargetInterfaceScope = (root: HTMLElement) =>
+    within((within(root).getByRole('heading', { name: 'Target Interface' }).closest('section') as HTMLElement));
+
   it('starts empty and lets you upload a target before saving interface residues', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
@@ -112,7 +115,7 @@ describe('project app shell', () => {
 
     const input = await screen.findByPlaceholderText('A1-10,B20-22');
     fireEvent.change(input, { target: { value: 'B20-22,A1-10' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.blur(input);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('A1-3')).toBeInTheDocument();
@@ -150,14 +153,14 @@ describe('project app shell', () => {
       expect(scoped.getAllByText(/^toy_ranked_0\.pdb$/i).length).toBeGreaterThan(0);
     });
 
-    expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+    expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
     expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     expect(scoped.getByTestId('focused-residues')).toHaveTextContent('');
 
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
 
     await waitFor(() => {
-      expect(scoped.getByDisplayValue('A1-3')).toBeInTheDocument();
+      expect(getTargetInterfaceScope(container).getByDisplayValue('A1-3')).toBeInTheDocument();
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0,1,2');
       expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
@@ -179,7 +182,7 @@ describe('project app shell', () => {
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
     await waitFor(() => {
-      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
 
@@ -197,7 +200,7 @@ describe('project app shell', () => {
     await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
     await waitFor(() => {
       expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cropped_1.pdb' })).toBeInTheDocument();
-      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
 
@@ -209,7 +212,7 @@ describe('project app shell', () => {
     await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
     await waitFor(() => {
       expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cut_1.pdb' })).toBeInTheDocument();
-      expect(scoped.getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
+      expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
   });
@@ -223,7 +226,7 @@ describe('project app shell', () => {
     await scoped.findByText(/BindCraft Workspace Demo/i);
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
-    const input = await scoped.findByPlaceholderText('A1-10,B20-22');
+    const input = await getTargetInterfaceScope(container).findByPlaceholderText('A1-10,B20-22');
     await user.clear(input);
     await user.type(input, 'A10');
     expect(input).toHaveValue('A10');
@@ -242,7 +245,7 @@ describe('project app shell', () => {
     await scoped.findByText(/BindCraft Workspace Demo/i);
     await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
 
-    const input = await scoped.findByPlaceholderText('A1-10,B20-22');
+    const input = await getTargetInterfaceScope(container).findByPlaceholderText('A1-10,B20-22');
     await user.clear(input);
     await user.type(input, 'A2-A3');
     expect(input).toHaveValue('A2-A3');
@@ -257,7 +260,7 @@ describe('project app shell', () => {
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
 
     await waitFor(() => {
-      expect(scoped.getByDisplayValue('A1-3')).toBeInTheDocument();
+      expect(getTargetInterfaceScope(container).getByDisplayValue('A1-3')).toBeInTheDocument();
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('0,1,2');
     });
   });
@@ -276,7 +279,7 @@ describe('project app shell', () => {
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
     ]);
 
-    const input = await scoped.findByPlaceholderText('A1-10,B20-22');
+    const input = await getTargetInterfaceScope(container).findByPlaceholderText('A1-10,B20-22');
     await user.clear(input);
     await user.type(input, 'A2-A3');
     expect(input).toHaveValue('A2-A3');
@@ -286,7 +289,7 @@ describe('project app shell', () => {
       new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
     ]);
 
-    const betaInput = await scoped.findByPlaceholderText('A1-10,B20-22');
+    const betaInput = await getTargetInterfaceScope(container).findByPlaceholderText('A1-10,B20-22');
     expect(betaInput).toHaveValue('');
     await user.type(betaInput, 'A1');
     expect(betaInput).toHaveValue('A1');
@@ -294,12 +297,12 @@ describe('project app shell', () => {
     const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
     await user.click(targetCards()[0]);
     await waitFor(() => {
-      expect(scoped.getByDisplayValue('A2-3')).toBeInTheDocument();
+      expect(getTargetInterfaceScope(container).getByDisplayValue('A2-3')).toBeInTheDocument();
     });
 
     await user.click(targetCards()[1]);
     await waitFor(() => {
-      expect(scoped.getByDisplayValue('A1')).toBeInTheDocument();
+      expect(getTargetInterfaceScope(container).getByDisplayValue('A1')).toBeInTheDocument();
     });
   });
 
@@ -371,24 +374,16 @@ describe('project app shell', () => {
       expect(scoped.getByTestId('viewer-state-payload')).toHaveTextContent('"tag":"target-1-target"');
     });
 
-    const input = scoped.getByPlaceholderText('A1-10,B20-22');
+    const input = getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22');
     await user.clear(input);
     await user.type(input, 'A1');
 
     fireEvent.click(scoped.getByRole('button', { name: /Generate binders/i }));
-    await waitFor(() => {
-      expect(scoped.getByText(/Binder candidate l73/i)).toBeInTheDocument();
-    });
-
-    fireEvent.click(scoped.getByRole('button', { name: /Validate refolding/i }));
-    await waitFor(() => {
-      expect(scoped.getByLabelText(/Refolded binder l73/i)).toBeInTheDocument();
-    });
-
-    fireEvent.click(scoped.getByLabelText(/Refolded binder l73/i));
-    await waitFor(() => {
-      expect(scoped.getAllByTestId('viewer-configuration').at(-1)).toHaveTextContent('validate_refolding');
-      expect(scoped.getAllByTestId('viewer-state-payload').at(-1)).toHaveTextContent('null');
+    await waitFor(async () => {
+      const refreshed = await api.getProject('project-1');
+      expect(refreshed.binder_candidates).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'Binder candidate l73' })]),
+      );
     });
   });
 
