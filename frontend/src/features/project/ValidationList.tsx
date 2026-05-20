@@ -1,4 +1,5 @@
 import type { WorkspaceProject } from '../../domain/project';
+import { Save } from 'lucide-react';
 
 interface ValidationListProps {
   project: WorkspaceProject;
@@ -14,8 +15,13 @@ export function ValidationList(props: ValidationListProps) {
     <section className="panel project-section-panel">
       <div className="project-section-header">
         <h2>Refolding Validations</h2>
-        <button type="button" className="secondary-button" onClick={props.onSaveViewerState} disabled={props.busy || !props.canSaveViewerState}>
-          Save viewer state
+        <button type="button" 
+          className="secondary-button" 
+          aria-label={"save viewer state"}
+          title={"save viewer state"}
+          onClick={props.onSaveViewerState} 
+          disabled={props.busy || !props.canSaveViewerState}>
+          <Save size={14} aria-hidden="true" />
         </button>
       </div>
       <ul className="compact-list">

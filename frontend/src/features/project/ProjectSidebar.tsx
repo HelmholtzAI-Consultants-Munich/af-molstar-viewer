@@ -80,7 +80,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         onGenerateBinders={props.onGenerateBinders}
       />
 
-      {/* <BinderList project={props.project} busy={props.busy} onValidateRefolding={props.onValidateRefolding} /> */}
+      <BinderList project={props.project} busy={props.busy} onValidateRefolding={props.onValidateRefolding} />
 
       {/* <ValidationList
         project={props.project}
@@ -91,7 +91,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         onToggleValidationCompare={props.onToggleValidationCompare}
       /> */}
 
-      {/* <JobList project={props.project} /> */}
+      <JobList project={props.project} />
 
       {/* <SavedViewerStates project={props.project} /> */}
     </aside>
