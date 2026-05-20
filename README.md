@@ -110,20 +110,19 @@ make dev-frontend-http
 - This will become a part of the Web UI for a larger project around BindCraft.
 - There will be a FastAPI server that manages SLURM jobs for BindCraft and ColabFold, and maybe does some light-weight pre- or post-processing and orchestration.
 - The Web UI should gain functionality to:
-  - display the structure of the target protein / template pair (check)
-  - enable selecting the interface, i.e. binding hotspots (check)
-  - enable cropping that protein (via backend and API) (check)
-  - show the generated binders
-  - show the AF2-predicted structures of the binders
-  - allow comparing the binders, maybe in separate connected views or with overlaying
-  - enable saving/exporting views from viewer panels as Mol* states
+  - [x] display the structure of the target protein / template pair
+  - [x] enable selecting the interface, i.e. binding hotspots
+  - [x] enable cropping that protein (via backend and API)
+  - [ ] enable pLDDT/chain-id theme toggling for the target
+  - [ ] use+show the pAE panel as a drawer on the right
+  - [ ] show the generated binders
+  - [ ] show the AF2-predicted structures of the binders
+  - [ ] allow comparing the binders, maybe in separate connected views or with overlaying
+  - [x] enable saving/exporting views from viewer panels as Mol* states (check)
+  - [x] enable downloading structure files, and Mol* states = views. ideally separately.
+  - [ ] low prio: drag structures onto **viewer** can load as well, not just target drop zone?
+  - [ ] low prio: selection input field should go on the target card (hide the span that is there, but keep it around)
 
-### TODO
-- enable saving/exporting views from viewer panels as Mol* states, and the structure files directly
-- enable pLDDT/chain-id theme toggling for the target
-- all the `byartifact` props could go somewhere, and pLDDT/chain-id theme should be a byartifact thing as well
-- maybe show the pAE panel again, as a drawer on the right?
-- low prio: drag structures onto **viewer** can load as well, not just target drop zone?
 
 ## Attribution
 
