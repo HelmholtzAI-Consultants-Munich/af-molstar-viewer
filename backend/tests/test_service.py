@@ -79,8 +79,8 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(len(resolved_crop.target_ids), 1)
         self.assertEqual(len(resolved_cut.target_ids), 1)
         self.assertEqual(len(refreshed.targets), initial_count + 2)
-        self.assertEqual(refreshed.targets[-2].name, "toy_ranked_0_cropped_1.pdb")
-        self.assertEqual(refreshed.targets[-1].name, "toy_ranked_0_cut_1.pdb")
+        self.assertEqual(refreshed.targets[-2].name, "toy_cropped_1")
+        self.assertEqual(refreshed.targets[-1].name, "toy_cut_1")
         mocked_crop.assert_called_once()
         mocked_cut.assert_called_once()
         crop_call = mocked_crop.call_args.kwargs
@@ -91,6 +91,23 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(cut_call["selection"], "A1-10,B20-22")
         self.assertEqual(crop_call["target_id"], target.id)
         self.assertEqual(cut_call["target_id"], target.id)
+
+    def test_reset_auth_indexing_creates_derived_target(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
+
+        job = service.create_reset_auth_indexing_job(project.id, target.id)
+        time.sleep(0.9)
+        resolved = service.get_job(job.job_id)
+        refreshed = service.get_project(project.id)
+
+        self.assertEqual(resolved.status, "succeeded")
+        self.assertEqual(resolved.job_type, "reset_auth_indexing")
+        self.assertEqual(len(resolved.target_ids), 1)
+        self.assertEqual(len(refreshed.targets), 2)
+        self.assertEqual(refreshed.targets[-1].name, "toy_reset_1")
+        self.assertEqual(refreshed.targets[-1].parent_target_id, target.id)
 
     def test_create_derived_target_name_uses_flat_crop_root_and_nested_cuts(self) -> None:
         self.assertEqual(next_derived_target_name("AF-3-model_v6.pdb", [], "cropped"), "AF-3-model_v6_cropped_1.pdb")

@@ -325,6 +325,33 @@ class ProjectService:
             produced={"targets": [derived_target], "viewer_assets": [derived_viewer_asset]},
         )
 
+    def create_reset_auth_indexing_job(self, project_id: str, target_id: str) -> JobRef:
+        project = self.get_project(project_id)
+        target = self._require_target(project, target_id)
+        derived_target_id = f"target-{self._id_counters['target']}"
+        self._id_counters["target"] += 1
+        edit_result = structure_edit.reset_auth_indexing(
+            project_id=project_id,
+            target_id=target.id,
+            target_name=target.name,
+            structure_path=self._get_target_structure_path(project_id, target.id),
+            output_dir=str(self.runtime_dir / project_id / derived_target_id),
+        )
+        derived_target, derived_viewer_asset = self._create_derived_target_artifacts(
+            project=project,
+            source_target=target,
+            derived_target_id=derived_target_id,
+            operation="reset",
+            derived_structure_path=str(edit_result["output_path"]),
+            derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
+        )
+        return self._create_job(
+            project_id=project_id,
+            job_type="reset_auth_indexing",
+            progress_message=f"Stub: would reset auth indexing for {target.name}",
+            produced={"targets": [derived_target], "viewer_assets": [derived_viewer_asset]},
+        )
+
     def create_generate_binders_job(self, project_id: str, target_id: str, selection: str) -> JobRef:
         project = self.get_project(project_id)
         target = self._require_target(project, target_id)
