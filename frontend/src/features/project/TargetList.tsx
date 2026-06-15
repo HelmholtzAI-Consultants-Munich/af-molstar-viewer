@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Crop, Scissors, Trash2, View, Save, Upload } from 'lucide-react';
+import { Crop, Scissors, Trash2, View, Save, Upload, FileDigit } from 'lucide-react';
 import { EXAMPLES } from '../import/examples';
 import type { WorkspaceProject } from '../../domain/project';
 
@@ -17,6 +17,7 @@ interface TargetListProps {
   onRemoveTarget: (targetId: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
+  onResetAuthIndexing: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
   onDraftFocus?: () => void;
@@ -203,6 +204,20 @@ export function TargetList(props: TargetListProps) {
                       }}
                     >
                       <View size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div className="artifact-card-tools">
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                        aria-label="re-index AUTH starting at 1"
+                        title="re-index AUTH starting at 1"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onResetAuthIndexing();
+                      }}
+                    >
+                      <FileDigit size={14} aria-hidden="true" />
                     </button>
                   </div>
                 </div>

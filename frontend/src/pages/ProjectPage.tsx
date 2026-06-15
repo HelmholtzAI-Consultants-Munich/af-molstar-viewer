@@ -54,6 +54,7 @@ export function ProjectPage(props: ProjectPageProps) {
           }}
           onCropToSelection={workspace.onCropToSelection}
           onCutOffSelection={workspace.onCutOffSelection}
+          onResetAuthIndexing={workspace.onResetAuthIndexing}
           onDownloadStructure={workspace.onDownloadStructure}
           onDownloadViewerState={workspace.onDownloadViewerState}
           onDraftFocus={workspace.onDraftFocus}

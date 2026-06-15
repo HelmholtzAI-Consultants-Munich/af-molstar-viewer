@@ -94,6 +94,7 @@ export interface ProjectWorkspaceState {
   onSaveInterface: (value: string) => void;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
+  onResetAuthIndexing: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
   onNativeViewerStateDownloadReady: (download: (() => void) | null) => void;
@@ -501,6 +502,15 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       await refreshProject(project!.id);
     });
 
+  const onResetAuthIndexing = () =>
+    // This does not need an actual selection like the other two operations!
+    void runMutation(async () => {
+      if (!selectedTarget || !selectedArtifact) return;
+      const job = await api.resetAuthIndexing(project!.id, selectedTarget.id);
+      setPendingDerivedTargetJobIds((current) => [...current, job.job_id]);
+      await refreshProject(project!.id);
+    });
+
   const onDownloadStructure = () => {
     if (!selectedTarget || !selectedArtifact) return;
     downloadTextFile(selectedTarget.name, selectedArtifact.structureText);
@@ -614,6 +624,7 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     onSaveInterface,
     onCropToSelection,
     onCutOffSelection,
+    onResetAuthIndexing,
     onDownloadStructure,
     onDownloadViewerState,
     onNativeViewerStateDownloadReady,

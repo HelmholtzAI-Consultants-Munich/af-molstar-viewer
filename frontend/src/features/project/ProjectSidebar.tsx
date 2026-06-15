@@ -21,6 +21,7 @@ interface ProjectSidebarProps {
   onRemoveTarget: (targetId: string) => void | Promise<void>;
   onCropToSelection: () => void;
   onCutOffSelection: () => void;
+  onResetAuthIndexing: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
   onDraftFocus?: () => void;
@@ -62,6 +63,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         }}
         onCropToSelection={props.onCropToSelection}
         onCutOffSelection={props.onCutOffSelection}
+        onResetAuthIndexing={props.onResetAuthIndexing}
         onDownloadStructure={props.onDownloadStructure}
         onDownloadViewerState={props.onDownloadViewerState}
         onDraftFocus={props.onDraftFocus}

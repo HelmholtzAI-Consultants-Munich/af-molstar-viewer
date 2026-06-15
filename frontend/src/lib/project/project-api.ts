@@ -47,6 +47,7 @@ export interface ProjectApi {
   updateTargetInterface(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<WorkspaceProject>;
   cropTargetToSelection(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   cutSelectionOffTarget(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
+  resetAuthIndexing(projectId: string, targetId: string): Promise<JobRef>;
   generateBinders(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef>;
   validateRefolding(projectId: string, binderCandidateIds: string[]): Promise<JobRef>;
   getJob(jobId: string): Promise<JobRef>;
@@ -196,6 +197,20 @@ class LocalFixtureProjectApi implements ProjectApi {
       job.target_ids = [target.id];
     });
   }
+
+  // // TODO find out if this is needed or not – is it for the useless fixture backend?
+  // async resetAuthIndexing(projectId: string, targetId: string): Promise<JobRef> {
+  //   const project = this.requireProject(projectId);
+  //   const sourceTarget = project.targets.find((entry) => entry.id === targetId);
+  //   if (!sourceTarget) throw new Error(`Unknown target ${targetId}`);
+  //   console.log("from project-api");
+  //   return this.createJob(projectId, 'reset_auth_indexing', 'Resetting auth indexing in local fixture mode', (job) => {
+  //     const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(project, sourceTarget, 'cropped');
+  //     project.targets.push(target);
+  //     this.uploadedViewerArtifacts.set(target.id, viewerArtifactSource);
+  //     job.target_ids = [target.id];
+  //   });
+  // }
 
   async generateBinders(projectId: string, targetId: string, targetInterfaceResidues: string): Promise<JobRef> {
     const project = this.requireProject(projectId);
@@ -466,6 +481,12 @@ class HttpProjectApi implements ProjectApi {
       body: JSON.stringify({
         selection: targetInterfaceResidues,
       }),
+    });
+  }
+
+  async resetAuthIndexing(projectId: string, targetId: string): Promise<JobRef> {
+    return this.request<JobRef>(`/projects/${projectId}/targets/${targetId}/reset-auth-indexing`, {
+      method: 'POST',
     });
   }
 
