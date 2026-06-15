@@ -2,12 +2,14 @@
 
 FRONTEND_DIR := frontend
 BACKEND_DIR := backend
+DEV_SCRIPT := ./scripts/dev.sh
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make install           Install frontend and backend dependencies\n"
 	@printf "  make install-frontend  Install frontend dependencies\n"
 	@printf "  make install-backend   Install backend dependencies with uv\n"
+	@printf "  make dev               Run frontend and backend together\n"
 	@printf "  make dev-frontend      Run the Vite dev server\n"
 	@printf "  make dev-frontend-http Run the Vite dev server against FastAPI\n"
 	@printf "  make dev-backend       Run the FastAPI placeholder backend\n"
@@ -24,7 +26,8 @@ install-frontend:
 install-backend:
 	cd $(BACKEND_DIR) && uv sync
 
-dev: help
+dev:
+	$(DEV_SCRIPT)
 
 dev-frontend:
 	cd $(FRONTEND_DIR) && npm run dev

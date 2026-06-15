@@ -49,6 +49,7 @@ From the repo root:
 ```bash
 make help
 make install
+make dev
 make dev-frontend
 make dev-frontend-http
 make dev-backend
@@ -89,18 +90,24 @@ uv sync
 uv run backend
 ```
 
-Frontend dev server with backend proxy:
+Single-command local dev:
+
+```bash
+make dev
+```
+
+The root command starts both apps and stops both with one `Ctrl-C`.
+
+If you want to run the servers separately while debugging:
 
 ```bash
 cd frontend
 VITE_PROJECT_API_MODE=http npm run dev
 # in a second terminal
-npm run dev:backend
-```
+cd backend
+uv run backend
 
-Or from the repo root:
-
-```bash
+# or from the repo root
 make dev-backend
 make dev-frontend-http
 ```
