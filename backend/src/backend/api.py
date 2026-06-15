@@ -131,6 +131,16 @@ def create_app() -> Any:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return serialize_job(job)
 
+    @app.post("/api/projects/{project_id}/targets/{target_id}/reset-auth-indexing")
+    def reset_auth_indexing(project_id: str, target_id: str) -> dict[str, object]:
+        try:
+            job = SERVICE.create_reset_auth_indexing_job(project_id, target_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=f"Unknown target {error.args[0]}") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return serialize_job(job)
+
     @app.post("/api/projects/{project_id}/generate-binders")
     def generate_binders(project_id: str, payload: dict[str, object]) -> dict[str, object]:
         try:

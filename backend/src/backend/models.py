@@ -9,6 +9,7 @@ JobType = Literal[
     "import",
     "crop_target",
     "cut_target",
+    "reset_auth_indexing",
     "generate_binders",
     "validate_refolding",
 ]
