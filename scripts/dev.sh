@@ -33,7 +33,7 @@ trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
 trap 'cleanup $?' EXIT
 
-(cd frontend && npm run dev) &
+(cd frontend && VITE_PROJECT_API_MODE=http npm run dev) &
 frontend_pid=$!
 
 (cd backend && uv run backend) &

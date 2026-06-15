@@ -96,7 +96,7 @@ Single-command local dev:
 make dev
 ```
 
-The root command starts both apps and stops both with one `Ctrl-C`.
+The root command starts the backend and the frontend in HTTP-proxy mode, which is equivalent to running `make dev-backend` plus `make dev-frontend-http`. It also stops both with one `Ctrl-C`.
 
 If you want to run the servers separately while debugging:
 
@@ -120,6 +120,7 @@ make dev-frontend-http
   - [x] display the structure of the target protein / template pair
   - [x] enable selecting the interface, i.e. binding hotspots
   - [x] enable cropping that protein (via backend and API)
+  - [x] crop/cut remove unobserved residues from touched chains, and reset-auth-indexing reuses the same trimming before renumbering auth IDs
   - [ ] enable pLDDT/chain-id theme toggling for the target
   - [ ] use+show the pAE panel as a drawer on the right
   - [ ] show the generated binders
@@ -129,6 +130,7 @@ make dev-frontend-http
   - [x] enable downloading structure files, and Mol* states = views. ideally separately.
   - [ ] low prio: drag structures onto **viewer** can load as well, not just target drop zone?
   - [ ] low prio: selection input field should go on the target card (hide the span that is there, but keep it around)
+  - [ ] cropping `pdb9cdz.ent` causes a `{"detail":"No structure file found for target target-14"}`
 
 
 ## Attribution
