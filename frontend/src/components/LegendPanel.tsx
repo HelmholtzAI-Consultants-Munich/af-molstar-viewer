@@ -16,30 +16,6 @@ export function LegendPanel(props: LegendPanelProps) {
 
   return (
     <aside className="panel legend-panel">
-      <ul className="legend-list">
-        <li>
-          <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS['very-high'] }} />
-          Very high (pLDDT &gt; 90)
-        </li>
-        <li>
-          <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS.high }} />
-          High (90 &gt; pLDDT &gt; 70)
-        </li>
-        <li>
-          <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS.low }} />
-          Low (70 &gt; pLDDT &gt; 50)
-        </li>
-        <li>
-          <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS['very-low'] }} />
-          Very low (pLDDT &lt; 50)
-        </li>
-      </ul>
-      <dl className="metric-list">
-        <div>
-          <dt>Mean confidence</dt>
-          <dd>{meanConfidence.toFixed(1)}</dd>
-        </div>
-      </dl>
       <div className="legend-description">
         <h3>Model Confidence (pLDDT)</h3>
         <p>
@@ -56,7 +32,28 @@ export function LegendPanel(props: LegendPanelProps) {
           </strong>
           .
         </p>
+        <ul className="legend-list">
+          <li>
+            <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS['very-high'] }} />
+            Very high (pLDDT &gt; 90)
+          </li>
+          <li>
+            <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS.high }} />
+            High (90 &gt; pLDDT &gt; 70)
+          </li>
+          <li>
+            <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS.low }} />
+            Low (70 &gt; pLDDT &gt; 50)
+          </li>
+          <li>
+            <span className="legend-swatch" style={{ backgroundColor: AF_CONFIDENCE_COLORS['very-low'] }} />
+            Very low (pLDDT &lt; 50)
+          </li>
+        </ul>
       </div>
+      <dl className="metric-list">
+        <dt>Mean confidence: {meanConfidence.toFixed(1)}</dt>
+      </dl>
       {props.bundle.metadata.warnings.length > 0 && (
         <div className="warning-box">
           {props.bundle.metadata.warnings.map((warning) => (
