@@ -23,6 +23,17 @@ def upload_toy_target(service: ProjectService, project_id: str):
     return service.upload_target(project_id, files, name="toy", chain_ids=["A"])
 
 
+def upload_toy_ent_target(service: ProjectService, project_id: str):
+    repo_root = Path(__file__).resolve().parents[2]
+    files = [
+        {
+            "name": "pdb9cdz.ent",
+            "text": (repo_root / "fixtures" / "test-inputs" / "colabfold" / "toy_ranked_0.pdb").read_text(),
+        }
+    ]
+    return service.upload_target(project_id, files, name="toy-ent", chain_ids=["A"])
+
+
 class ProjectServiceTests(unittest.TestCase):
     def test_projects_start_empty(self) -> None:
         service = ProjectService()
@@ -91,6 +102,25 @@ class ProjectServiceTests(unittest.TestCase):
         self.assertEqual(cut_call["selection"], "A1-10,B20-22")
         self.assertEqual(crop_call["target_id"], target.id)
         self.assertEqual(cut_call["target_id"], target.id)
+
+    def test_selection_edit_jobs_support_ent_structure_files(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+        project, target = upload_toy_ent_target(service, project.id)
+
+        with patch("backend.service.structure_edit.crop_to_selection") as mocked_crop:
+            crop_job = service.create_crop_to_selection_job(project.id, target.id, "A1-10")
+
+        time.sleep(0.9)
+        resolved_crop = service.get_job(crop_job.job_id)
+        refreshed = service.get_project(project.id)
+
+        self.assertEqual(resolved_crop.status, "succeeded")
+        self.assertEqual(len(refreshed.targets), 2)
+        self.assertEqual(refreshed.targets[-1].name, "toy-ent_cropped_1")
+        mocked_crop.assert_called_once()
+        crop_call = mocked_crop.call_args.kwargs
+        self.assertTrue(str(crop_call["structure_path"]).endswith("pdb9cdz.ent"))
 
     def test_reset_auth_indexing_creates_derived_target(self) -> None:
         service = ProjectService()

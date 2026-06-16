@@ -514,7 +514,7 @@ class ProjectService:
             (
                 file
                 for file in asset.files
-                if Path(file.name).suffix.lower() in {".pdb", ".cif", ".mmcif"}
+                if Path(file.name).suffix.lower() in {".pdb", ".ent", ".cif", ".mmcif"}
             ),
             None,
         )

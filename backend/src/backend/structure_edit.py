@@ -124,7 +124,7 @@ def _write_filtered_structure(
             keep_selected=keep_selected,
         )
     except ModuleNotFoundError:
-        if structure_file.suffix.lower() != ".pdb":
+        if structure_file.suffix.lower() not in {".pdb", ".ent"}:
             raise RuntimeError(
                 "Biopython is required to edit CIF/mmCIF structures. Run `uv sync` in backend/ first."
             ) from None
