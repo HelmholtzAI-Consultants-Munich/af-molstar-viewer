@@ -863,6 +863,7 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
     residue_count = 0
     residue_map_by_key: dict[MmcifResidueKey, int] = {}
     residue_map_by_chain_seq: dict[tuple[str, str], int] = {}
+    atom_residues, _ = _collect_mmcif_atom_residues_and_entities(lines)
 
     index = 0
     while index < len(lines):
@@ -917,6 +918,7 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
                     residue_map_by_key=residue_map_by_key,
                     residue_map_by_chain_seq=residue_map_by_chain_seq,
                     observed_chain_ids=observed_chain_ids,
+                    atom_residues=atom_residues,
                 )
 
             if not filtered_row_lines:
@@ -1005,6 +1007,7 @@ def _rewrite_mmcif_reset_associated_rows(
     residue_map_by_key: dict[MmcifResidueKey, int],
     residue_map_by_chain_seq: dict[tuple[str, str], int],
     observed_chain_ids: set[str],
+    atom_residues: list[dict[str, str]],
 ) -> list[str]:
     if prefix == "_struct_asym":
         filtered_rows: list[str] = []
@@ -1018,17 +1021,7 @@ def _rewrite_mmcif_reset_associated_rows(
                 filtered_rows.append(row_line)
         return filtered_rows
     if prefix == "_pdbx_poly_seq_scheme":
-        return _rewrite_single_residue_reference_rows(
-            row_lines,
-            columns,
-            chain_candidates=["_pdbx_poly_seq_scheme.asym_id", "_pdbx_poly_seq_scheme.pdb_strand_id"],
-            seq_candidates=["_pdbx_poly_seq_scheme.seq_id", "_pdbx_poly_seq_scheme.pdb_seq_num", "_pdbx_poly_seq_scheme.auth_seq_num"],
-            comp_candidates=["_pdbx_poly_seq_scheme.mon_id", "_pdbx_poly_seq_scheme.pdb_mon_id", "_pdbx_poly_seq_scheme.auth_mon_id"],
-            ins_candidates=["_pdbx_poly_seq_scheme.pdb_ins_code"],
-            residue_map_by_key=residue_map_by_key,
-            residue_map_by_chain_seq=residue_map_by_chain_seq,
-            observed_chain_ids=observed_chain_ids,
-        )
+        return _rewrite_poly_seq_scheme_reset_rows(row_lines, columns, atom_residues, observed_chain_ids)
     if prefix in {"_pdbx_unobs_or_zero_occ_atoms", "_pdbx_unobs_or_zero_occ_residues", "_atom_site_anisotrop"}:
         if prefix in {"_pdbx_unobs_or_zero_occ_atoms", "_pdbx_unobs_or_zero_occ_residues"}:
             return []
@@ -1094,6 +1087,54 @@ def _rewrite_mmcif_reset_associated_rows(
     return row_lines
 
 
+def _rewrite_poly_seq_scheme_reset_rows(
+    row_lines: list[str],
+    columns: list[str],
+    atom_residues: list[dict[str, str]],
+    observed_chain_ids: set[str],
+) -> list[str]:
+    chain_candidates = ["_pdbx_poly_seq_scheme.asym_id", "_pdbx_poly_seq_scheme.pdb_strand_id"]
+    seq_candidates = ["_pdbx_poly_seq_scheme.seq_id", "_pdbx_poly_seq_scheme.pdb_seq_num", "_pdbx_poly_seq_scheme.auth_seq_num"]
+    comp_candidates = ["_pdbx_poly_seq_scheme.mon_id", "_pdbx_poly_seq_scheme.pdb_mon_id", "_pdbx_poly_seq_scheme.auth_mon_id"]
+    ins_candidates = ["_pdbx_poly_seq_scheme.pdb_ins_code"]
+
+    expected_by_chain: dict[str, list[str]] = defaultdict(list)
+    for residue in atom_residues:
+        expected_by_chain[residue["chain_id"]].append(residue["comp_id"])
+
+    next_seq_by_chain: dict[str, int] = defaultdict(int)
+    matched_index_by_chain: dict[str, int] = defaultdict(int)
+    filtered_rows: list[str] = []
+    for row_line in row_lines:
+        tokens = _tokenize_mmcif_row(row_line)
+        if len(tokens) != len(columns):
+            filtered_rows.append(row_line)
+            continue
+
+        chain_id = _first_existing_value(tokens, columns, chain_candidates)
+        if chain_id not in observed_chain_ids:
+            continue
+
+        comp_value = _first_existing_value(tokens, columns, comp_candidates)
+        expected_comp_ids = expected_by_chain.get(chain_id, [])
+        cursor = matched_index_by_chain[chain_id]
+        while cursor < len(expected_comp_ids) and expected_comp_ids[cursor] != comp_value:
+            cursor += 1
+        if cursor >= len(expected_comp_ids):
+            continue
+
+        matched_index_by_chain[chain_id] = cursor + 1
+        next_seq_by_chain[chain_id] += 1
+        normalized_seq = str(next_seq_by_chain[chain_id])
+        _set_existing_value(tokens, columns, chain_candidates, chain_id)
+        _set_existing_value(tokens, columns, seq_candidates, normalized_seq)
+        _set_existing_value(tokens, columns, comp_candidates, comp_value)
+        _set_existing_value(tokens, columns, ins_candidates, ".")
+        filtered_rows.append(" ".join([str(token) for token in tokens]))
+
+    return filtered_rows
+
+
 def _first_existing_value(tokens: list[str], columns: list[str], candidates: list[str]) -> str:
     for name in candidates:
         if name in columns:
@@ -1118,10 +1159,20 @@ def _map_residue_reference(
     ins_value = _first_existing_value(tokens, columns, ins_candidates) if ins_candidates else "?"
     if not chain_id or not seq_value:
         return None
-    residue_key = (chain_id, seq_value, comp_value or "?", ins_value or "?")
+    normalized_ins_value = "?" if ins_value in {"", ".", "?"} else ins_value
+    residue_key = (chain_id, seq_value, comp_value or "?", normalized_ins_value)
     normalized_seq = residue_map_by_key.get(residue_key)
     if normalized_seq is None:
         normalized_seq = residue_map_by_chain_seq.get((chain_id, seq_value))
+    if normalized_seq is None and comp_value:
+        normalized_seq = next(
+            (
+                mapped_seq
+                for (mapped_chain, _mapped_seq, mapped_comp, mapped_ins), mapped_seq in residue_map_by_key.items()
+                if mapped_chain == chain_id and mapped_comp == comp_value and mapped_ins == normalized_ins_value
+            ),
+            None,
+        )
     if normalized_seq is None:
         return None
     return chain_id, seq_value, comp_value or "?", ins_value or "?", normalized_seq
