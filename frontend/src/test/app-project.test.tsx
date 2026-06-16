@@ -10,6 +10,7 @@ import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?r
 const nativeViewerDownloadSpy = vi.fn();
 
 vi.mock('../features/project/ArtifactWorkspace', () => ({
+  PAE_HOVER_SYNC_RESIDUE_THRESHOLD: 800,
   ArtifactWorkspace: ({
     artifact,
     viewerConfiguration,
@@ -19,9 +20,20 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     draftFocused,
     selectionEnabled,
     selectionSyncNonce,
+    brushSelection,
+    pinnedResidues,
+    pinnedCell,
+    paeHoverSyncEnabled,
+    paePairSelectionEnabled,
     onSelectionIndicesChange,
     onFocusIndicesChange,
     onSelectionModeChange,
+    onBrushSelectionChange,
+    onPinResidues,
+    onPinCell,
+    onTogglePaeHoverSync,
+    onTogglePaePairSelection,
+    onClearPairSelection,
     onViewerStateChange,
     onNativeViewerStateDownloadReady,
     onImportPaeData,
@@ -34,9 +46,20 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     draftFocused?: boolean;
     selectionEnabled?: boolean;
     selectionSyncNonce?: number;
+    brushSelection?: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null;
+    pinnedResidues?: number[];
+    pinnedCell?: { x: number; y: number } | null;
+    paeHoverSyncEnabled?: boolean;
+    paePairSelectionEnabled?: boolean;
     onSelectionIndicesChange?: (indices: number[]) => void;
     onFocusIndicesChange?: (indices: number[]) => void;
     onSelectionModeChange?: (enabled: boolean) => void;
+    onBrushSelectionChange?: (selection: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null) => void;
+    onPinResidues?: (indices: number[]) => void;
+    onPinCell?: (cell: { x: number; y: number } | null) => void;
+    onTogglePaeHoverSync?: () => void;
+    onTogglePaePairSelection?: () => void;
+    onClearPairSelection?: () => void;
     onViewerStateChange?: (payload: Record<string, unknown>) => void;
     onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
     onImportPaeData?: (paeMatrix: number[][], paeMax: number) => void;
@@ -45,6 +68,11 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
       <div data-testid="artifact-workspace">{artifact.artifactId}</div>
       <div data-testid="viewer-configuration">{viewerConfiguration}</div>
       <div data-testid="viewer-state-payload">{JSON.stringify(viewerStatePayload ?? null)}</div>
+      <div data-testid="brush-selection">{brushSelection ? `${brushSelection.xStart},${brushSelection.xEnd},${brushSelection.yStart},${brushSelection.yEnd}` : 'null'}</div>
+      <div data-testid="pinned-residues">{(pinnedResidues ?? []).join(',') || 'null'}</div>
+      <div data-testid="pinned-cell">{pinnedCell ? `${pinnedCell.x},${pinnedCell.y}` : 'null'}</div>
+      <div data-testid="pae-hover-sync">{String(Boolean(paeHoverSyncEnabled))}</div>
+      <div data-testid="pae-pair-selection">{String(Boolean(paePairSelectionEnabled))}</div>
       <div data-testid="selected-residues">
         {(selectionIndices ?? null) === null ? 'null' : selectionIndices!.join(',')}
       </div>
@@ -59,6 +87,24 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
       </button>
       <button type="button" onClick={() => onSelectionModeChange?.(true)}>
         Mock selection mode on
+      </button>
+      <button type="button" onClick={() => onBrushSelectionChange?.({ xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 })}>
+        Mock brush selection
+      </button>
+      <button type="button" onClick={() => onPinCell?.({ x: 0, y: 1 })}>
+        Mock pin cell
+      </button>
+      <button type="button" onClick={() => onPinResidues?.([0, 1])}>
+        Mock pin residues
+      </button>
+      <button type="button" onClick={() => onTogglePaeHoverSync?.()}>
+        Mock pair hover toggle
+      </button>
+      <button type="button" onClick={() => onTogglePaePairSelection?.()}>
+        Mock pair click toggle
+      </button>
+      <button type="button" onClick={() => onClearPairSelection?.()}>
+        Mock clear pair
       </button>
       <button type="button" onClick={() => onFocusIndicesChange?.([1, 2])}>
         Mock Molstar focus
@@ -143,6 +189,56 @@ describe('project app shell', () => {
     await waitFor(() => {
       expect(scoped.getAllByText(/^toy_ranked_0\.pdb$/i).length).toBeGreaterThan(0);
     });
+  });
+
+  it('keeps pAE brush selection and coloring when switching between targets', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<ProjectPage api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+    await user.selectOptions(scoped.getByLabelText('Load target example'), 'colabfold');
+
+    await waitFor(() => {
+      expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-1');
+    });
+
+    await user.click(scoped.getByRole('button', { name: 'Mock brush selection' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock pin cell' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock pin residues' }));
+    await user.click(scoped.getByRole('button', { name: 'Mock pair hover toggle' }));
+
+    expect(scoped.getByTestId('brush-selection')).toHaveTextContent('0,1,0,1');
+    expect(scoped.getByTestId('pinned-cell')).toHaveTextContent('0,1');
+    expect(scoped.getByTestId('pinned-residues')).toHaveTextContent('0,1');
+    expect(scoped.getByTestId('pae-hover-sync')).toHaveTextContent('false');
+
+    const secondUploadInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(secondUploadInput, [
+      new File([toyRanked0], 'alt_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'alt_scores.json', { type: 'application/json' }),
+    ]);
+
+    await waitFor(() => {
+      expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-2');
+    });
+
+    expect(scoped.getByTestId('brush-selection')).toHaveTextContent('null');
+    expect(scoped.getByTestId('pinned-cell')).toHaveTextContent('null');
+    expect(scoped.getByTestId('pinned-residues')).toHaveTextContent('null');
+    expect(scoped.getByTestId('pae-hover-sync')).toHaveTextContent('true');
+
+    await user.click(scoped.getByRole('button', { name: /^toy_ranked_0\.pdb$/i }));
+
+    await waitFor(() => {
+      expect(scoped.getByTestId('artifact-workspace')).toHaveTextContent('target-1');
+    });
+
+    expect(scoped.getByTestId('brush-selection')).toHaveTextContent('0,1,0,1');
+    expect(scoped.getByTestId('pinned-cell')).toHaveTextContent('0,1');
+    expect(scoped.getByTestId('pinned-residues')).toHaveTextContent('0,1');
+    expect(scoped.getByTestId('pae-hover-sync')).toHaveTextContent('false');
   });
 
   it('links Mol* selection to the interface input and shows both selection and focus on the selected target card', async () => {

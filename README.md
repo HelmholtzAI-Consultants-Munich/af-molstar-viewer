@@ -90,7 +90,7 @@ uv sync
 uv run backend
 ```
 
-Single-command local dev:
+Single-command local dev (preferred!):
 
 ```bash
 make dev
@@ -125,7 +125,8 @@ make dev-frontend-http
   - [x] enable pLDDT/chain-id theme toggling for the target
   - [x] use+show the pAE panel as a drawer on the right
   - [x] when cropping / cutting a structure, also crop the pAE data to the surviving residues
-  - [ ] persist drag-coloring across target switches?
+  - [x] persist pAE brush selection and coloring across artifact switching
+  - [x] persist focus, even when there is a pAE brush selection
   - [ ] show the generated binders
   - [ ] show the AF2-predicted structures of the binders
   - [ ] allow comparing the binders, maybe in separate connected views or with overlaying

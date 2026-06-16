@@ -1,33 +1,73 @@
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MolstarPanel } from '../components/MolstarPanel';
+import { PAE_SELECTION_COLORS } from '../lib/constants';
 import { SYNC_PAE_INTERACTION_PERFORMANCE } from '../lib/performance';
 import { createToyBundle } from './helpers';
 
 const selectionModeNextSpy = vi.fn();
 const createObjectURLSpy = vi.fn(() => 'blob:mock');
 const revokeObjectURLSpy = vi.fn();
+const viewerInstances: Array<{
+  visual: {
+    select: { mock: { calls: Array<[Record<string, unknown>]> } };
+    sequenceColor: { mock: { calls: Array<[Record<string, unknown>]> } };
+    interactivityFocus: { mock: { calls: Array<[Record<string, unknown>]> } };
+  };
+  plugin: {
+    managers: {
+      structure: {
+        focus: {
+          clear: { mock: { calls: unknown[][] } };
+          setFromLoci: { mock: { calls: unknown[][] } };
+        };
+      };
+    };
+  };
+}> = [];
+
+const makeMockLoci = (queries: Array<Record<string, unknown>> = []) => ({
+  __mockLoci: true,
+  locations: queries.flatMap((query) => {
+    const chainId = String(query.label_asym_id ?? '');
+    const start = Number(query.beg_auth_seq_id ?? query.end_auth_seq_id ?? 0);
+    const end = Number(query.end_auth_seq_id ?? query.beg_auth_seq_id ?? 0);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, offset) => ({
+      chainId,
+      authSeqId: start + offset,
+    }));
+  }),
+});
 
 vi.mock('pdbe-molstar/lib/helpers.js', () => ({
   QueryHelper: {
-    getInteractivityLoci: vi.fn(() => null),
+    getInteractivityLoci: vi.fn((queries: Array<Record<string, unknown>>) => makeMockLoci(queries)),
   },
 }));
 
 vi.mock('molstar/lib/mol-model/structure.js', () => ({
   StructureElement: {
     Loci: {
-      is: vi.fn(() => false),
-      isEmpty: vi.fn(() => true),
-      forEachLocation: vi.fn(),
+      is: vi.fn((value: unknown) => Boolean((value as { __mockLoci?: boolean } | null | undefined)?.__mockLoci)),
+      isEmpty: vi.fn((value: unknown) => {
+        const loci = value as { locations?: unknown[] } | null | undefined;
+        return !(loci?.locations?.length ?? 0);
+      }),
+      forEachLocation: vi.fn((value: unknown, callback: (location: unknown) => void) => {
+        const loci = value as { locations?: unknown[] } | null | undefined;
+        for (const location of loci?.locations ?? []) {
+          callback(location);
+        }
+      }),
+      areEqual: vi.fn((left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)),
     },
   },
   StructureProperties: {
     chain: {
-      label_asym_id: vi.fn(() => 'A'),
+      label_asym_id: vi.fn((location: { chainId?: string } | undefined) => location?.chainId ?? 'A'),
     },
     residue: {
-      auth_seq_id: vi.fn(() => 1),
+      auth_seq_id: vi.fn((location: { authSeqId?: number } | undefined) => location?.authSeqId ?? 1),
     },
   },
 }));
@@ -103,6 +143,10 @@ vi.mock('pdbe-molstar/lib/viewer.js', () => {
           },
           focus: {
             clear: vi.fn(() => undefined),
+            setFromLoci: vi.fn((loci: unknown) => {
+              this.plugin.managers.structure.focus.current.loci = loci;
+              return undefined;
+            }),
             current: {
               loci: null,
             },
@@ -166,6 +210,10 @@ vi.mock('pdbe-molstar/lib/viewer.js', () => {
     };
 
     render = vi.fn(async () => undefined);
+
+    constructor() {
+      viewerInstances.push(this);
+    }
   }
 
   return {
@@ -190,6 +238,7 @@ describe('MolstarPanel', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    viewerInstances.length = 0;
   });
 
   it('forwards an early selection-mode change once the panel becomes ready', async () => {
@@ -233,5 +282,209 @@ describe('MolstarPanel', () => {
       expect(onSelectionModeChange).toHaveBeenCalledTimes(1);
     });
     expect(onSelectionModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('reapplies brush coloring after the viewer finishes mounting', async () => {
+    const bundle = createToyBundle();
+
+    render(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={{ xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 }}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        viewerInstances.at(-1)?.visual.select.mock.calls.some(([call]) => {
+          const payload = call as { data?: unknown[]; nonSelectedColor?: string };
+          return Array.isArray(payload.data) && payload.nonSelectedColor === PAE_SELECTION_COLORS.dimmed;
+        }),
+      ).toBe(true);
+    });
+
+    expect(
+      viewerInstances.at(-1)?.visual.sequenceColor.mock.calls.some(([call]) => {
+        const payload = call as { data?: unknown[]; nonSelectedColor?: string };
+        return Array.isArray(payload.data) && payload.nonSelectedColor === PAE_SELECTION_COLORS.dimmed;
+      }),
+    ).toBe(true);
+  });
+
+  it('reapplies restored focus after switching away from and back to a target', async () => {
+    const bundle = createToyBundle();
+
+    const { rerender } = render(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={[1, 2]}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(viewerInstances).toHaveLength(1);
+      expect(viewerInstances.at(-1)?.plugin.managers.structure.focus.setFromLoci).toHaveBeenCalled();
+      expect(
+        viewerInstances.at(-1)?.visual.interactivityFocus.mock.calls.some(([call]) => {
+          const payload = call as { data?: Array<{ focus?: boolean }> };
+          return Array.isArray(payload.data) && payload.data.every((query) => query.focus === true);
+        }),
+      ).toBe(true);
+    });
+
+    rerender(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={createToyBundle()}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(viewerInstances).toHaveLength(2);
+    });
+
+    rerender(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={createToyBundle()}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={[1, 2]}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(viewerInstances).toHaveLength(3);
+      expect(viewerInstances.at(-1)?.plugin.managers.structure.focus.setFromLoci).toHaveBeenCalled();
+      expect(
+        viewerInstances.at(-1)?.visual.interactivityFocus.mock.calls.some(([call]) => {
+          const payload = call as { data?: Array<{ focus?: boolean }> };
+          return Array.isArray(payload.data) && payload.data.every((query) => query.focus === true);
+        }),
+      ).toBe(true);
+    });
+  });
+
+  it('reapplies restored focus even when brush coloring is active', async () => {
+    const bundle = createToyBundle();
+
+    render(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={[1, 2]}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={{ xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 }}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(viewerInstances).toHaveLength(1);
+      expect(
+        viewerInstances.at(-1)?.visual.interactivityFocus.mock.calls.some(([call]) => {
+          const payload = call as { data?: Array<{ focus?: boolean }> };
+          return Array.isArray(payload.data) && payload.data.every((query) => query.focus === true);
+        }),
+      ).toBe(true);
+    });
   });
 });

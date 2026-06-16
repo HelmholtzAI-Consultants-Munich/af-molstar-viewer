@@ -19,6 +19,7 @@ import type { ProjectApi } from '../../services/project/project-api';
 import { createProjectApi } from '../../services/project/project-api';
 import { getLatestViewerState, upsertViewerState } from '../viewer/viewer-state';
 import type { WorkerInputFile } from '../../lib/types';
+import { PAE_HOVER_SYNC_RESIDUE_THRESHOLD } from './ArtifactWorkspace';
 
 interface UseProjectWorkspaceOptions {
   api?: ProjectApi;
@@ -69,6 +70,11 @@ export interface ProjectWorkspaceState {
   selectionEnabledByArtifact: Record<string, boolean>;
   themeByArtifact: Record<string, boolean>;
   paeDrawerOpenByArtifact: Record<string, boolean>;
+  brushSelectionByArtifact: Record<string, { xStart: number; xEnd: number; yStart: number; yEnd: number } | null>;
+  pinnedResiduesByArtifact: Record<string, number[]>;
+  pinnedCellByArtifact: Record<string, { x: number; y: number } | null>;
+  paeHoverSyncEnabledByArtifact: Record<string, boolean>;
+  paePairSelectionEnabledByArtifact: Record<string, boolean>;
   selectionSyncNonce: number;
   isDraftFocused: boolean;
   focusByArtifact: Record<string, number[]>;
@@ -88,6 +94,11 @@ export interface ProjectWorkspaceState {
   selectionEnabled: boolean;
   selectionDisplayString: string;
   hasActiveSelection: boolean;
+  brushSelection: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null;
+  pinnedResidues: number[];
+  pinnedCell: { x: number; y: number } | null;
+  paeHoverSyncEnabled: boolean;
+  paePairSelectionEnabled: boolean;
   onSelectTarget: (targetId: string) => void;
   onToggleValidationCompare: (validationId: string) => void;
   onDraftFocus: () => void;
@@ -106,6 +117,12 @@ export interface ProjectWorkspaceState {
   onSelectionIndicesChange: (indices: number[]) => void;
   onSelectionModeChange: (enabled: boolean) => void;
   onFocusIndicesChange: (indices: number[]) => void;
+  onBrushSelectionChange: (artifactId: string, selection: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null) => void;
+  onPinResidues: (artifactId: string, indices: number[]) => void;
+  onPinCell: (artifactId: string, cell: { x: number; y: number } | null) => void;
+  onTogglePaeHoverSync: (artifactId: string) => void;
+  onTogglePaePairSelection: (artifactId: string) => void;
+  onClearPairSelection: (artifactId: string) => void;
   onThemeChange: (artifactId: string, enabled: boolean) => void;
   onToggleTheme: (artifactId: string) => void;
   onPaeDrawerOpenChange: (artifactId: string, open: boolean) => void;
@@ -128,6 +145,11 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   const [selectionEnabledByArtifact, setSelectionEnabledByArtifact] = useState<Record<string, boolean>>({});
   const [themeByArtifact, setThemeByArtifact] = useState<Record<string, boolean>>({});
   const [paeDrawerOpenByArtifact, setPaeDrawerOpenByArtifact] = useState<Record<string, boolean>>({});
+  const [brushSelectionByArtifact, setBrushSelectionByArtifact] = useState<Record<string, { xStart: number; xEnd: number; yStart: number; yEnd: number } | null>>({});
+  const [pinnedResiduesByArtifact, setPinnedResiduesByArtifact] = useState<Record<string, number[]>>({});
+  const [pinnedCellByArtifact, setPinnedCellByArtifact] = useState<Record<string, { x: number; y: number } | null>>({});
+  const [paeHoverSyncEnabledByArtifact, setPaeHoverSyncEnabledByArtifact] = useState<Record<string, boolean>>({});
+  const [paePairSelectionEnabledByArtifact, setPaePairSelectionEnabledByArtifact] = useState<Record<string, boolean>>({});
   const [selectionSyncNonce, setSelectionSyncNonce] = useState(0);
   const [isDraftFocused, setDraftFocused] = useState(false);
   const [focusByArtifact, setFocusByArtifact] = useState<Record<string, number[]>>({});
@@ -156,6 +178,13 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   const match = selectedTarget ? matchByArtifact[selectedTarget.id] : null;
   const selectionIndices = match ? match.residueIndices : null;
   const selectionEnabled = selectedTarget ? (selectionEnabledByArtifact[selectedTarget.id] ?? false) : false;
+  const brushSelection = selectedTarget ? (brushSelectionByArtifact[selectedTarget.id] ?? null) : null;
+  const pinnedResidues = selectedTarget ? (pinnedResiduesByArtifact[selectedTarget.id] ?? []) : [];
+  const pinnedCell = selectedTarget ? (pinnedCellByArtifact[selectedTarget.id] ?? null) : null;
+  const paeHoverSyncEnabled = selectedArtifact
+    ? (paeHoverSyncEnabledByArtifact[selectedArtifact.artifactId] ?? (selectedArtifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD))
+    : false;
+  const paePairSelectionEnabled = selectedArtifact ? (paePairSelectionEnabledByArtifact[selectedArtifact.artifactId] ?? true) : false;
   const selectionDisplayString = (() => {
     if (!selectedTarget || !selectedArtifact || !match) return '';
     const canonical = indicesAndResiduesToMatch(match.residueIndices, selectedArtifact.bundle.residues).canonical;
@@ -202,6 +231,41 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     }));
   };
 
+  const saveBrushSelectionByArtifact = (artifactId: string, value: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null) => {
+    setBrushSelectionByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
+  const savePinnedResiduesByArtifact = (artifactId: string, value: number[]) => {
+    setPinnedResiduesByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
+  const savePinnedCellByArtifact = (artifactId: string, value: { x: number; y: number } | null) => {
+    setPinnedCellByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
+  const savePaeHoverSyncEnabledByArtifact = (artifactId: string, value: boolean) => {
+    setPaeHoverSyncEnabledByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
+  const savePaePairSelectionEnabledByArtifact = (artifactId: string, value: boolean) => {
+    setPaePairSelectionEnabledByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
   const triggerSelectionSync = () => {
     setSelectionSyncNonce((current) => current + 1);
   };
@@ -242,6 +306,18 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
         );
         setSelectionEnabledByArtifact(
           Object.fromEntries(nextProject.targets.map((target) => [target.id, false])),
+        );
+        setBrushSelectionByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, null])),
+        );
+        setPinnedResiduesByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, []])),
+        );
+        setPinnedCellByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, null])),
+        );
+        setPaePairSelectionEnabledByArtifact(
+          Object.fromEntries(nextProject.targets.map((target) => [target.id, true])),
         );
       } catch (appError) {
         if (!cancelled) {
@@ -286,22 +362,142 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
         Object.entries(next).every(([targetId, value]) => current[targetId] === value);
       return same ? current : next;
     });
-    const targetIds = new Set(project.targets.map((target) => target.id));
+    const artifactIds = new Set([
+      ...project.targets.map((target) => target.id),
+      ...project.binder_validations.map((validation) => validation.id),
+    ]);
     setThemeByArtifact((current) => {
-      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => targetIds.has(targetId)));
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
       const same =
         Object.keys(next).length === Object.keys(current).length &&
         Object.entries(next).every(([targetId, value]) => current[targetId] === value);
       return same ? current : next;
     });
     setPaeDrawerOpenByArtifact((current) => {
-      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => targetIds.has(targetId)));
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setBrushSelectionByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setPinnedResiduesByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setPinnedCellByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setPaePairSelectionEnabledByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => artifactIds.has(targetId)));
       const same =
         Object.keys(next).length === Object.keys(current).length &&
         Object.entries(next).every(([targetId, value]) => current[targetId] === value);
       return same ? current : next;
     });
   }, [project]);
+
+  useEffect(() => {
+    if (!project) return;
+    setBrushSelectionByArtifact((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const target of project.targets) {
+        if (next[target.id] === undefined) {
+          next[target.id] = null;
+          changed = true;
+        }
+      }
+      for (const validation of project.binder_validations) {
+        if (next[validation.id] === undefined) {
+          next[validation.id] = null;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    setPinnedResiduesByArtifact((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const target of project.targets) {
+        if (next[target.id] === undefined) {
+          next[target.id] = [];
+          changed = true;
+        }
+      }
+      for (const validation of project.binder_validations) {
+        if (next[validation.id] === undefined) {
+          next[validation.id] = [];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    setPinnedCellByArtifact((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const target of project.targets) {
+        if (next[target.id] === undefined) {
+          next[target.id] = null;
+          changed = true;
+        }
+      }
+      for (const validation of project.binder_validations) {
+        if (next[validation.id] === undefined) {
+          next[validation.id] = null;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    setPaeHoverSyncEnabledByArtifact((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const target of project.targets) {
+        if (next[target.id] === undefined && viewerArtifacts[target.id]) {
+          next[target.id] = viewerArtifacts[target.id].bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD;
+          changed = true;
+        }
+      }
+      for (const validation of project.binder_validations) {
+        if (next[validation.id] === undefined && viewerArtifacts[validation.id]) {
+          next[validation.id] = viewerArtifacts[validation.id].bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+    setPaePairSelectionEnabledByArtifact((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const target of project.targets) {
+        if (next[target.id] === undefined) {
+          next[target.id] = true;
+          changed = true;
+        }
+      }
+      for (const validation of project.binder_validations) {
+        if (next[validation.id] === undefined) {
+          next[validation.id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [project, viewerArtifacts]);
 
   useEffect(() => {
     if (!project) return;
@@ -471,6 +667,11 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       setSelectionEnabledByArtifact((current) => omitKey(current, targetId));
       setThemeByArtifact((current) => omitKey(current, targetId));
       setPaeDrawerOpenByArtifact((current) => omitKey(current, targetId));
+      setBrushSelectionByArtifact((current) => omitKey(current, targetId));
+      setPinnedResiduesByArtifact((current) => omitKey(current, targetId));
+      setPinnedCellByArtifact((current) => omitKey(current, targetId));
+      setPaeHoverSyncEnabledByArtifact((current) => omitKey(current, targetId));
+      setPaePairSelectionEnabledByArtifact((current) => omitKey(current, targetId));
       setViewerArtifacts((current) => omitKey(current, targetId));
       setFocusByArtifact((current) => omitKey(current, targetId));
     } catch (removeError) {
@@ -602,6 +803,40 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     saveSelectionEnabledByArtifact(targetId, enabled);
   };
 
+  const onBrushSelectionChange = (artifactId: string, selection: { xStart: number; xEnd: number; yStart: number; yEnd: number } | null) => {
+    saveBrushSelectionByArtifact(artifactId, selection);
+  };
+
+  const onPinResidues = (artifactId: string, indices: number[]) => {
+    savePinnedResiduesByArtifact(artifactId, indices);
+  };
+
+  const onPinCell = (artifactId: string, cell: { x: number; y: number } | null) => {
+    savePinnedCellByArtifact(artifactId, cell);
+  };
+
+  const onTogglePaeHoverSync = (artifactId: string) => {
+    const artifact = viewerArtifacts[artifactId];
+    const currentEnabled =
+      paeHoverSyncEnabledByArtifact[artifactId] ?? Boolean(artifact && artifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD);
+    savePaeHoverSyncEnabledByArtifact(artifactId, !currentEnabled);
+  };
+
+  const onTogglePaePairSelection = (artifactId: string) => {
+    const currentEnabled = paePairSelectionEnabledByArtifact[artifactId] ?? true;
+    const next = !currentEnabled;
+    savePaePairSelectionEnabledByArtifact(artifactId, next);
+    if (!next) {
+      savePinnedCellByArtifact(artifactId, null);
+      savePinnedResiduesByArtifact(artifactId, []);
+    }
+  };
+
+  const onClearPairSelection = (artifactId: string) => {
+    savePinnedCellByArtifact(artifactId, null);
+    savePinnedResiduesByArtifact(artifactId, []);
+  };
+
   const onFocusIndicesChange = (indices: number[]) => {
     if (!selectedArtifact) return;
     setFocusByArtifact((current) => ({
@@ -679,6 +914,11 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     selectionEnabledByArtifact,
     themeByArtifact,
     paeDrawerOpenByArtifact,
+    brushSelectionByArtifact,
+    pinnedResiduesByArtifact,
+    pinnedCellByArtifact,
+    paeHoverSyncEnabledByArtifact,
+    paePairSelectionEnabledByArtifact,
     selectionSyncNonce,
     isDraftFocused,
     focusByArtifact,
@@ -698,6 +938,11 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     selectionEnabled,
     selectionDisplayString,
     hasActiveSelection,
+    brushSelection,
+    pinnedResidues,
+    pinnedCell,
+    paeHoverSyncEnabled,
+    paePairSelectionEnabled,
     onSelectTarget,
     onToggleValidationCompare,
     onDraftFocus,
@@ -716,6 +961,12 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     onSelectionIndicesChange,
     onSelectionModeChange,
     onFocusIndicesChange,
+    onBrushSelectionChange,
+    onPinResidues,
+    onPinCell,
+    onTogglePaeHoverSync,
+    onTogglePaePairSelection,
+    onClearPairSelection,
     onThemeChange,
     onToggleTheme,
     onPaeDrawerOpenChange,

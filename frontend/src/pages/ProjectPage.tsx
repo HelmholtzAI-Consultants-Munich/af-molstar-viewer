@@ -1,7 +1,7 @@
 import { PanelRightOpen } from 'lucide-react';
 import { useProjectWorkspace } from '../features/project/useProjectWorkspace';
 import { ProjectSidebar } from '../features/project/ProjectSidebar';
-import { ArtifactWorkspace } from '../features/project/ArtifactWorkspace';
+import { ArtifactWorkspace, PAE_HOVER_SYNC_RESIDUE_THRESHOLD } from '../features/project/ArtifactWorkspace';
 import { getLatestViewerState } from '../features/viewer/viewer-state';
 import type { ProjectApi } from '../services/project/project-api';
 
@@ -17,6 +17,21 @@ export function ProjectPage(props: ProjectPageProps) {
     : false;
   const selectedTargetPaeDrawerOpen = workspace.selectedTarget
     ? (workspace.paeDrawerOpenByArtifact[workspace.selectedTarget.id] ?? false)
+    : false;
+  const selectedTargetBrushSelection = workspace.selectedTarget
+    ? (workspace.brushSelectionByArtifact[workspace.selectedTarget.id] ?? null)
+    : null;
+  const selectedTargetPinnedResidues = workspace.selectedTarget
+    ? (workspace.pinnedResiduesByArtifact[workspace.selectedTarget.id] ?? [])
+    : [];
+  const selectedTargetPinnedCell = workspace.selectedTarget
+    ? (workspace.pinnedCellByArtifact[workspace.selectedTarget.id] ?? null)
+    : null;
+  const selectedTargetPaeHoverSyncEnabled = workspace.selectedArtifact
+    ? (workspace.paeHoverSyncEnabledByArtifact[workspace.selectedArtifact.artifactId] ?? (workspace.selectedArtifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD))
+    : false;
+  const selectedTargetPaePairSelectionEnabled = workspace.selectedArtifact
+    ? (workspace.paePairSelectionEnabledByArtifact[workspace.selectedArtifact.artifactId] ?? true)
     : false;
 
   if (workspace.loading) {
@@ -124,12 +139,41 @@ export function ProjectPage(props: ProjectPageProps) {
               draftFocused={workspace.isDraftFocused}
               selectionEnabled={workspace.selectionEnabled}
               selectionSyncNonce={workspace.selectionSyncNonce}
+              brushSelection={selectedTargetBrushSelection}
+              pinnedResidues={selectedTargetPinnedResidues}
+              pinnedCell={selectedTargetPinnedCell}
+              paeHoverSyncEnabled={selectedTargetPaeHoverSyncEnabled}
+              paePairSelectionEnabled={selectedTargetPaePairSelectionEnabled}
               colorByPLDDTToggleStatus={selectedTargetThemeStatus}
               colorByPLDDTEnabled={selectedTargetThemeEnabled}
               paeDrawerOpen={selectedTargetPaeDrawerOpen}
               onSelectionIndicesChange={workspace.onSelectionIndicesChange}
               onSelectionModeChange={workspace.onSelectionModeChange}
               onFocusIndicesChange={workspace.onFocusIndicesChange}
+              onBrushSelectionChange={(selection) => {
+                if (!workspace.selectedTarget) return;
+                workspace.onBrushSelectionChange(workspace.selectedTarget.id, selection);
+              }}
+              onPinResidues={(indices) => {
+                if (!workspace.selectedTarget) return;
+                workspace.onPinResidues(workspace.selectedTarget.id, indices);
+              }}
+              onPinCell={(cell) => {
+                if (!workspace.selectedTarget) return;
+                workspace.onPinCell(workspace.selectedTarget.id, cell);
+              }}
+              onTogglePaeHoverSync={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onTogglePaeHoverSync(workspace.selectedTarget.id);
+              }}
+              onTogglePaePairSelection={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onTogglePaePairSelection(workspace.selectedTarget.id);
+              }}
+              onClearPairSelection={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onClearPairSelection(workspace.selectedTarget.id);
+              }}
               onToggleColorByPLDDT={() => {
                 if (!workspace.selectedTarget) return;
                 workspace.onToggleTheme(workspace.selectedTarget.id);
@@ -187,9 +231,20 @@ export function ProjectPage(props: ProjectPageProps) {
                           focusIndices={null}
                           draftFocused={workspace.isDraftFocused}
                           selectionEnabled={workspace.selectionEnabled}
+                          brushSelection={workspace.brushSelectionByArtifact[validation.id] ?? null}
+                          pinnedResidues={workspace.pinnedResiduesByArtifact[validation.id] ?? []}
+                          pinnedCell={workspace.pinnedCellByArtifact[validation.id] ?? null}
+                          paeHoverSyncEnabled={workspace.paeHoverSyncEnabledByArtifact[validation.id] ?? (artifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD)}
+                          paePairSelectionEnabled={workspace.paePairSelectionEnabledByArtifact[validation.id] ?? true}
                           colorByPLDDTToggleStatus={workspace.themeByArtifact[validation.id] ?? Boolean(artifact.bundle.metadata.looksLikePLDDTs)}
                           colorByPLDDTEnabled={Boolean(artifact.bundle.metadata.looksLikePLDDTs)}
                           paeDrawerOpen={workspace.paeDrawerOpenByArtifact[validation.id] ?? false}
+                          onBrushSelectionChange={(selection) => workspace.onBrushSelectionChange(validation.id, selection)}
+                          onPinResidues={(indices) => workspace.onPinResidues(validation.id, indices)}
+                          onPinCell={(cell) => workspace.onPinCell(validation.id, cell)}
+                          onTogglePaeHoverSync={() => workspace.onTogglePaeHoverSync(validation.id)}
+                          onTogglePaePairSelection={() => workspace.onTogglePaePairSelection(validation.id)}
+                          onClearPairSelection={() => workspace.onClearPairSelection(validation.id)}
                           onImportPaeData={(paeMatrix, paeMax) => {
                             workspace.onImportPaeData(validation.id, paeMatrix, paeMax);
                           }}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PAE_PAIR_SELECTION_COLOR, PAE_SELECTION_COLORS } from '../lib/constants';
 import { findResidueIndexFromMolstarEvent, residueIndicesToQueries } from '../lib/molstar/queries';
 import type { MatrixViewport, PredictionBundle } from '../lib/types';
@@ -182,6 +182,28 @@ async function applyDefaultColorsDeferred(
       error,
     });
   }
+}
+
+async function delayViewerSettle() {
+  const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await raf();
+  await raf();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function restoreFocusedResiduesAfterViewerSettle(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  props: MolstarPanelProps,
+  focusIndices: number[] | null,
+) {
+  if (props.viewerConfiguration !== 'target') return;
+  if (props.pinnedResidues.length > 0 || props.pinnedCell !== null) return;
+  if (focusIndices === null) return;
+
+  await delayViewerSettle();
+  await syncNativeFocus(viewer, props.bundle.residues, focusIndices, {
+    includeLabelSeqId: props.bundle.structure.format !== 'pdb',
+  });
 }
 
 async function applyPinnedPairSelection(
@@ -413,6 +435,15 @@ async function syncNativeFocus(
   if (!viewer.plugin?.managers?.structure?.focus) return;
   if (indices.length === 0) {
     viewer.plugin.managers.structure.focus.clear();
+    await viewer.visual.interactivityFocus({ data: [] });
+    return;
+  }
+
+  const currentFocus = await readFocusResidues(viewer, residues);
+  if (
+    currentFocus.length === indices.length &&
+    currentFocus.every((value, index) => value === indices[index])
+  ) {
     return;
   }
 
@@ -421,6 +452,12 @@ async function syncNativeFocus(
   });
   if (!loci) return;
   viewer.plugin.managers.structure.focus.setFromLoci(loci);
+  await viewer.visual.interactivityFocus({
+    data: residueIndicesToQueries(residues, indices, {
+      focus: true,
+      includeLabelSeqId: options?.includeLabelSeqId ?? true,
+    }),
+  });
 }
 
 function readSnapshotFromPayload(payload: Record<string, unknown> | null | undefined) {
@@ -497,6 +534,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
+  const [viewerReadyRevision, setViewerReadyRevision] = useState(0);
   const hoveredResidues = useMemo(() => props.hoveredResidues, [props.hoveredResidues]);
 
   useEffect(() => {
@@ -689,9 +727,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
         });
       }
       if (focusedResiduesRef.current !== null) {
-        await syncNativeFocus(viewerRef.current, props.bundle.residues, focusedResiduesRef.current, {
-          includeLabelSeqId: props.bundle.structure.format !== 'pdb',
-        });
+        await restoreFocusedResiduesAfterViewerSettle(viewerRef.current, props, focusedResiduesRef.current);
       }
       await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 
@@ -742,6 +778,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
       }
       const initialFocus = await readFocusResidues(viewerRef.current, props.bundle.residues);
       focusCallbackRef.current?.(initialFocus);
+      setViewerReadyRevision((current) => current + 1);
 
       return () => {
         disposed = true;
@@ -820,8 +857,10 @@ export function MolstarPanel(props: MolstarPanelProps) {
       const brushSelection = props.brushSelection;
       void (async () => {
         await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
-        await clearStructureFocus(viewer);
         await applyBrushColoring(viewer, props.bundle.residues, brushSelection);
+        if (focusedResiduesRef.current !== null) {
+          await restoreFocusedResiduesAfterViewerSettle(viewer, props, focusedResiduesRef.current);
+        }
       })();
       return;
     }
@@ -834,11 +873,6 @@ export function MolstarPanel(props: MolstarPanelProps) {
         if (selectedResiduesRef.current !== null) {
           await syncNativeSelection(viewer, props.bundle.residues, selectedResiduesRef.current, {
             force: true,
-            includeLabelSeqId: props.bundle.structure.format !== 'pdb',
-          });
-        }
-        if (focusedResiduesRef.current !== null) {
-          await syncNativeFocus(viewer, props.bundle.residues, focusedResiduesRef.current, {
             includeLabelSeqId: props.bundle.structure.format !== 'pdb',
           });
         }
@@ -868,6 +902,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     props.pinnedResidues,
     props.colorByPLDDTToggleStatus,
     props.colorByPLDDTEnabled,
+    viewerReadyRevision,
   ]);
 
   return (

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Workspace } from '../viewer/Workspace';
 import type { LoadedViewerArtifact, ViewerConfiguration } from '../../domain/project';
+import type { MatrixViewport } from '../../lib/types';
 import { resolvePaeInteractionPerformance } from '../../lib/performance';
 
-const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
+export const PAE_HOVER_SYNC_RESIDUE_THRESHOLD = 800;
 
 interface ArtifactWorkspaceProps {
   artifact: LoadedViewerArtifact;
@@ -15,12 +16,23 @@ interface ArtifactWorkspaceProps {
   selectionEnabled: boolean;
   selectionSyncNonce?: number;
   focusIndices?: number[] | null;
+  brushSelection: MatrixViewport | null;
+  pinnedResidues: number[];
+  pinnedCell: { x: number; y: number } | null;
+  paeHoverSyncEnabled: boolean;
+  paePairSelectionEnabled: boolean;
   colorByPLDDTToggleStatus: boolean;
   colorByPLDDTEnabled: boolean;
   paeDrawerOpen: boolean;
   onSelectionIndicesChange?: (indices: number[]) => void;
   onSelectionModeChange?: (enabled: boolean) => void;
   onFocusIndicesChange?: (indices: number[]) => void;
+  onBrushSelectionChange: (selection: MatrixViewport | null) => void;
+  onPinResidues: (indices: number[]) => void;
+  onPinCell: (cell: { x: number; y: number } | null) => void;
+  onTogglePaeHoverSync: () => void;
+  onTogglePaePairSelection: () => void;
+  onClearPairSelection: () => void;
   onToggleColorByPLDDT: () => void;
   onEnableColorByPLDDT: () => void;
   onTogglePaeDrawer: () => void;
@@ -31,14 +43,7 @@ interface ArtifactWorkspaceProps {
 
 export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
   const [hoveredResidues, setHoveredResidues] = useState<number[]>([]);
-  const [pinnedResidues, setPinnedResidues] = useState<number[]>([]);
-  const [pinnedCell, setPinnedCell] = useState<{ x: number; y: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
-  const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
-  const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(
-    props.artifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD,
-  );
-  const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
 
   const interactionPerformance = useMemo(
     () => resolvePaeInteractionPerformance(props.artifact.bundle.residues.length),
@@ -58,46 +63,29 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       selectionSyncNonce={props.selectionSyncNonce ?? 0}
       focusedResidues={props.focusIndices ?? null}
       hoveredResidues={hoveredResidues}
-      pinnedResidues={pinnedResidues}
-      pinnedCell={pinnedCell}
+      pinnedResidues={props.pinnedResidues}
+      pinnedCell={props.pinnedCell}
       hoveredCell={hoveredCell}
-      brushSelection={brushSelection}
+      brushSelection={props.brushSelection}
       interactionPerformance={interactionPerformance}
-      paeHoverSyncEnabled={paeHoverSyncEnabled}
-      paePairSelectionEnabled={paePairSelectionEnabled}
+      paeHoverSyncEnabled={props.paeHoverSyncEnabled}
+      paePairSelectionEnabled={props.paePairSelectionEnabled}
       colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
       colorByPLDDTEnabled={props.colorByPLDDTEnabled}
       paeDrawerOpen={props.paeDrawerOpen}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
-      onPinResidues={setPinnedResidues}
-      onPinCell={setPinnedCell}
-      onBrushSelectionChange={setBrushSelection}
+      onPinResidues={props.onPinResidues}
+      onPinCell={props.onPinCell}
+      onBrushSelectionChange={props.onBrushSelectionChange}
       onTogglePaeHoverSync={() => {
-        setPaeHoverSyncEnabled((enabled) => {
-          const next = !enabled;
-          if (!next) setHoveredResidues([]);
-          return next;
-        });
+        props.onTogglePaeHoverSync();
+        if (props.paeHoverSyncEnabled) {
+          setHoveredResidues([]);
+        }
       }}
-      onTogglePaePairSelection={() => {
-        setPaePairSelectionEnabled((enabled) => {
-          const next = !enabled;
-          if (!next) {
-            setPinnedCell((currentPinnedCell) => {
-              if (currentPinnedCell) {
-                setPinnedResidues([]);
-              }
-              return null;
-            });
-          }
-          return next;
-        });
-      }}
-      onClearPairSelection={() => {
-        setPinnedCell(null);
-        setPinnedResidues([]);
-      }}
+      onTogglePaePairSelection={props.onTogglePaePairSelection}
+      onClearPairSelection={props.onClearPairSelection}
       onToggleColorByPLDDT={props.onToggleColorByPLDDT}
       onEnableColorByPLDDT={props.onEnableColorByPLDDT}
       onTogglePaeDrawer={props.onTogglePaeDrawer}
