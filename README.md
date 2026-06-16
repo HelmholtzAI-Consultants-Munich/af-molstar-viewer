@@ -122,8 +122,9 @@ make dev-frontend-http
   - [x] enable cropping that protein (via backend and API)
   - [x] crop/cut remove unobserved residues from touched chains
   - [x] reset/remove AUTH indexing for BoltzGen
-  - [ ] enable pLDDT/chain-id theme toggling for the target
-  - [ ] use+show the pAE panel as a drawer on the right
+  - [x] enable pLDDT/chain-id theme toggling for the target
+  - [x] use+show the pAE panel as a drawer on the right
+  - [ ] crop pAE along the structure
   - [ ] show the generated binders
   - [ ] show the AF2-predicted structures of the binders
   - [ ] allow comparing the binders, maybe in separate connected views or with overlaying

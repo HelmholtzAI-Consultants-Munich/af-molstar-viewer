@@ -1,3 +1,4 @@
+import { PanelRightOpen } from 'lucide-react';
 import { useProjectWorkspace } from '../features/project/useProjectWorkspace';
 import { ProjectSidebar } from '../features/project/ProjectSidebar';
 import { ArtifactWorkspace } from '../features/project/ArtifactWorkspace';
@@ -10,6 +11,13 @@ interface ProjectPageProps {
 
 export function ProjectPage(props: ProjectPageProps) {
   const workspace = useProjectWorkspace({ api: props.api });
+  const selectedTargetThemeEnabled = Boolean(workspace.selectedArtifact?.bundle.metadata.looksLikePLDDTs);
+  const selectedTargetThemeStatus = workspace.selectedTarget
+    ? (workspace.themeByArtifact[workspace.selectedTarget.id] ?? selectedTargetThemeEnabled)
+    : false;
+  const selectedTargetPaeDrawerOpen = workspace.selectedTarget
+    ? (workspace.paeDrawerOpenByArtifact[workspace.selectedTarget.id] ?? false)
+    : false;
 
   if (workspace.loading) {
     return (
@@ -44,6 +52,8 @@ export function ProjectPage(props: ProjectPageProps) {
           selectionDisplayString={workspace.selectionDisplayString}
           hasActiveSelection={workspace.hasActiveSelection}
           selectionDraft={workspace.selectionDraft}
+          selectedTargetThemeEnabled={selectedTargetThemeEnabled}
+          selectedTargetThemeStatus={selectedTargetThemeStatus}
           compareValidationIds={workspace.compareValidationIds}
           busy={workspace.busy}
           onUploadTargetFiles={workspace.onUploadTargetFiles}
@@ -57,6 +67,10 @@ export function ProjectPage(props: ProjectPageProps) {
           onResetAuthIndexing={workspace.onResetAuthIndexing}
           onDownloadStructure={workspace.onDownloadStructure}
           onDownloadViewerState={workspace.onDownloadViewerState}
+          onSetSelectedTargetTheme={(enabled) => {
+            if (!workspace.selectedTarget) return;
+            workspace.onThemeChange(workspace.selectedTarget.id, enabled);
+          }}
           onDraftFocus={workspace.onDraftFocus}
           onDraftChange={workspace.onDraftChange}
           onDraftBlur={workspace.onDraftBlur}
@@ -80,6 +94,19 @@ export function ProjectPage(props: ProjectPageProps) {
                 <div className="viewer-context-meta">
                   <span>{workspace.selectedTarget.provenance.replace('_', ' ')}</span>
                   <span>{workspace.selectedTarget.selection}</span>
+                  {!selectedTargetPaeDrawerOpen && (
+                    <button
+                      type="button"
+                      className="pae-drawer-tab artifact-card-tool"
+                      title="show/hide pAE matrix"
+                      aria-label="show/hide pAE matrix"
+                      onClick={() => {
+                        workspace.onTogglePaeDrawer(workspace.selectedTarget!.id);
+                      }}
+                    >
+                      <PanelRightOpen size={16} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -97,9 +124,28 @@ export function ProjectPage(props: ProjectPageProps) {
               draftFocused={workspace.isDraftFocused}
               selectionEnabled={workspace.selectionEnabled}
               selectionSyncNonce={workspace.selectionSyncNonce}
+              colorByPLDDTToggleStatus={selectedTargetThemeStatus}
+              colorByPLDDTEnabled={selectedTargetThemeEnabled}
+              paeDrawerOpen={selectedTargetPaeDrawerOpen}
               onSelectionIndicesChange={workspace.onSelectionIndicesChange}
               onSelectionModeChange={workspace.onSelectionModeChange}
               onFocusIndicesChange={workspace.onFocusIndicesChange}
+              onToggleColorByPLDDT={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onToggleTheme(workspace.selectedTarget.id);
+              }}
+              onEnableColorByPLDDT={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onThemeChange(workspace.selectedTarget.id, true);
+              }}
+              onTogglePaeDrawer={() => {
+                if (!workspace.selectedTarget) return;
+                workspace.onTogglePaeDrawer(workspace.selectedTarget.id);
+              }}
+              onImportPaeData={(paeMatrix, paeMax) => {
+                if (!workspace.selectedTarget) return;
+                workspace.onImportPaeData(workspace.selectedTarget.id, paeMatrix, paeMax);
+              }}
               onViewerStateChange={(payload) => {
                 workspace.onViewerStateChange(workspace.selectedArtifact!.artifactId, 'target', 'Current target view', payload);
               }}
@@ -141,9 +187,18 @@ export function ProjectPage(props: ProjectPageProps) {
                           focusIndices={null}
                           draftFocused={workspace.isDraftFocused}
                           selectionEnabled={workspace.selectionEnabled}
+                          colorByPLDDTToggleStatus={workspace.themeByArtifact[validation.id] ?? Boolean(artifact.bundle.metadata.looksLikePLDDTs)}
+                          colorByPLDDTEnabled={Boolean(artifact.bundle.metadata.looksLikePLDDTs)}
+                          paeDrawerOpen={workspace.paeDrawerOpenByArtifact[validation.id] ?? false}
+                          onImportPaeData={(paeMatrix, paeMax) => {
+                            workspace.onImportPaeData(validation.id, paeMatrix, paeMax);
+                          }}
                           onViewerStateChange={(payload) => {
                             workspace.onViewerStateChange(validation.id, 'validate_refolding', 'Current validate refolding view', payload);
                           }}
+                          onToggleColorByPLDDT={() => workspace.onToggleTheme(validation.id)}
+                          onEnableColorByPLDDT={() => workspace.onThemeChange(validation.id, true)}
+                          onTogglePaeDrawer={() => workspace.onTogglePaeDrawer(validation.id)}
                         />
                       ) : (
                         <div className="panel empty-panel compare-empty-panel">

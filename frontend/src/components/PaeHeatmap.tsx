@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport } from '../lib/types';
 import { PAE_SELECTION_COLORS, PAE_PAIR_SELECTION_COLOR } from '../lib/constants';
 import { clamp } from '../lib/utils';
+import { parsePaeJson } from '../lib/parsers/pae';
 
 interface PaeHeatmapProps {
   matrix: number[][];
@@ -15,16 +16,13 @@ interface PaeHeatmapProps {
   interactionPerformance: PaeInteractionPerformanceSettings;
   hoverSyncEnabled: boolean;
   pairSelectionEnabled: boolean;
-  colorByPLDDTToggleStatus: boolean;
-  colorByPLDDTEnabled: boolean;
   onHoverCell: (cell: { x: number; y: number } | null) => void;
   onClickCell: (cell: { x: number; y: number }) => void;
   onBrushSelectionChange: (selection: MatrixViewport | null) => void;
   onToggleHoverSync: () => void;
   onTogglePairSelection: () => void;
   onClearPairSelection: () => void;
-  onToggleColorByPLDDT: () => void;
-  onEnableColorByPLDDT: () => void;
+  onImportPaeData: (paeMatrix: number[][], paeMax: number) => void;
 }
 
 const PAE_COLOR_STOPS = [
@@ -286,6 +284,19 @@ function mapClientToCell(
   };
 }
 
+function readFileText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error(`Unable to read ${file.name}`));
+    reader.readAsText(file);
+  });
+}
+
 export function PaeHeatmap(props: PaeHeatmapProps) {
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -299,6 +310,8 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     startClientY: number;
     selection: MatrixViewport;
   } | null>(null);
+  const [dropDepth, setDropDepth] = useState(0);
+  const [dropError, setDropError] = useState<string | null>(null);
   const size = props.matrix.length;
   const yAxisTicks = useMemo(() => buildAxisTicks(size), [size]);
   const yAxisLabelTicks = useMemo(() => filterAxisLabelTicks(yAxisTicks), [yAxisTicks]);
@@ -541,8 +554,43 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     return mapClientToCell(canvas, size, clientX, clientY);
   };
 
+  const handleFileDrop = async (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropDepth(0);
+
+    const file = [...event.dataTransfer.files].find((entry) => entry.type === 'application/json' || entry.name.toLowerCase().endsWith('.json')) ?? event.dataTransfer.files[0];
+    if (!file) return;
+
+    try {
+      const text = await readFileText(file);
+      const parsed = parsePaeJson(text);
+      props.onImportPaeData(parsed.matrix, parsed.maxValue);
+      setDropError(null);
+    } catch (error) {
+      setDropError(error instanceof Error ? error.message : 'Unable to import pAE JSON');
+    }
+  };
+
   return (
-    <section className="panel heatmap-panel">
+    <section
+      className={`panel heatmap-panel${dropDepth > 0 ? ' dropping' : ''}${dropError ? ' drop-error' : ''}`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setDropDepth((current) => current + 1);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault();
+        setDropDepth((current) => Math.max(0, current - 1));
+      }}
+      onDrop={(event) => {
+        void handleFileDrop(event);
+      }}
+    >
       <div className="heatmap-chart">
         <div className="heatmap-chart-main">
           <div className="heatmap-plot-row">
@@ -566,6 +614,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 <div className="heatmap-overlay-notice" aria-live="polite">
                   <strong>Empty pAE</strong>
                   <span>This model did not include predicted aligned error data.</span>
+                </div>
+              )}
+              {dropDepth > 0 && (
+                <div className="heatmap-drop-overlay" aria-live="polite">
+                  <strong>Drop pAE JSON</strong>
+                  <span>Release to import pAE data into this artifact.</span>
                 </div>
               )}
               <canvas
@@ -703,22 +757,6 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
           </div>
           <div className="heatmap-colorbar-label">Expected position error (Ångströms)</div>
           <div className="heatmap-footer">
-            <div className="heatmap-description">
-              <h3>Predicted Aligned Error (pAE)</h3>
-              <p>
-                pAE measures the confidence in the relative position of two residues&nbsp;&ndash;{' '}
-                <strong>
-                  <a
-                    href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/pae-a-measure-of-global-confidence-in-alphafold-predictions/"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    see&nbsp;guide
-                  </a>
-                </strong>{' '}
-                for more information.
-              </p>
-            </div>
             <div className="heatmap-actions">
               <label className="switch-field">
                 <span className="switch-label">pair hover</span>
@@ -750,24 +788,25 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   </span>
                 </span>
               </label>
-              <label className="switch-field">
-                <span className="switch-label">pLDDT coloring</span>
-                <span className="switch-control">
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    aria-label="pLDDT color"
-                    disabled={!props.colorByPLDDTEnabled}
-                    checked={props.colorByPLDDTToggleStatus}
-                    onChange={props.onToggleColorByPLDDT}
-                  />
-                  <span className="switch-track" aria-hidden="true">
-                    <span className="switch-thumb" />
-                  </span>
-                </span>
-              </label>
+            </div>
+            <div className="heatmap-description">
+              <h3>Predicted Aligned Error (pAE)</h3>
+              <p>
+                pAE measures the confidence in the relative position of two residues&nbsp;&ndash;{' '}
+                <strong>
+                  <a
+                    href="https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/pae-a-measure-of-global-confidence-in-alphafold-predictions/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    see&nbsp;guide
+                  </a>
+                </strong>{' '}
+                for more information.
+              </p>
             </div>
           </div>
+          {dropError && <div className="heatmap-drop-error">{dropError}</div>}
         </div>
       </div>
     </section>

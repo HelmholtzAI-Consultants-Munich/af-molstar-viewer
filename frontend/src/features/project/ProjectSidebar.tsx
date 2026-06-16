@@ -13,6 +13,8 @@ interface ProjectSidebarProps {
   selectionDisplayString: string;
   hasActiveSelection: boolean;
   selectionDraft: string;
+  selectedTargetThemeEnabled: boolean;
+  selectedTargetThemeStatus: boolean;
   compareValidationIds: string[];
   busy: boolean;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
@@ -24,6 +26,7 @@ interface ProjectSidebarProps {
   onResetAuthIndexing: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
+  onSetSelectedTargetTheme: (enabled: boolean) => void;
   onDraftFocus?: () => void;
   onDraftChange?: (value: string) => void;
   onDraftBlur?: (value: string) => void;
@@ -54,6 +57,8 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         selectionDisplayString={props.selectionDisplayString}
         hasActiveSelection={props.hasActiveSelection}
         selectionDraft={props.selectionDraft}
+        selectedTargetThemeEnabled={props.selectedTargetThemeEnabled}
+        selectedTargetThemeStatus={props.selectedTargetThemeStatus}
         busy={props.busy}
         onUploadTargetFiles={props.onUploadTargetFiles}
         onLoadExample={props.onLoadExample}
@@ -66,6 +71,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
         onResetAuthIndexing={props.onResetAuthIndexing}
         onDownloadStructure={props.onDownloadStructure}
         onDownloadViewerState={props.onDownloadViewerState}
+        onSetSelectedTargetTheme={props.onSetSelectedTargetTheme}
         onDraftFocus={props.onDraftFocus}
         onDraftChange={props.onDraftChange}
         onDraftBlur={props.onDraftBlur}

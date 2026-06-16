@@ -67,6 +67,8 @@ export interface ProjectWorkspaceState {
   draftByArtifact: Record<string, string>;
   matchByArtifact: Record<string, RangeResidueMatch | null>;
   selectionEnabledByArtifact: Record<string, boolean>;
+  themeByArtifact: Record<string, boolean>;
+  paeDrawerOpenByArtifact: Record<string, boolean>;
   selectionSyncNonce: number;
   isDraftFocused: boolean;
   focusByArtifact: Record<string, number[]>;
@@ -104,6 +106,11 @@ export interface ProjectWorkspaceState {
   onSelectionIndicesChange: (indices: number[]) => void;
   onSelectionModeChange: (enabled: boolean) => void;
   onFocusIndicesChange: (indices: number[]) => void;
+  onThemeChange: (artifactId: string, enabled: boolean) => void;
+  onToggleTheme: (artifactId: string) => void;
+  onPaeDrawerOpenChange: (artifactId: string, open: boolean) => void;
+  onTogglePaeDrawer: (artifactId: string) => void;
+  onImportPaeData: (artifactId: string, paeMatrix: number[][], paeMax: number) => void;
   onViewerStateChange: (artifactId: string, viewerConfiguration: ViewerConfiguration, label: string, payload: Record<string, unknown>) => void;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
   onLoadExample: (exampleId: string) => Promise<void>;
@@ -119,6 +126,8 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
   const [draftByArtifact, setDraftByArtifact] = useState<Record<string, string>>({});
   const [matchByArtifact, setMatchByArtifact] = useState<Record<string, RangeResidueMatch | null>>({});
   const [selectionEnabledByArtifact, setSelectionEnabledByArtifact] = useState<Record<string, boolean>>({});
+  const [themeByArtifact, setThemeByArtifact] = useState<Record<string, boolean>>({});
+  const [paeDrawerOpenByArtifact, setPaeDrawerOpenByArtifact] = useState<Record<string, boolean>>({});
   const [selectionSyncNonce, setSelectionSyncNonce] = useState(0);
   const [isDraftFocused, setDraftFocused] = useState(false);
   const [focusByArtifact, setFocusByArtifact] = useState<Record<string, number[]>>({});
@@ -177,6 +186,20 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       [targetId]: value,
     }));
     triggerSelectionSync();
+  };
+
+  const saveThemeByArtifact = (artifactId: string, value: boolean) => {
+    setThemeByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
+  };
+
+  const savePaeDrawerOpenByArtifact = (artifactId: string, value: boolean) => {
+    setPaeDrawerOpenByArtifact((current) => ({
+      ...current,
+      [artifactId]: value,
+    }));
   };
 
   const triggerSelectionSync = () => {
@@ -258,6 +281,21 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       const next = Object.fromEntries(
         project.targets.map((target) => [target.id, current[target.id] ?? false]),
       );
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    const targetIds = new Set(project.targets.map((target) => target.id));
+    setThemeByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => targetIds.has(targetId)));
+      const same =
+        Object.keys(next).length === Object.keys(current).length &&
+        Object.entries(next).every(([targetId, value]) => current[targetId] === value);
+      return same ? current : next;
+    });
+    setPaeDrawerOpenByArtifact((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([targetId]) => targetIds.has(targetId)));
       const same =
         Object.keys(next).length === Object.keys(current).length &&
         Object.entries(next).every(([targetId, value]) => current[targetId] === value);
@@ -431,6 +469,8 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
       setDraftByArtifact((current) => omitKey(current, targetId));
       setMatchByArtifact((current) => omitKey(current, targetId));
       setSelectionEnabledByArtifact((current) => omitKey(current, targetId));
+      setThemeByArtifact((current) => omitKey(current, targetId));
+      setPaeDrawerOpenByArtifact((current) => omitKey(current, targetId));
       setViewerArtifacts((current) => omitKey(current, targetId));
       setFocusByArtifact((current) => omitKey(current, targetId));
     } catch (removeError) {
@@ -570,6 +610,46 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     }));
   };
 
+  const onThemeChange = (artifactId: string, enabled: boolean) => {
+    saveThemeByArtifact(artifactId, enabled);
+  };
+
+  const onToggleTheme = (artifactId: string) => {
+    const currentEnabled = themeByArtifact[artifactId] ?? viewerArtifacts[artifactId]?.bundle.metadata.looksLikePLDDTs ?? false;
+    saveThemeByArtifact(artifactId, !currentEnabled);
+  };
+
+  const onPaeDrawerOpenChange = (artifactId: string, open: boolean) => {
+    savePaeDrawerOpenByArtifact(artifactId, open);
+  };
+
+  const onTogglePaeDrawer = (artifactId: string) => {
+    const currentOpen = paeDrawerOpenByArtifact[artifactId] ?? false;
+    savePaeDrawerOpenByArtifact(artifactId, !currentOpen);
+  };
+
+  const onImportPaeData = (artifactId: string, paeMatrix: number[][], paeMax: number) => {
+    setViewerArtifacts((current) => {
+      const artifact = current[artifactId];
+      if (!artifact) return current;
+      return {
+        ...current,
+        [artifactId]: {
+          ...artifact,
+          bundle: {
+            ...artifact.bundle,
+            paeMatrix,
+            paeMax,
+            metadata: {
+              ...artifact.bundle.metadata,
+              syntheticPae: false,
+            },
+          },
+        },
+      };
+    });
+  };
+
   const onViewerStateChange = (
     artifactId: string,
     viewerConfiguration: ViewerConfiguration,
@@ -597,6 +677,8 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     draftByArtifact,
     matchByArtifact,
     selectionEnabledByArtifact,
+    themeByArtifact,
+    paeDrawerOpenByArtifact,
     selectionSyncNonce,
     isDraftFocused,
     focusByArtifact,
@@ -634,6 +716,11 @@ export function useProjectWorkspace(options: UseProjectWorkspaceOptions = {}): P
     onSelectionIndicesChange,
     onSelectionModeChange,
     onFocusIndicesChange,
+    onThemeChange,
+    onToggleTheme,
+    onPaeDrawerOpenChange,
+    onTogglePaeDrawer,
+    onImportPaeData,
     onViewerStateChange,
     onUploadTargetFiles: uploadTargetFiles,
     onLoadExample: loadExample,

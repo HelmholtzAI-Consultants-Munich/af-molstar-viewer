@@ -15,9 +15,16 @@ interface ArtifactWorkspaceProps {
   selectionEnabled: boolean;
   selectionSyncNonce?: number;
   focusIndices?: number[] | null;
+  colorByPLDDTToggleStatus: boolean;
+  colorByPLDDTEnabled: boolean;
+  paeDrawerOpen: boolean;
   onSelectionIndicesChange?: (indices: number[]) => void;
   onSelectionModeChange?: (enabled: boolean) => void;
   onFocusIndicesChange?: (indices: number[]) => void;
+  onToggleColorByPLDDT: () => void;
+  onEnableColorByPLDDT: () => void;
+  onTogglePaeDrawer: () => void;
+  onImportPaeData: (paeMatrix: number[][], paeMax: number) => void;
   onViewerStateChange?: (payload: Record<string, unknown>) => void;
   onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
 }
@@ -32,8 +39,6 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
     props.artifact.bundle.residues.length <= PAE_HOVER_SYNC_RESIDUE_THRESHOLD,
   );
   const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
-  const [colorByPLDDTToggleStatus, setColorByPLDDTToggleStatus] = useState(props.artifact.bundle.metadata.looksLikePLDDTs);
-  const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState(props.artifact.bundle.metadata.looksLikePLDDTs);
 
   const interactionPerformance = useMemo(
     () => resolvePaeInteractionPerformance(props.artifact.bundle.residues.length),
@@ -60,8 +65,9 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
       interactionPerformance={interactionPerformance}
       paeHoverSyncEnabled={paeHoverSyncEnabled}
       paePairSelectionEnabled={paePairSelectionEnabled}
-      colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
-      colorByPLDDTEnabled={colorByPLDDTEnabled}
+      colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
+      colorByPLDDTEnabled={props.colorByPLDDTEnabled}
+      paeDrawerOpen={props.paeDrawerOpen}
       onHoverResidues={setHoveredResidues}
       onHoverCell={setHoveredCell}
       onPinResidues={setPinnedResidues}
@@ -92,16 +98,10 @@ export function ArtifactWorkspace(props: ArtifactWorkspaceProps) {
         setPinnedCell(null);
         setPinnedResidues([]);
       }}
-      onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
-      onEnableColorByPLDDT={() => {
-        setColorByPLDDTEnabled((enabled) => {
-          const next = !enabled;
-          if (!next) {
-            setColorByPLDDTToggleStatus(false);
-          }
-          return next;
-        });
-      }}
+      onToggleColorByPLDDT={props.onToggleColorByPLDDT}
+      onEnableColorByPLDDT={props.onEnableColorByPLDDT}
+      onTogglePaeDrawer={props.onTogglePaeDrawer}
+      onImportPaeData={props.onImportPaeData}
       onMolstarSelectionChange={props.onSelectionIndicesChange}
       onMolstarSelectionModeChange={props.onSelectionModeChange}
       onMolstarFocusChange={props.onFocusIndicesChange}

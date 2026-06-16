@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Crop, Scissors, Trash2, View, Save, Upload, FileDigit } from 'lucide-react';
+import { Paintbrush, Crop, Scissors, Trash2, View, Save, Upload, FileDigit } from 'lucide-react';
 import { EXAMPLES } from '../import/examples';
 import type { WorkspaceProject } from '../../domain/project';
 
@@ -10,6 +10,8 @@ interface TargetListProps {
   selectionDisplayString: string;
   hasActiveSelection: boolean;
   selectionDraft: string;
+  selectedTargetThemeEnabled: boolean;
+  selectedTargetThemeStatus: boolean;
   busy: boolean;
   onUploadTargetFiles: (files: File[]) => Promise<void>;
   onLoadExample: (exampleId: string) => Promise<void>;
@@ -20,6 +22,7 @@ interface TargetListProps {
   onResetAuthIndexing: () => void;
   onDownloadStructure: () => void;
   onDownloadViewerState: () => void;
+  onSetSelectedTargetTheme: (enabled: boolean) => void;
   onDraftFocus?: () => void;
   onDraftChange?: (value: string) => void;
   onDraftBlur?: (value: string) => void;
@@ -30,7 +33,6 @@ export function TargetList(props: TargetListProps) {
   const [isDraggingTargetFiles, setIsDraggingTargetFiles] = useState(false);
   const selectedTarget = props.project.targets.find((target) => target.id === props.selectedTargetId) ?? null;
   const [selectionDraft, setSelectionDraft] = useState(props.selectionDraft);
-
   useEffect(() => {
     setSelectionDraft(props.selectionDraft);
   }, [props.selectionDraft]);
@@ -157,7 +159,7 @@ export function TargetList(props: TargetListProps) {
                     <button
                       type="button"
                       className="artifact-card-tool"
-                      aria-label="Cut off selection"
+                      aria-label="cut off selection"
                       title="cut off selection"
                       disabled={!props.hasActiveSelection}
                       onClick={(event) => {
@@ -166,6 +168,18 @@ export function TargetList(props: TargetListProps) {
                       }}
                     >
                       <Scissors size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="artifact-card-tool"
+                      aria-label="re-index AUTH starting at 1"
+                      title="re-index so AUTH starts at 1"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onResetAuthIndexing();
+                      }}
+                    >
+                      <FileDigit size={14} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
@@ -181,6 +195,20 @@ export function TargetList(props: TargetListProps) {
                     </button>
                   </div>
                   <div className="artifact-card-download-actions">
+                    <button
+                      type="button"
+                      className={`artifact-card-tool artifact-theme-toggle${props.selectedTargetThemeStatus ? ' active' : ''}`}
+                      aria-pressed={props.selectedTargetThemeStatus}
+                      aria-label="switch coloring: pLDDT ↔ chain ID"
+                      title="switch coloring: pLDDT ↔ chain ID"
+                      disabled={!props.selectedTargetThemeEnabled}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onSetSelectedTargetTheme(!props.selectedTargetThemeStatus);
+                      }}
+                    >
+                      <Paintbrush size={14} aria-hidden="true" />
+                    </button>
                     <button
                       type="button"
                       className="artifact-card-tool"
@@ -205,20 +233,6 @@ export function TargetList(props: TargetListProps) {
                     >
                       <View size={14} aria-hidden="true" />
                     </button>
-                  </div>
-                  <div className="artifact-card-tools">
-                    <button
-                        type="button"
-                        className="artifact-card-tool"
-                        aria-label="re-index AUTH starting at 1"
-                        title="re-index AUTH starting at 1"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          props.onResetAuthIndexing();
-                        }}
-                      >
-                        <FileDigit size={14} aria-hidden="true" />
-                      </button>
                   </div>
                 </div>
               )}

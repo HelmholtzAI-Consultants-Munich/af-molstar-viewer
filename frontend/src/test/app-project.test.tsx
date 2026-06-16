@@ -24,6 +24,7 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     onSelectionModeChange,
     onViewerStateChange,
     onNativeViewerStateDownloadReady,
+    onImportPaeData,
   }: {
     artifact: { artifactId: string };
     viewerConfiguration: 'target' | 'validate_refolding';
@@ -38,6 +39,7 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
     onSelectionModeChange?: (enabled: boolean) => void;
     onViewerStateChange?: (payload: Record<string, unknown>) => void;
     onNativeViewerStateDownloadReady?: (download: (() => void) | null) => void;
+    onImportPaeData?: (paeMatrix: number[][], paeMax: number) => void;
   }) => (
     <div>
       <div data-testid="artifact-workspace">{artifact.artifactId}</div>
@@ -77,6 +79,9 @@ vi.mock('../features/project/ArtifactWorkspace', () => ({
       <button type="button" onClick={() => onNativeViewerStateDownloadReady?.(nativeViewerDownloadSpy)}>
         Mock native download ready
       </button>
+      <button type="button" onClick={() => onImportPaeData?.([[1, 2], [2, 1]], 2)}>
+        Mock pAE import
+      </button>
     </div>
   ),
 }));
@@ -107,7 +112,7 @@ describe('project app shell', () => {
     await screen.findByText(/BindCraft Workspace Demo/i);
     expect(screen.getByText(/No targets yet/i)).toBeInTheDocument();
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'toy_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'toy_scores.json', { type: 'application/json' }),
@@ -186,18 +191,18 @@ describe('project app shell', () => {
       expect(scoped.getByTestId('selected-residues')).toHaveTextContent('null');
     });
 
-    expect(scoped.getByRole('button', { name: 'Crop to selection' })).toBeDisabled();
-    expect(scoped.getByRole('button', { name: 'Cut off selection' })).toBeDisabled();
+    expect(scoped.getByRole('button', { name: /crop to selection/i })).toBeDisabled();
+    expect(scoped.getByRole('button', { name: /cut off selection/i })).toBeDisabled();
 
     await user.click(scoped.getByRole('button', { name: 'Mock Molstar selection' }));
     await waitFor(() => {
       expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
 
-    expect(scoped.getByRole('button', { name: 'Crop to selection' })).toBeEnabled();
-    expect(scoped.getByRole('button', { name: 'Cut off selection' })).toBeEnabled();
+    expect(scoped.getByRole('button', { name: /crop to selection/i })).toBeEnabled();
+    expect(scoped.getByRole('button', { name: /cut off selection/i })).toBeEnabled();
 
-    await user.click(scoped.getByRole('button', { name: 'Crop to selection' }));
+    await user.click(scoped.getByRole('button', { name: /crop to selection/i }));
     await waitFor(() => {
       expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cropped_1.pdb' })).toBeInTheDocument();
       expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
@@ -209,7 +214,7 @@ describe('project app shell', () => {
       expect(scoped.getByText('Selection: A1-3')).toBeInTheDocument();
     });
 
-    await user.click(scoped.getByRole('button', { name: 'Cut off selection' }));
+    await user.click(scoped.getByRole('button', { name: /cut off selection/i }));
     await waitFor(() => {
       expect(scoped.getByRole('heading', { name: 'toy_ranked_0_cut_1.pdb' })).toBeInTheDocument();
       expect(getTargetInterfaceScope(container).getByPlaceholderText('A1-10,B20-22')).toHaveValue('');
@@ -273,7 +278,7 @@ describe('project app shell', () => {
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
@@ -314,7 +319,7 @@ describe('project app shell', () => {
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
@@ -341,6 +346,48 @@ describe('project app shell', () => {
     });
   });
 
+  it('remembers the pLDDT theme choice per target when switching targets', async () => {
+    const api = createProjectApi();
+    const user = userEvent.setup();
+    const { container } = render(<ProjectPage api={api} />);
+    const scoped = within(container);
+
+    await scoped.findByText(/BindCraft Workspace Demo/i);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
+    ]);
+
+    const themeToggle = () => container.querySelector<HTMLButtonElement>('.artifact-theme-toggle');
+
+    await waitFor(() => {
+      expect(themeToggle()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    await user.click(themeToggle()!);
+    await waitFor(() => {
+      expect(themeToggle()).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    await user.upload(fileInput, [
+      new File([toyRanked0], 'target_beta_ranked_0.pdb', { type: 'chemical/x-pdb' }),
+      new File([toyScores], 'target_beta_scores.json', { type: 'application/json' }),
+    ]);
+
+    await waitFor(() => {
+      expect(themeToggle()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    const targetCards = () => [...container.querySelectorAll<HTMLButtonElement>('.artifact-card')];
+    await user.click(targetCards()[0]);
+
+    await waitFor(() => {
+      expect(themeToggle()).toHaveAttribute('aria-pressed', 'false');
+    });
+  });
+
   it('restores per-target viewer snapshots and keeps target and validate-refolding states separate', async () => {
     const api = createProjectApi();
     const user = userEvent.setup();
@@ -349,7 +396,7 @@ describe('project app shell', () => {
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
@@ -401,7 +448,7 @@ describe('project app shell', () => {
     Object.defineProperty(window.URL, 'revokeObjectURL', { value: revokeObjectURL, configurable: true });
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),
@@ -431,7 +478,7 @@ describe('project app shell', () => {
 
     await scoped.findByText(/BindCraft Workspace Demo/i);
 
-    const fileInput = container.querySelector('input[type="file"][accept=".pdb,.cif,.mmcif,.json"]') as HTMLInputElement;
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, [
       new File([toyRanked0], 'target_alpha_ranked_0.pdb', { type: 'chemical/x-pdb' }),
       new File([toyScores], 'target_alpha_scores.json', { type: 'application/json' }),

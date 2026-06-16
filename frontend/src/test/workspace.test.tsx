@@ -23,70 +23,79 @@ function Harness() {
   const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>(null);
   const [paeHoverSyncEnabled, setPaeHoverSyncEnabled] = useState(true);
   const [paePairSelectionEnabled, setPaePairSelectionEnabled] = useState(true);
+  const [paeDrawerOpen, setPaeDrawerOpen] = useState(true);
   const [colorByPLDDTToggleStatus, setColorByPLDDTToggleStatus] = useState(true);
   const [colorByPLDDTEnabled, setColorByPLDDTEnabled] = useState(true);
+  const [importedPae, setImportedPae] = useState<{ matrix: number[][]; maxValue: number } | null>(null);
 
   return (
-    <Workspace
-      viewerConfiguration="validate_refolding"
-      viewerStatePayload={null}
-      bundle={bundle}
-      structureText="ATOM"
-      selectedResidues={[]}
-      draftFocused={false}
-      selectionModeEnabled={false}
-      focusedResidues={[]}
-      hoveredResidues={hoveredResidues}
-      pinnedResidues={pinnedResidues}
-      pinnedCell={pinnedCell}
-      hoveredCell={hoveredCell}
-      brushSelection={brushSelection}
-      interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
-      paeHoverSyncEnabled={paeHoverSyncEnabled}
-      paePairSelectionEnabled={paePairSelectionEnabled}
-      colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
-      colorByPLDDTEnabled={colorByPLDDTEnabled}
-      onHoverResidues={setHoveredResidues}
-      onHoverCell={setHoveredCell}
-      onPinResidues={setPinnedResidues}
-      onPinCell={setPinnedCell}
-      onBrushSelectionChange={setBrushSelection}
-      onTogglePaeHoverSync={() =>
-        setPaeHoverSyncEnabled((value) => {
-          const next = !value;
-          if (!next) setHoveredResidues([]);
-          return next;
-        })
-      }
-      onTogglePaePairSelection={() =>
-        setPaePairSelectionEnabled((value) => {
-          const next = !value;
-          if (!next) {
-            setPinnedCell((currentPinnedCell) => {
-              if (currentPinnedCell) setPinnedResidues([]);
-              return null;
-            });
-          }
-          return next;
-        })
-      }
-      onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
-      onEnableColorByPLDDT={() => {
-        setColorByPLDDTEnabled((enabled) => {
-          const next = !enabled;  // make a new variable that is the other boolean
-          if (!next) {
-            // on disabling, also turn it off
-            setColorByPLDDTToggleStatus(false);
-          }
-          return next;
-        })
-      }}
-      onClearPairSelection={() => {
-        setPinnedCell(null);
-        setPinnedResidues([]);
-      }}
-      onViewerStateChange={() => {}}
-    />
+    <>
+      <Workspace
+        viewerConfiguration="validate_refolding"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={[]}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        focusedResidues={[]}
+        hoveredResidues={hoveredResidues}
+        pinnedResidues={pinnedResidues}
+        pinnedCell={pinnedCell}
+        hoveredCell={hoveredCell}
+        brushSelection={brushSelection}
+        interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
+        paeHoverSyncEnabled={paeHoverSyncEnabled}
+        paePairSelectionEnabled={paePairSelectionEnabled}
+        paeDrawerOpen={paeDrawerOpen}
+        colorByPLDDTToggleStatus={colorByPLDDTToggleStatus}
+        colorByPLDDTEnabled={colorByPLDDTEnabled}
+        onHoverResidues={setHoveredResidues}
+        onHoverCell={setHoveredCell}
+        onPinResidues={setPinnedResidues}
+        onPinCell={setPinnedCell}
+        onBrushSelectionChange={setBrushSelection}
+        onTogglePaeHoverSync={() =>
+          setPaeHoverSyncEnabled((value) => {
+            const next = !value;
+            if (!next) setHoveredResidues([]);
+            return next;
+          })
+        }
+        onTogglePaeDrawer={() => setPaeDrawerOpen((value) => !value)}
+        onImportPaeData={(paeMatrix, paeMax) => setImportedPae({ matrix: paeMatrix, maxValue: paeMax })}
+        onTogglePaePairSelection={() =>
+          setPaePairSelectionEnabled((value) => {
+            const next = !value;
+            if (!next) {
+              setPinnedCell((currentPinnedCell) => {
+                if (currentPinnedCell) setPinnedResidues([]);
+                return null;
+              });
+            }
+            return next;
+          })
+        }
+        onToggleColorByPLDDT={() => setColorByPLDDTToggleStatus((enabled) => !enabled)}
+        onEnableColorByPLDDT={() => {
+          setColorByPLDDTEnabled((enabled) => {
+            const next = !enabled;  // make a new variable that is the other boolean
+            if (!next) {
+              // on disabling, also turn it off
+              setColorByPLDDTToggleStatus(false);
+            }
+            return next;
+          })
+        }}
+        onClearPairSelection={() => {
+          setPinnedCell(null);
+          setPinnedResidues([]);
+        }}
+        onViewerStateChange={() => {}}
+      />
+      {importedPae && <div data-testid="imported-pae">{`${importedPae.matrix.length}:${importedPae.maxValue}`}</div>}
+    </>
   );
 }
 
@@ -97,6 +106,7 @@ function TargetHarness() {
     <Workspace
       viewerConfiguration="target"
       viewerStatePayload={null}
+      selectionDraft=""
       bundle={bundle}
       structureText="ATOM"
       selectedResidues={[]}
@@ -111,6 +121,7 @@ function TargetHarness() {
       interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
       paeHoverSyncEnabled
       paePairSelectionEnabled
+      paeDrawerOpen
       colorByPLDDTToggleStatus
       colorByPLDDTEnabled
       onHoverResidues={() => {}}
@@ -120,6 +131,8 @@ function TargetHarness() {
       onBrushSelectionChange={() => {}}
       onTogglePaeHoverSync={() => {}}
       onTogglePaePairSelection={() => {}}
+      onTogglePaeDrawer={() => {}}
+      onImportPaeData={() => {}}
       onToggleColorByPLDDT={() => {}}
       onEnableColorByPLDDT={() => {}}
       onClearPairSelection={() => {}}
@@ -248,12 +261,39 @@ describe('workspace interactions', () => {
     expect(lastCall.pinnedResidues).toEqual([]);
   });
 
-  it('uses a Mol*-only layout for the target viewer configuration', () => {
+  it('renders the pAE drawer for the target viewer configuration too', () => {
     render(<TargetHarness />);
 
-    expect(document.querySelector('.heatmap-panel')).not.toBeInTheDocument();
-    expect(document.querySelector('.legend-panel')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
+    expect(document.querySelector('.pae-drawer')).toBeInTheDocument();
+    expect(document.querySelector('.heatmap-panel')).toBeInTheDocument();
+    expect(document.querySelector('.legend-panel')).toBeInTheDocument();
     const lastCall = viewerSpy.mock.calls.at(-1)?.[0] as { viewerConfiguration: string };
     expect(lastCall.viewerConfiguration).toBe('target');
+  });
+
+  it('can collapse the pAE drawer', () => {
+    render(<Harness />);
+
+    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
+    expect(document.querySelector('.heatmap-panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /show\/hide pAE matrix/i }));
+
+    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
+    expect(document.querySelector('.heatmap-panel')).not.toBeInTheDocument();
+  });
+
+  it('imports pAE JSON dropped onto the heatmap', async () => {
+    render(<Harness />);
+
+    const heatmap = document.querySelector('.heatmap-panel') as HTMLElement;
+    fireEvent.drop(heatmap, {
+      dataTransfer: {
+        files: [new File([JSON.stringify([[1, 2], [3, 4]])], 'pae.json', { type: 'application/json' })],
+      },
+    });
+
+    expect(await screen.findByTestId('imported-pae')).toHaveTextContent('2:4');
   });
 });
