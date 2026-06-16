@@ -9,6 +9,7 @@ import type {
 import { canonicalizeSelectionDraft } from '../../domain/target-interface';
 import { discoverGroups, loadBundle } from '../discovery';
 import type { WorkerInputFile } from '../types';
+import { buildDerivedViewerArtifactSource } from './derived-viewer-artifact';
 import { createSeedProject, getGeneratedOutputs, resolveViewerArtifactSource } from './project-fixtures';
 
 export function nextDerivedTargetName(
@@ -169,6 +170,7 @@ class LocalFixtureProjectApi implements ProjectApi {
       const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
         project,
         sourceTarget,
+        targetInterfaceResidues,
         'cropped',
       );
       project.targets.push(target);
@@ -190,6 +192,7 @@ class LocalFixtureProjectApi implements ProjectApi {
       const { target, viewerArtifactSource } = this.createDerivedTargetFromSource(
         project,
         sourceTarget,
+        targetInterfaceResidues,
         'cut',
       );
       project.targets.push(target);
@@ -368,6 +371,7 @@ class LocalFixtureProjectApi implements ProjectApi {
   private createDerivedTargetFromSource(
     project: WorkspaceProject,
     sourceTarget: TargetArtifact,
+    targetInterfaceResidues: string,
     operation: 'cropped' | 'cut',
   ) {
     const sourceArtifact =
@@ -378,25 +382,22 @@ class LocalFixtureProjectApi implements ProjectApi {
       project.targets.map((target) => target.name),
       operation,
     );
+    const viewerArtifactSource = buildDerivedViewerArtifactSource(
+      sourceArtifact,
+      operation,
+      targetInterfaceResidues,
+      name,
+    );
     const target: TargetArtifact = {
       ...sourceTarget,
       id: targetId,
       name,
       provenance: 'cropped',
       selection: '',
-      chain_ids: this.deriveChainIdsForDerivedTarget(sourceTarget, sourceArtifact),
+      chain_ids: this.deriveChainIdsForDerivedTarget(sourceTarget, viewerArtifactSource),
       parent_target_id: sourceTarget.id,
       viewer_asset_id: targetId,
       source_job_id: null,
-    };
-    const viewerArtifactSource: ViewerArtifactSource = {
-      artifact_id: targetId,
-      label: name,
-      files: sourceArtifact.files.map((file) => ({
-        name: file.name,
-        text: file.text,
-        url: file.url,
-      })),
     };
     console.debug('[DerivedTargetCreated]', {
       sourceTargetId: sourceTarget.id,
@@ -407,7 +408,14 @@ class LocalFixtureProjectApi implements ProjectApi {
       derivedChains: target.chain_ids,
       sourceFiles: sourceArtifact.files.map((file) => file.name),
     });
-    return { target, viewerArtifactSource };
+    return {
+      target,
+      viewerArtifactSource: {
+        ...viewerArtifactSource,
+        artifact_id: targetId,
+        label: name,
+      },
+    };
   }
 
   private deriveChainIdsForDerivedTarget(sourceTarget: TargetArtifact, sourceArtifact: ViewerArtifactSource) {

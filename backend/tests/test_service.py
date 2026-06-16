@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import time
 import unittest
@@ -121,6 +122,40 @@ class ProjectServiceTests(unittest.TestCase):
         mocked_crop.assert_called_once()
         crop_call = mocked_crop.call_args.kwargs
         self.assertTrue(str(crop_call["structure_path"]).endswith("pdb9cdz.ent"))
+
+    def test_selection_edit_jobs_crop_pae_data_for_derived_targets(self) -> None:
+        service = ProjectService()
+        project = service.create_project()
+        project, target = upload_toy_target(service, project.id)
+
+        crop_job = service.create_crop_to_selection_job(project.id, target.id, "A1-2")
+        cut_job = service.create_cut_selection_off_target_job(project.id, target.id, "A1-2")
+
+        time.sleep(0.9)
+        resolved_crop = service.get_job(crop_job.job_id)
+        resolved_cut = service.get_job(cut_job.job_id)
+        refreshed = service.get_project(project.id)
+
+        crop_target_id = resolved_crop.target_ids[0]
+        cut_target_id = resolved_cut.target_ids[0]
+        crop_asset = service.get_viewer_asset(project.id, crop_target_id)
+        cut_asset = service.get_viewer_asset(project.id, cut_target_id)
+
+        crop_json = next(Path(file.path).read_text() for file in crop_asset.files if file.name.endswith(".json"))
+        cut_json = next(Path(file.path).read_text() for file in cut_asset.files if file.name.endswith(".json"))
+        crop_payload = json.loads(crop_json)
+        cut_payload = json.loads(cut_json)
+
+        crop_matrix = crop_payload["pae"] if "pae" in crop_payload else crop_payload["predicted_aligned_error"]
+        cut_matrix = cut_payload["pae"] if "pae" in cut_payload else cut_payload["predicted_aligned_error"]
+
+        self.assertEqual(resolved_crop.status, "succeeded")
+        self.assertEqual(resolved_cut.status, "succeeded")
+        self.assertEqual(len(refreshed.targets), 3)
+        self.assertEqual(len(crop_matrix), 2)
+        self.assertEqual(len(crop_matrix[0]), 2)
+        self.assertEqual(len(cut_matrix), 1)
+        self.assertEqual(len(cut_matrix[0]), 1)
 
     def test_reset_auth_indexing_creates_derived_target(self) -> None:
         service = ProjectService()

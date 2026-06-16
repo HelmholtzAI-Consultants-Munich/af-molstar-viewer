@@ -124,7 +124,8 @@ make dev-frontend-http
   - [x] reset/remove AUTH indexing for BoltzGen
   - [x] enable pLDDT/chain-id theme toggling for the target
   - [x] use+show the pAE panel as a drawer on the right
-  - [ ] crop pAE along the structure
+  - [x] when cropping / cutting a structure, also crop the pAE data to the surviving residues
+  - [ ] persist drag-coloring across target switches?
   - [ ] show the generated binders
   - [ ] show the AF2-predicted structures of the binders
   - [ ] allow comparing the binders, maybe in separate connected views or with overlaying

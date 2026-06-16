@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProjectApi } from '../lib/project/project-api';
+import { loadViewerArtifact } from '../services/project/load-viewer-artifact';
 import toyRanked0 from '../../../fixtures/test-inputs/colabfold/toy_ranked_0.pdb?raw';
 import toyScores from '../../../fixtures/test-inputs/colabfold/toy_scores.json?raw';
 
@@ -26,8 +27,8 @@ describe('project api fixtures', () => {
   it('runs crop-to-selection and cut-off-selection jobs and produces derived targets', async () => {
     const { api, project, target } = await uploadColabfoldTarget();
 
-    const cropJob = await api.cropTargetToSelection(project.id, target.id, 'B20-22,A1-10');
-    const cutJob = await api.cutSelectionOffTarget(project.id, target.id, 'B20-22,A1-10');
+    const cropJob = await api.cropTargetToSelection(project.id, target.id, 'A1-2');
+    const cutJob = await api.cutSelectionOffTarget(project.id, target.id, 'A1-2');
     vi.advanceTimersByTime(700);
     const resolvedCrop = await api.getJob(cropJob.job_id);
     const resolvedCut = await api.getJob(cutJob.job_id);
@@ -40,6 +41,13 @@ describe('project api fixtures', () => {
     expect(refreshed.targets).toHaveLength(project.targets.length + 2);
     expect(refreshed.targets.at(-2)?.name).toBe('toy_ranked_0_cropped_1.pdb');
     expect(refreshed.targets.at(-1)?.name).toBe('toy_ranked_0_cut_1.pdb');
+
+    const croppedArtifact = await loadViewerArtifact(await api.getViewerArtifact(project.id, resolvedCrop.target_ids[0]));
+    const cutArtifact = await loadViewerArtifact(await api.getViewerArtifact(project.id, resolvedCut.target_ids[0]));
+    expect(croppedArtifact.bundle.paeMatrix).toHaveLength(2);
+    expect(croppedArtifact.bundle.paeMatrix[0]).toHaveLength(2);
+    expect(cutArtifact.bundle.paeMatrix).toHaveLength(1);
+    expect(cutArtifact.bundle.paeMatrix[0]).toHaveLength(1);
   });
 
   it('generates binders and validates refolding through async jobs', async () => {

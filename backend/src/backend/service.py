@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from .fixtures import load_fixture_catalog
+from .artifact_projection import project_derived_viewer_asset
 from .models import (
     BinderCandidate,
     BinderRun,
@@ -281,6 +282,8 @@ class ProjectService:
             operation="cropped",
             derived_structure_path=str(edit_result["output_path"]),
             derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
+            selection=canonical_selection,
+            keep_selected=True,
         )
         return self._create_job(
             project_id=project_id,
@@ -317,6 +320,8 @@ class ProjectService:
             operation="cut",
             derived_structure_path=str(edit_result["output_path"]),
             derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
+            selection=canonical_selection,
+            keep_selected=False,
         )
         return self._create_job(
             project_id=project_id,
@@ -344,6 +349,8 @@ class ProjectService:
             operation="reset",
             derived_structure_path=str(edit_result["output_path"]),
             derived_chain_ids=[str(chain_id) for chain_id in edit_result.get("kept_chain_ids", [])],
+            selection=None,
+            keep_selected=None,
         )
         return self._create_job(
             project_id=project_id,
@@ -531,6 +538,8 @@ class ProjectService:
         operation: str,
         derived_structure_path: str,
         derived_chain_ids: list[str],
+        selection: str | None,
+        keep_selected: bool | None,
     ) -> tuple[TargetArtifact, ViewerAsset]:
         derived_name = next_derived_target_name(source_target.name, [target.name for target in project.targets], operation)
         viewer_asset_id = f"viewer-{derived_target_id}"
@@ -545,16 +554,15 @@ class ProjectService:
             source_structure_id=source_target.source_structure_id,
             source_job_id=None,
         )
-        derived_viewer_asset = ViewerAsset(
-            id=viewer_asset_id,
-            artifact_id=derived_target_id,
-            label=derived_name,
-            files=[
-                ViewerFile(
-                    name=Path(derived_structure_path).name,
-                    path=derived_structure_path,
-                )
-            ],
+        source_viewer_asset = self.get_viewer_asset(project.id, source_target.id)
+        derived_viewer_asset = project_derived_viewer_asset(
+            root_dir=self.catalog.root_dir,
+            source_asset=source_viewer_asset,
+            derived_target_id=derived_target_id,
+            derived_label=derived_name,
+            derived_structure_path=derived_structure_path,
+            selection=selection,
+            keep_selected=keep_selected,
         )
         return derived_target, derived_viewer_asset
 
