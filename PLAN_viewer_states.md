@@ -2,7 +2,6 @@
 
 ## Summary
 
-The current implementation only persists a thin slice of viewer state: `selection` as semantic selection text, plus focus as residue indices. That is why switching back to a target does not fully restore Mol* `Focus`, camera, or orientation. The Mol* “Session” feature is the right way forward here: it captures the real plugin/viewer state, not just residue lists.
 
 The plan is to keep semantic project state and Mol* viewer state as two separate layers:
 
