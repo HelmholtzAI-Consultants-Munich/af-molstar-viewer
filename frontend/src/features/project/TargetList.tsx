@@ -208,17 +208,17 @@ export function TargetList(props: TargetListProps) {
                   </div>
                   <div className="artifact-card-tools">
                     <button
-                      type="button"
-                      className="artifact-card-tool"
+                        type="button"
+                        className="artifact-card-tool"
                         aria-label="re-index AUTH starting at 1"
                         title="re-index AUTH starting at 1"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        props.onResetAuthIndexing();
-                      }}
-                    >
-                      <FileDigit size={14} aria-hidden="true" />
-                    </button>
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          props.onResetAuthIndexing();
+                        }}
+                      >
+                        <FileDigit size={14} aria-hidden="true" />
+                      </button>
                   </div>
                 </div>
               )}
@@ -266,7 +266,7 @@ export function TargetList(props: TargetListProps) {
         hidden
         multiple
         type="file"
-        accept=".pdb,.cif,.mmcif,.json"
+        accept=".pdb,.cif,.mmcif,.json,.ent"
         onChange={(event) => {
           void handleTargetFileInput(event);
         }}
