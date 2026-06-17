@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { PanelRightClose } from 'lucide-react';
 import { PaeHeatmap } from './PaeHeatmap';
 import { MolstarViewer } from './MolstarViewer';
 import { LegendPanel } from './LegendPanel';
@@ -234,19 +233,6 @@ export function Workspace(props: WorkspaceProps) {
           {props.paeDrawerOpen ? (
             <aside className="pae-drawer">
               <div className="pae-drawer-header">
-                {/* <div>
-                  <p className="eyebrow">pAE drawer</p>
-                  <h3>Predicted Aligned Error</h3>
-                </div> */}
-                <button
-                  type="button"
-                  className="pae-drawer-close artifact-card-tool"
-                  title="show/hide pAE matrix"
-                  aria-label="show/hide pAE matrix"
-                  onClick={props.onTogglePaeDrawer}
-                >
-                  <PanelRightClose size={16} aria-hidden="true" />
-                </button>
               </div>
               <div
                 className="pae-drawer-resizer"

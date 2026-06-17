@@ -1,4 +1,4 @@
-import { PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useProjectWorkspace } from '../features/project/useProjectWorkspace';
 import { ProjectSidebar } from '../features/project/ProjectSidebar';
 import { ArtifactWorkspace, PAE_HOVER_SYNC_RESIDUE_THRESHOLD } from '../features/project/ArtifactWorkspace';
@@ -109,19 +109,21 @@ export function ProjectPage(props: ProjectPageProps) {
                 <div className="viewer-context-meta">
                   <span>{workspace.selectedTarget.provenance.replace('_', ' ')}</span>
                   <span>{workspace.selectedTarget.selection}</span>
-                  {!selectedTargetPaeDrawerOpen && (
-                    <button
-                      type="button"
-                      className="pae-drawer-tab artifact-card-tool"
-                      title="show/hide pAE matrix"
-                      aria-label="show/hide pAE matrix"
-                      onClick={() => {
-                        workspace.onTogglePaeDrawer(workspace.selectedTarget!.id);
-                      }}
-                    >
+                  <button
+                    type="button"
+                    className="pae-drawer-tab artifact-card-tool"
+                    title="show/hide pAE matrix"
+                    aria-label="show/hide pAE matrix"
+                    onClick={() => {
+                      workspace.onTogglePaeDrawer(workspace.selectedTarget!.id);
+                    }}
+                  >
+                    {selectedTargetPaeDrawerOpen ? (
+                      <PanelRightClose size={16} aria-hidden="true" />
+                    ) : (
                       <PanelRightOpen size={16} aria-hidden="true" />
-                    </button>
-                  )}
+                    )}
+                  </button>
                 </div>
               )}
             </div>
