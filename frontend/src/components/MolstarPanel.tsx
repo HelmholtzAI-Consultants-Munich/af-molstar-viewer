@@ -168,10 +168,7 @@ async function applyDefaultColorsDeferred(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   props: MolstarPanelProps,
 ) {
-  const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await raf();
-  await raf();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await delayViewerSettle();
   try {
     await applyDefaultColors(viewer, props);
   } catch (error) {
@@ -204,6 +201,15 @@ async function restoreFocusedResiduesAfterViewerSettle(
   await syncNativeFocus(viewer, props.bundle.residues, focusIndices, {
     includeLabelSeqId: props.bundle.structure.format !== 'pdb',
   });
+}
+
+async function restoreBrushSelectionAfterViewerSettle(
+  viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
+  props: MolstarPanelProps,
+  brushSelection: MatrixViewport,
+) {
+  await delayViewerSettle();
+  await applyBrushColoring(viewer, props.bundle.residues, brushSelection);
 }
 
 async function applyPinnedPairSelection(
@@ -840,6 +846,16 @@ export function MolstarPanel(props: MolstarPanelProps) {
     if (!props.selectionModeEnabled) {
       lastAppliedSelectionRef.current = [];
       void viewer.visual.clearSelection();
+      const brushSelection = props.brushSelection;
+      if (brushSelection) {
+        void (async () => {
+          await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+          await restoreBrushSelectionAfterViewerSettle(viewer, props, brushSelection);
+          if (focusedResiduesRef.current !== null) {
+            await restoreFocusedResiduesAfterViewerSettle(viewer, props, focusedResiduesRef.current);
+          }
+        })();
+      }
       return;
     }
 
@@ -853,11 +869,11 @@ export function MolstarPanel(props: MolstarPanelProps) {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
-    if (props.brushSelection) {
-      const brushSelection = props.brushSelection;
+    const brushSelection = props.brushSelection;
+    if (brushSelection) {
       void (async () => {
         await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
-        await applyBrushColoring(viewer, props.bundle.residues, brushSelection);
+        await restoreBrushSelectionAfterViewerSettle(viewer, props, brushSelection);
         if (focusedResiduesRef.current !== null) {
           await restoreFocusedResiduesAfterViewerSettle(viewer, props, focusedResiduesRef.current);
         }
