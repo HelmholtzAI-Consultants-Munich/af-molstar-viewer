@@ -273,15 +273,133 @@ describe('workspace interactions', () => {
   });
 
   it('can collapse the pAE drawer', () => {
-    render(<Harness />);
+    function ToggleHarness() {
+      const bundle = createToyBundle();
+      const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>({
+        xStart: 0,
+        xEnd: 1,
+        yStart: 0,
+        yEnd: 1,
+      });
+      const [paeDrawerOpen, setPaeDrawerOpen] = useState(true);
 
-    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
+      return (
+        <>
+          <button type="button" onClick={() => setPaeDrawerOpen((value) => !value)}>
+            toggle drawer
+          </button>
+          <Workspace
+            viewerConfiguration="validate_refolding"
+            viewerStatePayload={null}
+            selectionDraft=""
+            bundle={bundle}
+            structureText="ATOM"
+            selectedResidues={[]}
+            draftFocused={false}
+            selectionModeEnabled={false}
+            focusedResidues={[]}
+            hoveredResidues={[]}
+            pinnedResidues={[]}
+            pinnedCell={null}
+            hoveredCell={null}
+            brushSelection={brushSelection}
+            interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
+            paeHoverSyncEnabled
+            paePairSelectionEnabled
+            paeDrawerOpen={paeDrawerOpen}
+            colorByPLDDTToggleStatus
+            colorByPLDDTEnabled
+            onHoverResidues={() => {}}
+            onHoverCell={() => {}}
+            onPinResidues={() => {}}
+            onPinCell={() => {}}
+            onBrushSelectionChange={setBrushSelection}
+            onTogglePaeHoverSync={() => {}}
+            onTogglePaePairSelection={() => {}}
+            onTogglePaeDrawer={() => setPaeDrawerOpen((value) => !value)}
+            onImportPaeData={() => {}}
+            onToggleColorByPLDDT={() => {}}
+            onEnableColorByPLDDT={() => {}}
+            onClearPairSelection={() => {}}
+            onViewerStateChange={() => {}}
+          />
+        </>
+      );
+    }
+
+    render(<ToggleHarness />);
+
     expect(document.querySelector('.heatmap-panel')).toBeInTheDocument();
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: { xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 } }));
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle drawer/i }));
+
+    expect(document.querySelector('.heatmap-panel')).not.toBeInTheDocument();
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: null }));
+  });
+
+  it('keeps the saved brush selection when the pAE drawer closes, but stops passing it to Molstar', () => {
+    function BrushRetentionHarness() {
+      const bundle = createToyBundle();
+      const [brushSelection, setBrushSelection] = useState<{ xStart: number; xEnd: number; yStart: number; yEnd: number } | null>({
+        xStart: 0,
+        xEnd: 1,
+        yStart: 0,
+        yEnd: 1,
+      });
+      const [paeDrawerOpen, setPaeDrawerOpen] = useState(true);
+
+      return (
+        <>
+          <Workspace
+            viewerConfiguration="validate_refolding"
+            viewerStatePayload={null}
+            selectionDraft=""
+            bundle={bundle}
+            structureText="ATOM"
+            selectedResidues={[]}
+            draftFocused={false}
+            selectionModeEnabled={false}
+            focusedResidues={[]}
+            hoveredResidues={[]}
+            pinnedResidues={[]}
+            pinnedCell={null}
+            hoveredCell={null}
+            brushSelection={brushSelection}
+            interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
+            paeHoverSyncEnabled
+            paePairSelectionEnabled
+            paeDrawerOpen={paeDrawerOpen}
+            colorByPLDDTToggleStatus
+            colorByPLDDTEnabled
+            onHoverResidues={() => {}}
+            onHoverCell={() => {}}
+            onPinResidues={() => {}}
+            onPinCell={() => {}}
+            onBrushSelectionChange={setBrushSelection}
+            onTogglePaeHoverSync={() => {}}
+            onTogglePaePairSelection={() => {}}
+            onTogglePaeDrawer={() => setPaeDrawerOpen((value) => !value)}
+            onImportPaeData={() => {}}
+            onToggleColorByPLDDT={() => {}}
+            onEnableColorByPLDDT={() => {}}
+            onClearPairSelection={() => {}}
+            onViewerStateChange={() => {}}
+          />
+          <div data-testid="saved-brush">{brushSelection ? 'present' : 'null'}</div>
+        </>
+      );
+    }
+
+    render(<BrushRetentionHarness />);
+
+    expect(screen.getByTestId('saved-brush')).toHaveTextContent('present');
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: { xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 } }));
 
     fireEvent.click(screen.getByRole('button', { name: /show\/hide pAE matrix/i }));
 
-    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
-    expect(document.querySelector('.heatmap-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('saved-brush')).toHaveTextContent('present');
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: null }));
   });
 
   it('imports pAE JSON dropped onto the heatmap', async () => {

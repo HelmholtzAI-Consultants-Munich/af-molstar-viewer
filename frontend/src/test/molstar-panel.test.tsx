@@ -570,4 +570,82 @@ describe('MolstarPanel', () => {
 
     expect(selectionModeNextSpy.mock.calls.at(-1)?.[0]).toBe(false);
   });
+
+  it('clears pAE brush coloring when brush selection is removed', async () => {
+    const bundle = createToyBundle();
+
+    const { rerender } = render(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={{ xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 }}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        viewerInstances.at(-1)?.visual.sequenceColor.mock.calls.some(([call]) => {
+          const payload = call as { data?: unknown[]; nonSelectedColor?: string };
+          return Array.isArray(payload.data) && payload.nonSelectedColor === PAE_SELECTION_COLORS.dimmed;
+        }),
+      ).toBe(true);
+    });
+
+    rerender(
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      const lastCall = viewerInstances.at(-1)?.visual.sequenceColor.mock.calls.at(-1)?.[0] as
+        | { data?: unknown[]; nonSelectedColor?: string; theme?: { name?: string } }
+        | undefined;
+      expect(lastCall).toBeTruthy();
+      expect(Array.isArray(lastCall?.data)).toBe(true);
+      expect(lastCall?.data).toHaveLength(0);
+    });
+  });
 });

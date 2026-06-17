@@ -184,6 +184,7 @@ export function Workspace(props: WorkspaceProps) {
   };
 
   const drawerWidth = paeDrawerWidth ?? MIN_PAE_DRAWER_WIDTH;
+  const viewerBrushSelection = props.paeDrawerOpen ? props.brushSelection : null;
   const workspaceStyle = {
     '--pae-drawer-width': `${drawerWidth}px`,
   } as CSSProperties & Record<'--pae-drawer-width', string>;
@@ -209,7 +210,7 @@ export function Workspace(props: WorkspaceProps) {
             hoveredResidues={props.hoveredResidues}
             pinnedResidues={props.pinnedResidues}
             pinnedCell={props.pinnedCell}
-            brushSelection={props.brushSelection}
+            brushSelection={viewerBrushSelection}
             colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
             colorByPLDDTEnabled={props.colorByPLDDTEnabled}
             onHoverResidue={(index) => props.onHoverResidues(index === null ? [] : [index])}
@@ -233,10 +234,10 @@ export function Workspace(props: WorkspaceProps) {
           {props.paeDrawerOpen ? (
             <aside className="pae-drawer">
               <div className="pae-drawer-header">
-                <div>
+                {/* <div>
                   <p className="eyebrow">pAE drawer</p>
                   <h3>Predicted Aligned Error</h3>
-                </div>
+                </div> */}
                 <button
                   type="button"
                   className="pae-drawer-close artifact-card-tool"

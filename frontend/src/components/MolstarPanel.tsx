@@ -881,8 +881,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
       return;
     }
 
-    if (props.pinnedResidues.length === 0) {
-      void (async () => {
+    void (async () => {
+      if (props.pinnedResidues.length === 0) {
         await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
         await viewer.visual.clearSelection();
         await applyDefaultColors(viewer, props);
@@ -892,21 +892,17 @@ export function MolstarPanel(props: MolstarPanelProps) {
             includeLabelSeqId: props.bundle.structure.format !== 'pdb',
           });
         }
-      })();
-      return;
-    }
+        return;
+      }
 
-    if (props.pinnedCell) {
-      void (async () => {
+      if (props.pinnedCell) {
         await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
         await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
         await viewer.visual.interactivityFocus({ data: residueIndicesToQueries(props.bundle.residues, props.pinnedResidues) });
         await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
-      })();
-      return;
-    }
+        return;
+      }
 
-    void (async () => {
       await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
       await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
       await applyDefaultColors(viewer, props);

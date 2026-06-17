@@ -127,6 +127,7 @@ make dev-frontend-http
   - [x] when cropping / cutting a structure, also crop the pAE data to the surviving residues
   - [x] persist pAE brush selection and coloring across artifact switching
   - [x] persist focus, even when there is a pAE brush selection
+  - [x] hide pAE brushSelection when drawer closes
   - [ ] show the generated binders
   - [ ] show the AF2-predicted structures of the binders
   - [ ] allow comparing the binders, maybe in separate connected views or with overlaying
