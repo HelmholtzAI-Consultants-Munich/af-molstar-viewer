@@ -8,11 +8,26 @@ import { createToyBundle } from './helpers';
 const selectionModeNextSpy = vi.fn();
 const createObjectURLSpy = vi.fn(() => 'blob:mock');
 const revokeObjectURLSpy = vi.fn();
-const viewerInstances: Array<{
+const mockStructureRepresentationCell = {
+  obj: {
+    data: {
+      colorTheme: { name: 'chain-id', params: {} },
+      type: {
+        name: 'cartoon',
+        params: {
+          bumpFrequency: 0,
+          bumpAmplitude: 0,
+        },
+      },
+    },
+  },
+};
+interface MockViewerInstance {
   visual: {
-    select: { mock: { calls: Array<[Record<string, unknown>]> } };
-    sequenceColor: { mock: { calls: Array<[Record<string, unknown>]> } };
-    interactivityFocus: { mock: { calls: Array<[Record<string, unknown>]> } };
+    select: { mock: { calls: unknown[][] } };
+    sequenceColor: { mock: { calls: unknown[][] } };
+    interactivityFocus: { mock: { calls: unknown[][] } };
+    clearSelection: { mock: { calls: unknown[][] } };
   };
   plugin: {
     managers: {
@@ -20,11 +35,14 @@ const viewerInstances: Array<{
         focus: {
           clear: { mock: { calls: unknown[][] } };
           setFromLoci: { mock: { calls: unknown[][] } };
+          current: { loci: unknown };
         };
       };
     };
   };
-}> = [];
+}
+
+const viewerInstances: MockViewerInstance[] = [];
 
 const makeMockLoci = (queries: Array<Record<string, unknown>> = []) => ({
   __mockLoci: true,
@@ -130,7 +148,15 @@ vi.mock('pdbe-molstar/lib/viewer.js', () => {
                       data: {},
                     },
                   },
-                  components: [],
+                  components: [
+                    {
+                      representations: [
+                        {
+                          cell: mockStructureRepresentationCell,
+                        },
+                      ],
+                    },
+                  ],
                 },
               ],
             },
@@ -148,7 +174,7 @@ vi.mock('pdbe-molstar/lib/viewer.js', () => {
               return undefined;
             }),
             current: {
-              loci: null,
+              loci: null as unknown,
             },
             behaviors: {
               current: {
@@ -182,10 +208,12 @@ vi.mock('pdbe-molstar/lib/viewer.js', () => {
         },
         data: {
           build: vi.fn(() => ({
+            commit: vi.fn(async () => undefined),
             to: vi.fn(() => ({
-              update: vi.fn(() => ({
-                commit: vi.fn(async () => undefined),
-              })),
+              update: vi.fn((callback: (old: { colorTheme?: { name?: string; params?: Record<string, unknown> } }) => void) => {
+                callback(mockStructureRepresentationCell.obj.data);
+                return undefined;
+              }),
             })),
           })),
         },
@@ -226,6 +254,14 @@ describe('MolstarPanel', () => {
     selectionModeNextSpy.mockClear();
     createObjectURLSpy.mockClear();
     revokeObjectURLSpy.mockClear();
+    mockStructureRepresentationCell.obj.data.colorTheme = { name: 'chain-id', params: {} };
+    mockStructureRepresentationCell.obj.data.type = {
+      name: 'cartoon',
+      params: {
+        bumpFrequency: 0,
+        bumpAmplitude: 0,
+      },
+    };
     Object.defineProperty(window.URL, 'createObjectURL', {
       value: createObjectURLSpy,
       configurable: true,
@@ -330,6 +366,123 @@ describe('MolstarPanel', () => {
         return Array.isArray(payload.data) && payload.nonSelectedColor === PAE_SELECTION_COLORS.dimmed;
       }),
     ).toBe(true);
+  });
+
+  it('keeps pinned pair highlights while updating both sequence and structure themes', async () => {
+    const bundle = createToyBundle();
+
+    const { rerender } = render(
+      <MolstarPanel
+        viewerConfiguration="validate_refolding"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[0, 1]}
+        pinnedCell={{ x: 0, y: 1 }}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={false}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        viewerInstances.at(-1)?.visual.sequenceColor.mock.calls.some(([call]) => {
+          const payload = call as { data?: unknown[]; theme?: { name?: string } };
+          return Array.isArray(payload.data) && payload.data.length > 0 && payload.theme?.name === 'chain-id';
+        }),
+      ).toBe(true);
+      expect(mockStructureRepresentationCell.obj.data.colorTheme?.name).toBe('chain-id');
+    });
+
+    rerender(
+      <MolstarPanel
+        viewerConfiguration="validate_refolding"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[0, 1]}
+        pinnedCell={{ x: 0, y: 1 }}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        viewerInstances.at(-1)?.visual.sequenceColor.mock.calls.some(([call]) => {
+          const payload = call as { data?: unknown[]; theme?: { name?: string } };
+          return Array.isArray(payload.data) && payload.data.length > 0 && payload.theme?.name === 'plddt-confidence';
+        }),
+      ).toBe(true);
+      expect(mockStructureRepresentationCell.obj.data.colorTheme?.name).toBe('plddt-confidence');
+    });
+
+    const focusClearsBefore = viewerInstances.at(-1)?.plugin.managers.structure.focus.clear.mock.calls.length ?? 0;
+    const selectionClearsBefore = viewerInstances.at(-1)?.visual.clearSelection.mock.calls.length ?? 0;
+
+    rerender(
+      <MolstarPanel
+        viewerConfiguration="validate_refolding"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={null}
+        hoveredResidues={[]}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((viewerInstances.at(-1)?.plugin.managers.structure.focus.clear.mock.calls.length ?? 0)).toBeGreaterThan(focusClearsBefore);
+      expect((viewerInstances.at(-1)?.visual.clearSelection.mock.calls.length ?? 0)).toBeGreaterThan(selectionClearsBefore);
+      expect(mockStructureRepresentationCell.obj.data.colorTheme?.name).toBe('plddt-confidence');
+    });
   });
 
   it('reapplies restored focus after switching away from and back to a target', async () => {

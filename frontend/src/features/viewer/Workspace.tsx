@@ -184,6 +184,8 @@ export function Workspace(props: WorkspaceProps) {
 
   const drawerWidth = paeDrawerWidth ?? MIN_PAE_DRAWER_WIDTH;
   const viewerBrushSelection = props.paeDrawerOpen ? props.brushSelection : null;
+  const viewerPinnedResidues = props.paeDrawerOpen ? props.pinnedResidues : [];
+  const viewerPinnedCell = props.paeDrawerOpen ? props.pinnedCell : null;
   const workspaceStyle = {
     '--pae-drawer-width': `${drawerWidth}px`,
   } as CSSProperties & Record<'--pae-drawer-width', string>;
@@ -207,8 +209,8 @@ export function Workspace(props: WorkspaceProps) {
             selectionSyncNonce={props.selectionSyncNonce ?? 0}
             focusedResidues={props.focusedResidues}
             hoveredResidues={props.hoveredResidues}
-            pinnedResidues={props.pinnedResidues}
-            pinnedCell={props.pinnedCell}
+            pinnedResidues={viewerPinnedResidues}
+            pinnedCell={viewerPinnedCell}
             brushSelection={viewerBrushSelection}
             colorByPLDDTToggleStatus={props.colorByPLDDTToggleStatus}
             colorByPLDDTEnabled={props.colorByPLDDTEnabled}

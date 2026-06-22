@@ -264,7 +264,6 @@ describe('workspace interactions', () => {
   it('renders the pAE drawer for the target viewer configuration too', () => {
     render(<TargetHarness />);
 
-    expect(screen.getByRole('button', { name: /show\/hide pAE matrix/i })).toBeInTheDocument();
     expect(document.querySelector('.pae-drawer')).toBeInTheDocument();
     expect(document.querySelector('.heatmap-panel')).toBeInTheDocument();
     expect(document.querySelector('.legend-panel')).toBeInTheDocument();
@@ -351,6 +350,9 @@ describe('workspace interactions', () => {
 
       return (
         <>
+          <button type="button" onClick={() => setPaeDrawerOpen((value) => !value)}>
+            toggle drawer
+          </button>
           <Workspace
             viewerConfiguration="validate_refolding"
             viewerStatePayload={null}
@@ -396,10 +398,81 @@ describe('workspace interactions', () => {
     expect(screen.getByTestId('saved-brush')).toHaveTextContent('present');
     expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: { xStart: 0, xEnd: 1, yStart: 0, yEnd: 1 } }));
 
-    fireEvent.click(screen.getByRole('button', { name: /show\/hide pAE matrix/i }));
+    fireEvent.click(screen.getByRole('button', { name: /toggle drawer/i }));
 
     expect(screen.getByTestId('saved-brush')).toHaveTextContent('present');
     expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ brushSelection: null }));
+  });
+
+  it('keeps a pinned pair in app state when the pAE drawer closes, but stops passing it to Molstar until reopened', () => {
+    function PairRetentionHarness() {
+      const bundle = createToyBundle();
+      const [pinnedResidues, setPinnedResidues] = useState<number[]>([0, 1]);
+      const [pinnedCell, setPinnedCell] = useState<{ x: number; y: number } | null>({ x: 0, y: 1 });
+      const [paeDrawerOpen, setPaeDrawerOpen] = useState(true);
+
+      return (
+        <>
+          <button type="button" onClick={() => setPaeDrawerOpen((value) => !value)}>
+            toggle drawer
+          </button>
+          <Workspace
+            viewerConfiguration="validate_refolding"
+            viewerStatePayload={null}
+            selectionDraft=""
+            bundle={bundle}
+            structureText="ATOM"
+            selectedResidues={[]}
+            draftFocused={false}
+            selectionModeEnabled={false}
+            focusedResidues={[]}
+            hoveredResidues={[]}
+            pinnedResidues={pinnedResidues}
+            pinnedCell={pinnedCell}
+            hoveredCell={null}
+            brushSelection={null}
+            interactionPerformance={SYNC_PAE_INTERACTION_PERFORMANCE}
+            paeHoverSyncEnabled
+            paePairSelectionEnabled
+            paeDrawerOpen={paeDrawerOpen}
+            colorByPLDDTToggleStatus
+            colorByPLDDTEnabled
+            onHoverResidues={() => {}}
+            onHoverCell={() => {}}
+            onPinResidues={setPinnedResidues}
+            onPinCell={setPinnedCell}
+            onBrushSelectionChange={() => {}}
+            onTogglePaeHoverSync={() => {}}
+            onTogglePaePairSelection={() => {}}
+            onTogglePaeDrawer={() => setPaeDrawerOpen((value) => !value)}
+            onImportPaeData={() => {}}
+            onToggleColorByPLDDT={() => {}}
+            onEnableColorByPLDDT={() => {}}
+            onClearPairSelection={() => {
+              setPinnedCell(null);
+              setPinnedResidues([]);
+            }}
+            onViewerStateChange={() => {}}
+          />
+          <div data-testid="saved-pair">{pinnedCell ? `${pinnedResidues.join(',')}:${pinnedCell.x},${pinnedCell.y}` : 'null'}</div>
+        </>
+      );
+    }
+
+    render(<PairRetentionHarness />);
+
+    expect(screen.getByTestId('saved-pair')).toHaveTextContent('0,1:0,1');
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ pinnedResidues: [0, 1], pinnedCell: { x: 0, y: 1 } }));
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle drawer/i }));
+
+    expect(screen.getByTestId('saved-pair')).toHaveTextContent('0,1:0,1');
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ pinnedResidues: [], pinnedCell: null }));
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle drawer/i }));
+
+    expect(screen.getByTestId('saved-pair')).toHaveTextContent('0,1:0,1');
+    expect(viewerSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ pinnedResidues: [0, 1], pinnedCell: { x: 0, y: 1 } }));
   });
 
   it('imports pAE JSON dropped onto the heatmap', async () => {

@@ -158,10 +158,13 @@ async function applyDefaultColors(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   props: MolstarPanelProps,
 ) {
-  const usePLDDTs =
-    props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTToggleStatus && props.colorByPLDDTEnabled;
+  const usePLDDTs = shouldUsePLDDTs(props);
   await applyDefaultSequenceTheme(viewer, usePLDDTs);
   await applyDefaultStructureTheme(viewer, usePLDDTs);
+}
+
+function shouldUsePLDDTs(props: MolstarPanelProps) {
+  return props.bundle.metadata.looksLikePLDDTs && props.colorByPLDDTToggleStatus && props.colorByPLDDTEnabled;
 }
 
 async function applyDefaultColorsDeferred(
@@ -216,6 +219,7 @@ async function applyPinnedPairSelection(
   viewer: import('pdbe-molstar/lib/viewer.js').PDBeMolstarPlugin,
   residues: PredictionBundle['residues'],
   indices: number[],
+  usePLDDTs: boolean,
 ) {
   const coloredQueries = queriesWithColor(residues, indices, PAE_PAIR_SELECTION_COLOR);
 
@@ -226,7 +230,7 @@ async function applyPinnedPairSelection(
   await viewer.visual.sequenceColor({
     data: coloredQueries,
     theme: {
-      name: 'plddt-confidence',
+      name: usePLDDTs ? 'plddt-confidence' : 'chain-id',
       params: {},
       themeStrength: 1,
     },
@@ -884,6 +888,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
     void (async () => {
       if (props.pinnedResidues.length === 0) {
         await setStructureFocusComponents(viewer, DEFAULT_FOCUS_COMPONENTS);
+        await clearStructureFocus(viewer);
         await viewer.visual.clearSelection();
         await applyDefaultColors(viewer, props);
         if (selectedResiduesRef.current !== null) {
@@ -899,7 +904,8 @@ export function MolstarPanel(props: MolstarPanelProps) {
         await setStructureFocusComponents(viewer, TARGET_ONLY_FOCUS_COMPONENTS);
         await syncNativeFocus(viewer, props.bundle.residues, props.pinnedResidues);
         await viewer.visual.interactivityFocus({ data: residueIndicesToQueries(props.bundle.residues, props.pinnedResidues) });
-        await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues);
+        await applyPinnedPairSelection(viewer, props.bundle.residues, props.pinnedResidues, shouldUsePLDDTs(props));
+        await applyDefaultStructureTheme(viewer, shouldUsePLDDTs(props));
         return;
       }
 
