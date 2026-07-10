@@ -28,6 +28,10 @@ def _fixture_cif_path() -> Path:
     return Path(__file__).resolve().parents[2] / "fixtures" / "test-inputs" / "af3" / "toy_model.cif"
 
 
+def _fixture_q14694_cif_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "fixtures" / "examples" / "AF-Q14694-F1-model_v6.cif"
+
+
 def _read_residue_numbers(path: Path) -> list[int]:
     residues: list[int] = []
     seen: set[int] = set()
@@ -809,8 +813,11 @@ class StructureEditTests(unittest.TestCase):
             )
             cropped_path = Path(cropped["output_path"])
             cropped_metric_rows = _read_mmcif_local_metric_rows(cropped_path)
-            self.assertEqual([row[3] for row in cropped_metric_rows], ["20", "30"])
+            self.assertEqual([row[3] for row in cropped_metric_rows], ["1", "2"])
             self.assertEqual([row[6] for row in cropped_metric_rows], ["20.00", "30.00"])
+            label_seq_ids, auth_seq_ids = _read_mmcif_atom_site_seq_ids(cropped_path)
+            self.assertEqual(label_seq_ids, [1, 2])
+            self.assertEqual(auth_seq_ids, [20, 30])
 
             reset = reset_auth_indexing(
                 project_id="project-1",
@@ -826,6 +833,62 @@ class StructureEditTests(unittest.TestCase):
             label_seq_ids, auth_seq_ids = _read_mmcif_atom_site_seq_ids(reset_path)
             self.assertEqual(label_seq_ids, [1, 2])
             self.assertEqual(auth_seq_ids, [1, 2])
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_crop_real_af_q14694_renumbers_labels_but_keeps_auth_numbers(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="AF-Q14694",
+                structure_path=str(_fixture_q14694_cif_path()),
+                selection="A382-798",
+                residue_ranges=[ResidueRange(chain_id="A", start=382, end=798)],
+                output_dir=tmp_dir,
+            )
+
+            cropped_path = Path(cropped["output_path"])
+            label_seq_ids, auth_seq_ids = _read_mmcif_atom_site_seq_ids(cropped_path)
+            cropped_metric_rows = _read_mmcif_local_metric_rows(cropped_path)
+            entity_poly_seq_rows = _read_mmcif_loop_rows(cropped_path, "_entity_poly_seq")
+
+            self.assertEqual(label_seq_ids[:8], [1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual(auth_seq_ids[:8], [382, 383, 384, 385, 386, 387, 388, 389])
+            self.assertEqual([int(row[2]) for row in cropped_metric_rows[:8]], [1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual([row[0] for row in entity_poly_seq_rows[:3]], ["1", "1", "1"])
+            self.assertEqual([row[2] for row in entity_poly_seq_rows[:3]], ["GLU", "GLY", "LEU"])
+            self.assertEqual([row[3] for row in entity_poly_seq_rows[:3]], ["1", "2", "3"])
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_cut_then_reset_auth_indexing_keeps_entity_poly_seq_for_real_af_q14694(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            cut = cut_selection_off_target(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="AF-Q14694",
+                structure_path=str(_fixture_q14694_cif_path()),
+                selection="A1-381",
+                residue_ranges=[ResidueRange(chain_id="A", start=1, end=381)],
+                output_dir=tmp_dir,
+            )
+
+            reset = reset_auth_indexing(
+                project_id="project-1",
+                target_id="target-2",
+                target_name="AF-Q14694",
+                structure_path=str(cut["output_path"]),
+                output_dir=tmp_dir,
+            )
+
+            reset_path = Path(reset["output_path"])
+            label_seq_ids, auth_seq_ids = _read_mmcif_atom_site_seq_ids(reset_path)
+            entity_poly_seq_rows = _read_mmcif_loop_rows(reset_path, "_entity_poly_seq")
+
+            self.assertEqual(label_seq_ids[:8], [1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual(auth_seq_ids[:8], [1, 2, 3, 4, 5, 6, 7, 8])
+            self.assertEqual([row[0] for row in entity_poly_seq_rows[:3]], ["1", "1", "1"])
+            self.assertEqual([row[2] for row in entity_poly_seq_rows[:3]], ["GLU", "GLY", "LEU"])
+            self.assertEqual([row[3] for row in entity_poly_seq_rows[:3]], ["1", "2", "3"])
 
     def test_normalize_mmcif_filtered_metadata_prunes_stale_chain_annotations(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -845,7 +908,7 @@ class StructureEditTests(unittest.TestCase):
             self.assertEqual([row[0] for row in struct_asym_rows], ["A"])
             self.assertEqual(poly_seq_rows, [])
             self.assertEqual(assembly_rows[0][2], "A")
-            self.assertEqual(entity_poly_rows, [])
+            self.assertEqual(entity_poly_rows, [["1", "polypeptide(L)"]])
             self.assertEqual(entity_poly_seq_rows, [])
             self.assertEqual(struct_ref_rows, [])
             self.assertEqual(struct_ref_seq_rows, [])

@@ -9,6 +9,41 @@ from .selection import ResidueRange
 
 MmcifResidueKey = tuple[str, str, str, str]
 
+_MMCIF_MONOMER_CODES = {
+    "ALA": "A",
+    "ARG": "R",
+    "ASN": "N",
+    "ASP": "D",
+    "CYS": "C",
+    "GLN": "Q",
+    "GLU": "E",
+    "GLY": "G",
+    "HIS": "H",
+    "ILE": "I",
+    "LEU": "L",
+    "LYS": "K",
+    "MET": "M",
+    "PHE": "F",
+    "PRO": "P",
+    "SER": "S",
+    "THR": "T",
+    "TRP": "W",
+    "TYR": "Y",
+    "VAL": "V",
+    "SEC": "U",
+    "PYL": "O",
+    "A": "A",
+    "C": "C",
+    "G": "G",
+    "U": "U",
+    "T": "T",
+    "DA": "A",
+    "DC": "C",
+    "DG": "G",
+    "DT": "T",
+    "DU": "U",
+}
+
 
 def crop_to_selection(
     *,
@@ -174,7 +209,7 @@ def _write_filtered_structure_with_biopython(
     io.set_structure(structure)
     io.save(str(output_path), select=ResidueSelect())
     if structure_file.suffix.lower() in {".cif", ".mmcif"}:
-        _normalize_mmcif_atom_site_label_seq_ids(output_path)
+        _normalize_mmcif_label_seq_ids(output_path)
     return kept_residue_count, kept_chain_ids
 
 
@@ -246,13 +281,12 @@ def _tokenize_mmcif_row(line: str) -> list[str]:
     return _MMCIF_TOKEN_PATTERN.findall(line)
 
 
-def _normalize_mmcif_atom_site_label_seq_ids(path: Path) -> None:
+def _normalize_mmcif_label_seq_ids(path: Path) -> None:
     lines = path.read_text().splitlines()
 
-    loop_start = None
-    loop_end = None
-    columns: list[str] = []
-    row_indices: list[int] = []
+    atom_site_columns: list[str] = []
+    atom_site_row_indices: list[int] = []
+    atom_site_start = None
 
     index = 0
     while index < len(lines):
@@ -260,65 +294,160 @@ def _normalize_mmcif_atom_site_label_seq_ids(path: Path) -> None:
             index += 1
             continue
 
-        candidate_columns: list[str] = []
-        cursor = index + 1
-        while cursor < len(lines) and lines[cursor].strip().startswith("_"):
-            candidate_columns.append(lines[cursor].strip())
-            cursor += 1
+        loop_start = index
+        index += 1
+        columns: list[str] = []
+        while index < len(lines) and lines[index].strip().startswith("_"):
+            columns.append(lines[index].strip())
+            index += 1
 
-        if candidate_columns and candidate_columns[0].startswith("_atom_site."):
-            loop_start = index
-            columns = candidate_columns
-            while cursor < len(lines):
-                stripped = lines[cursor].strip()
-                if not stripped or stripped == "#" or stripped == "loop_" or stripped.startswith("_") or stripped.startswith("data_"):
-                    break
-                row_indices.append(cursor)
-                cursor += 1
-            loop_end = cursor
+        row_indices: list[int] = []
+        while index < len(lines):
+            stripped = lines[index].strip()
+            if not stripped or stripped == "#" or stripped == "loop_" or stripped.startswith("_") or stripped.startswith("data_"):
+                break
+            row_indices.append(index)
+            index += 1
+
+        if columns and columns[0].startswith("_atom_site."):
+            atom_site_start = loop_start
+            atom_site_columns = columns
+            atom_site_row_indices = row_indices
             break
 
-        index = cursor
-
-    if loop_start is None or loop_end is None or not row_indices:
+    if atom_site_start is None or not atom_site_row_indices:
         return
 
     try:
-        label_asym_idx = columns.index("_atom_site.label_asym_id")
-        label_seq_idx = columns.index("_atom_site.label_seq_id")
+        label_asym_idx = atom_site_columns.index("_atom_site.label_asym_id")
+        label_seq_idx = atom_site_columns.index("_atom_site.label_seq_id")
     except ValueError:
         return
 
-    auth_seq_idx = columns.index("_atom_site.auth_seq_id") if "_atom_site.auth_seq_id" in columns else None
-    auth_comp_idx = columns.index("_atom_site.auth_comp_id") if "_atom_site.auth_comp_id" in columns else None
-    label_comp_idx = columns.index("_atom_site.label_comp_id") if "_atom_site.label_comp_id" in columns else None
-    ins_code_idx = columns.index("_atom_site.pdbx_PDB_ins_code") if "_atom_site.pdbx_PDB_ins_code" in columns else None
+    auth_seq_idx = atom_site_columns.index("_atom_site.auth_seq_id") if "_atom_site.auth_seq_id" in atom_site_columns else None
+    auth_comp_idx = atom_site_columns.index("_atom_site.auth_comp_id") if "_atom_site.auth_comp_id" in atom_site_columns else None
+    label_comp_idx = atom_site_columns.index("_atom_site.label_comp_id") if "_atom_site.label_comp_id" in atom_site_columns else None
+    ins_code_idx = atom_site_columns.index("_atom_site.pdbx_PDB_ins_code") if "_atom_site.pdbx_PDB_ins_code" in atom_site_columns else None
 
     next_label_seq_by_chain: dict[str, int] = {}
-    label_seq_by_residue: dict[tuple[str, str, str, str], int] = {}
+    label_seq_by_residue: dict[MmcifResidueKey, int] = {}
+    label_seq_by_chain_seq: dict[tuple[str, str], int] = {}
+    observed_chain_ids: set[str] = set()
 
-    for row_index in row_indices:
+    for row_index in atom_site_row_indices:
         tokens = _tokenize_mmcif_row(lines[row_index])
-        if len(tokens) != len(columns):
+        if len(tokens) != len(atom_site_columns):
             continue
 
         chain_id = tokens[label_asym_idx]
-        auth_seq = tokens[auth_seq_idx] if auth_seq_idx is not None else tokens[label_seq_idx]
+        label_seq = tokens[label_seq_idx]
+        auth_seq = tokens[auth_seq_idx] if auth_seq_idx is not None else label_seq
         comp_id = tokens[auth_comp_idx] if auth_comp_idx is not None else (
             tokens[label_comp_idx] if label_comp_idx is not None else "?"
         )
         ins_code = tokens[ins_code_idx] if ins_code_idx is not None else "?"
-        residue_key = (chain_id, auth_seq, comp_id, ins_code)
+        normalized_ins_code = "?" if ins_code in {"", ".", "?"} else ins_code
+        residue_key = (chain_id, label_seq, comp_id, normalized_ins_code)
 
         if residue_key not in label_seq_by_residue:
             next_label_seq = next_label_seq_by_chain.get(chain_id, 0) + 1
             next_label_seq_by_chain[chain_id] = next_label_seq
             label_seq_by_residue[residue_key] = next_label_seq
+            label_seq_by_chain_seq[(chain_id, label_seq)] = next_label_seq
 
         tokens[label_seq_idx] = str(label_seq_by_residue[residue_key])
         lines[row_index] = " ".join(tokens)
+        observed_chain_ids.add(chain_id)
 
-    path.write_text("\n".join(lines) + "\n")
+    output_lines: list[str] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip() != "loop_":
+            output_lines.append(lines[index])
+            index += 1
+            continue
+
+        loop_start = index
+        index += 1
+        columns: list[str] = []
+        while index < len(lines) and lines[index].strip().startswith("_"):
+            columns.append(lines[index].strip())
+            index += 1
+
+        row_lines: list[str] = []
+        while index < len(lines):
+            stripped = lines[index].strip()
+            if not stripped or stripped == "#" or stripped == "loop_" or stripped.startswith("_") or stripped.startswith("data_"):
+                break
+            row_lines.append(lines[index])
+            index += 1
+
+        rewritten_rows = row_lines
+        if columns:
+            prefix = columns[0].split(".")[0]
+            if prefix in {"_atom_site_anisotrop", "_ma_qa_metric_local"}:
+                rewritten_rows = _rewrite_single_residue_reference_rows(
+                    row_lines,
+                    columns,
+                    chain_candidates=[
+                        f"{prefix}.label_asym_id",
+                        f"{prefix}.pdbx_label_asym_id",
+                    ],
+                    seq_candidates=[
+                        f"{prefix}.label_seq_id",
+                        f"{prefix}.pdbx_label_seq_id",
+                    ],
+                    comp_candidates=[f"{prefix}.label_comp_id"],
+                    ins_candidates=[
+                        f"{prefix}.PDB_ins_code",
+                        f"{prefix}.pdbx_PDB_ins_code",
+                    ],
+                    residue_map_by_key=label_seq_by_residue,
+                    residue_map_by_chain_seq=label_seq_by_chain_seq,
+                    observed_chain_ids=observed_chain_ids,
+                )
+            elif prefix in {"_struct_conf", "_struct_sheet_range"}:
+                rewritten_rows = _rewrite_dual_residue_reference_rows(
+                    row_lines,
+                    columns,
+                    first_chain_candidates=[f"{prefix}.beg_label_asym_id"],
+                    first_seq_candidates=[f"{prefix}.beg_label_seq_id"],
+                    first_comp_candidates=[f"{prefix}.beg_label_comp_id"],
+                    first_ins_candidates=[f"{prefix}.pdbx_beg_PDB_ins_code"],
+                    second_chain_candidates=[f"{prefix}.end_label_asym_id"],
+                    second_seq_candidates=[f"{prefix}.end_label_seq_id"],
+                    second_comp_candidates=[f"{prefix}.end_label_comp_id"],
+                    second_ins_candidates=[f"{prefix}.pdbx_end_PDB_ins_code"],
+                    residue_map_by_key=label_seq_by_residue,
+                    residue_map_by_chain_seq=label_seq_by_chain_seq,
+                    observed_chain_ids=observed_chain_ids,
+                )
+            elif prefix == "_pdbx_struct_sheet_hbond":
+                rewritten_rows = _rewrite_dual_residue_reference_rows(
+                    row_lines,
+                    columns,
+                    first_chain_candidates=[f"{prefix}.range_1_label_asym_id"],
+                    first_seq_candidates=[f"{prefix}.range_1_label_seq_id"],
+                    first_comp_candidates=[f"{prefix}.range_1_label_comp_id"],
+                    first_ins_candidates=[f"{prefix}.range_1_PDB_ins_code"],
+                    second_chain_candidates=[f"{prefix}.range_2_label_asym_id"],
+                    second_seq_candidates=[f"{prefix}.range_2_label_seq_id"],
+                    second_comp_candidates=[f"{prefix}.range_2_label_comp_id"],
+                    second_ins_candidates=[f"{prefix}.range_2_PDB_ins_code"],
+                    residue_map_by_key=label_seq_by_residue,
+                    residue_map_by_chain_seq=label_seq_by_chain_seq,
+                    observed_chain_ids=observed_chain_ids,
+                )
+
+        output_lines.append(lines[loop_start])
+        output_lines.extend(lines[loop_start + 1 : loop_start + 1 + len(columns)])
+        output_lines.extend(rewritten_rows)
+
+        if index < len(lines) and lines[index].strip() == "#":
+            output_lines.append(lines[index])
+            index += 1
+
+    path.write_text("\n".join(output_lines) + "\n")
 
 
 def _write_filtered_mmcif_text(
@@ -373,7 +502,17 @@ def _normalize_mmcif_filtered_metadata(path: Path, kept_chain_ids: set[str]) -> 
         filtered_row_lines = row_lines
         if columns:
             prefix = columns[0].split(".")[0]
-            if prefix in {"_entity_poly", "_entity_poly_seq", "_struct_ref", "_struct_ref_seq"}:
+            if prefix == "_entity_poly":
+                filtered_row_lines = _rewrite_mmcif_entity_poly_rows(
+                    columns,
+                    row_lines,
+                    atom_residues,
+                    chain_entity_ids,
+                    kept_chain_ids,
+                )
+            elif prefix == "_entity_poly_seq":
+                filtered_row_lines = _rewrite_mmcif_entity_poly_seq_rows(columns, atom_residues, chain_entity_ids, kept_chain_ids)
+            elif prefix in {"_struct_ref", "_struct_ref_seq"}:
                 filtered_row_lines = []
             elif prefix == "_struct_asym":
                 filtered_row_lines = _filter_mmcif_rows_by_chain(
@@ -561,6 +700,97 @@ def _rewrite_mmcif_poly_seq_scheme_rows(
     return rows
 
 
+def _rewrite_mmcif_entity_poly_rows(
+    columns: list[str],
+    row_lines: list[str],
+    atom_residues: list[dict[str, str]],
+    chain_entity_ids: dict[str, str],
+    kept_chain_ids: set[str],
+) -> list[str]:
+    entity_index = columns.index("_entity_poly.entity_id") if "_entity_poly.entity_id" in columns else None
+    strand_index = columns.index("_entity_poly.pdbx_strand_id") if "_entity_poly.pdbx_strand_id" in columns else None
+    if entity_index is None:
+        return row_lines
+
+    kept_entity_ids = {chain_entity_ids.get(chain_id) for chain_id in kept_chain_ids}
+    kept_entity_ids.discard(None)
+    if not kept_entity_ids:
+        return []
+
+    entity_chain_ids: dict[str, list[str]] = defaultdict(list)
+    entity_sequences: dict[str, list[str]] = defaultdict(list)
+    primary_chain_by_entity: dict[str, str] = {}
+    for residue in atom_residues:
+        chain_id = residue["chain_id"]
+        if chain_id not in kept_chain_ids:
+            continue
+        entity_id = chain_entity_ids.get(chain_id, "1")
+        if chain_id not in entity_chain_ids[entity_id]:
+            entity_chain_ids[entity_id].append(chain_id)
+        primary_chain = primary_chain_by_entity.setdefault(entity_id, chain_id)
+        if chain_id == primary_chain:
+            entity_sequences[entity_id].append(_mmcif_monomer_code(residue["comp_id"]))
+
+    rows: list[str] = []
+    for entity_id in sorted(kept_entity_ids, key=lambda value: int(value) if value.isdigit() else value):
+        sequence = "".join(entity_sequences.get(entity_id, [])) or "?"
+        column_values = {column: "?" for column in columns}
+        for column in columns:
+            if column == "_entity_poly.entity_id":
+                column_values[column] = entity_id
+            elif column == "_entity_poly.type":
+                column_values[column] = "polypeptide(L)"
+            elif column in {"_entity_poly.nstd_linkage", "_entity_poly.nstd_monomer"}:
+                column_values[column] = "no"
+            elif column in {"_entity_poly.pdbx_seq_one_letter_code", "_entity_poly.pdbx_seq_one_letter_code_can"}:
+                column_values[column] = sequence
+            elif column == "_entity_poly.pdbx_strand_id":
+                column_values[column] = ",".join(entity_chain_ids.get(entity_id, [])) or "?"
+        rows.append(" ".join(column_values[column] for column in columns))
+    return rows
+
+
+def _mmcif_monomer_code(comp_id: str) -> str:
+    return _MMCIF_MONOMER_CODES.get(comp_id.strip().upper(), "X")
+
+
+def _rewrite_mmcif_entity_poly_seq_rows(
+    columns: list[str],
+    atom_residues: list[dict[str, str]],
+    chain_entity_ids: dict[str, str],
+    kept_chain_ids: set[str],
+) -> list[str]:
+    if not atom_residues:
+        return []
+
+    entity_index = columns.index("_entity_poly_seq.entity_id") if "_entity_poly_seq.entity_id" in columns else None
+    num_index = columns.index("_entity_poly_seq.num") if "_entity_poly_seq.num" in columns else None
+    mon_index = columns.index("_entity_poly_seq.mon_id") if "_entity_poly_seq.mon_id" in columns else None
+    if entity_index is None or num_index is None or mon_index is None:
+        return []
+
+    entity_seq_counts: dict[str, int] = defaultdict(int)
+    rows: list[str] = []
+    for residue in atom_residues:
+        chain_id = residue["chain_id"]
+        if chain_id not in kept_chain_ids:
+            continue
+        entity_id = chain_entity_ids.get(chain_id, "1")
+        entity_seq_counts[entity_id] += 1
+        column_values = {column: "?" for column in columns}
+        for column in columns:
+            if column == "_entity_poly_seq.entity_id":
+                column_values[column] = entity_id
+            elif column == "_entity_poly_seq.num":
+                column_values[column] = str(entity_seq_counts[entity_id])
+            elif column == "_entity_poly_seq.mon_id":
+                column_values[column] = residue["comp_id"]
+            elif column == "_entity_poly_seq.hetero":
+                column_values[column] = "n"
+        rows.append(" ".join(column_values[column] for column in columns))
+    return rows
+
+
 def _filter_mmcif_rows_by_chain(
     columns: list[str],
     row_lines: list[str],
@@ -682,6 +912,7 @@ def _write_mmcif_text_with_residue_filter(
         raise ValueError("The requested edit would remove every residue from the structure.")
 
     output_path.write_text("\n".join(output_lines) + "\n")
+    _normalize_mmcif_label_seq_ids(output_path)
     _normalize_mmcif_filtered_metadata(output_path, kept_chain_ids)
     return len(kept_residue_keys), sorted(kept_chain_ids)
 
@@ -897,7 +1128,7 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
         emit_loop = True
         if columns:
             prefix = columns[0].split(".")[0]
-            if prefix in {"_entity_poly", "_entity_poly_seq", "_struct_ref", "_struct_ref_seq"}:
+            if prefix in {"_struct_ref", "_struct_ref_seq"}:
                 if index < len(lines) and lines[index].strip() == "#":
                     index += 1
                 continue
@@ -947,6 +1178,7 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
         raise ValueError("The requested edit would remove every residue from the structure.")
 
     output_path.write_text("\n".join(output_lines) + "\n")
+    _normalize_mmcif_filtered_metadata(output_path, observed_chain_ids)
     return residue_count, sorted(observed_chain_ids)
 
 
