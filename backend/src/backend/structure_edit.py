@@ -652,6 +652,7 @@ def _write_mmcif_text_with_residue_filter(
             if prefix in {
                 "_atom_site",
                 "_atom_site_anisotrop",
+                "_ma_qa_metric_local",
                 "_pdbx_unobs_or_zero_occ_atoms",
                 "_pdbx_unobs_or_zero_occ_residues",
                 "_pdbx_poly_seq_scheme",
@@ -714,6 +715,8 @@ def _filter_mmcif_loop_rows(
         "_atom_site.label_asym_id",
         "_atom_site_anisotrop.pdbx_auth_asym_id",
         "_atom_site_anisotrop.pdbx_label_asym_id",
+        "_ma_qa_metric_local.auth_asym_id",
+        "_ma_qa_metric_local.label_asym_id",
         "_pdbx_unobs_or_zero_occ_atoms.auth_asym_id",
         "_pdbx_unobs_or_zero_occ_atoms.label_asym_id",
         "_pdbx_unobs_or_zero_occ_residues.auth_asym_id",
@@ -727,6 +730,8 @@ def _filter_mmcif_loop_rows(
         "_atom_site.label_seq_id",
         "_atom_site_anisotrop.pdbx_auth_seq_id",
         "_atom_site_anisotrop.pdbx_label_seq_id",
+        "_ma_qa_metric_local.auth_seq_id",
+        "_ma_qa_metric_local.label_seq_id",
         "_pdbx_unobs_or_zero_occ_atoms.auth_seq_id",
         "_pdbx_unobs_or_zero_occ_atoms.label_seq_id",
         "_pdbx_unobs_or_zero_occ_residues.auth_seq_id",
@@ -903,6 +908,7 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
                 )
             elif prefix in {
                 "_atom_site_anisotrop",
+                "_ma_qa_metric_local",
                 "_pdbx_unobs_or_zero_occ_atoms",
                 "_pdbx_unobs_or_zero_occ_residues",
                 "_pdbx_poly_seq_scheme",
@@ -1022,7 +1028,7 @@ def _rewrite_mmcif_reset_associated_rows(
         return filtered_rows
     if prefix == "_pdbx_poly_seq_scheme":
         return _rewrite_poly_seq_scheme_reset_rows(row_lines, columns, atom_residues, observed_chain_ids)
-    if prefix in {"_pdbx_unobs_or_zero_occ_atoms", "_pdbx_unobs_or_zero_occ_residues", "_atom_site_anisotrop"}:
+    if prefix in {"_pdbx_unobs_or_zero_occ_atoms", "_pdbx_unobs_or_zero_occ_residues", "_atom_site_anisotrop", "_ma_qa_metric_local"}:
         if prefix in {"_pdbx_unobs_or_zero_occ_atoms", "_pdbx_unobs_or_zero_occ_residues"}:
             return []
         return _rewrite_single_residue_reference_rows(

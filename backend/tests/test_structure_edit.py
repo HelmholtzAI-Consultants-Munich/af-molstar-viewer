@@ -399,6 +399,68 @@ def _write_mmcif_with_truncated_poly_seq_scheme(path: Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def _write_mmcif_with_local_confidence_metrics(path: Path) -> None:
+    lines = [
+        "data_test",
+        "#",
+        "loop_",
+        "_atom_site.group_PDB",
+        "_atom_site.id",
+        "_atom_site.type_symbol",
+        "_atom_site.label_atom_id",
+        "_atom_site.label_alt_id",
+        "_atom_site.label_comp_id",
+        "_atom_site.label_asym_id",
+        "_atom_site.label_entity_id",
+        "_atom_site.label_seq_id",
+        "_atom_site.pdbx_PDB_ins_code",
+        "_atom_site.Cartn_x",
+        "_atom_site.Cartn_y",
+        "_atom_site.Cartn_z",
+        "_atom_site.occupancy",
+        "_atom_site.B_iso_or_equiv",
+        "_atom_site.auth_seq_id",
+        "_atom_site.auth_comp_id",
+        "_atom_site.auth_asym_id",
+        "_atom_site.auth_atom_id",
+        "_atom_site.pdbx_PDB_model_num",
+        "ATOM 1 N N . ALA A 1 1 ? 0.0 0.0 0.0 1.00 10.00 10 ALA A N 1",
+        "ATOM 2 C CA . ALA A 1 1 ? 1.0 0.0 0.0 1.00 10.00 10 ALA A CA 1",
+        "ATOM 3 N N . GLY A 1 2 ? 2.0 0.0 0.0 1.00 20.00 20 GLY A N 1",
+        "ATOM 4 C CA . GLY A 1 2 ? 3.0 0.0 0.0 1.00 20.00 20 GLY A CA 1",
+        "ATOM 5 N N . SER A 1 3 ? 4.0 0.0 0.0 1.00 30.00 30 SER A N 1",
+        "ATOM 6 C CA . SER A 1 3 ? 5.0 0.0 0.0 1.00 30.00 30 SER A CA 1",
+        "#",
+        "loop_",
+        "_ma_qa_metric.id",
+        "_ma_qa_metric.name",
+        "_ma_qa_metric.mode",
+        "1 pLDDT local",
+        "#",
+        "loop_",
+        "_ma_qa_metric_local.ordinal_id",
+        "_ma_qa_metric_local.model_id",
+        "_ma_qa_metric_local.label_asym_id",
+        "_ma_qa_metric_local.label_seq_id",
+        "_ma_qa_metric_local.label_comp_id",
+        "_ma_qa_metric_local.metric_id",
+        "_ma_qa_metric_local.metric_value",
+        "1 1 A 10 ALA 1 10.00",
+        "2 1 A 20 GLY 1 20.00",
+        "3 1 A 30 SER 1 30.00",
+        "#",
+        "loop_",
+        "_struct_asym.id",
+        "_struct_asym.pdbx_blank_PDB_chainid_flag",
+        "_struct_asym.pdbx_modified",
+        "_struct_asym.entity_id",
+        "_struct_asym.details",
+        "A N N 1 ?",
+        "#",
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
 def _read_mmcif_atom_site_seq_ids(path: Path) -> tuple[list[int], list[int]]:
     lines = path.read_text().splitlines()
     columns: list[str] = []
@@ -472,6 +534,10 @@ def _read_mmcif_loop_rows(path: Path, prefix: str) -> list[list[str]]:
             index += 1
         return rows
     return []
+
+
+def _read_mmcif_local_metric_rows(path: Path) -> list[list[str]]:
+    return _read_mmcif_loop_rows(path, "_ma_qa_metric_local")
 
 
 class StructureEditTests(unittest.TestCase):
@@ -725,6 +791,41 @@ class StructureEditTests(unittest.TestCase):
             text = output_path.read_text()
             self.assertNotIn("MVMEK", text)
             self.assertEqual(_read_mmcif_loop_rows(output_path, "_pdbx_unobs_or_zero_occ_residues"), [])
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_crop_then_reset_auth_indexing_rewrites_local_confidence_metrics(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "local_confidence.cif"
+            _write_mmcif_with_local_confidence_metrics(source_path)
+
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="toy",
+                structure_path=str(source_path),
+                selection="A20-30",
+                residue_ranges=[ResidueRange(chain_id="A", start=20, end=30)],
+                output_dir=tmp_dir,
+            )
+            cropped_path = Path(cropped["output_path"])
+            cropped_metric_rows = _read_mmcif_local_metric_rows(cropped_path)
+            self.assertEqual([row[3] for row in cropped_metric_rows], ["20", "30"])
+            self.assertEqual([row[6] for row in cropped_metric_rows], ["20.00", "30.00"])
+
+            reset = reset_auth_indexing(
+                project_id="project-1",
+                target_id="target-2",
+                target_name="toy",
+                structure_path=str(cropped_path),
+                output_dir=tmp_dir,
+            )
+            reset_path = Path(reset["output_path"])
+            reset_metric_rows = _read_mmcif_local_metric_rows(reset_path)
+            self.assertEqual([row[3] for row in reset_metric_rows], ["1", "2"])
+            self.assertEqual([row[6] for row in reset_metric_rows], ["20.00", "30.00"])
+            label_seq_ids, auth_seq_ids = _read_mmcif_atom_site_seq_ids(reset_path)
+            self.assertEqual(label_seq_ids, [1, 2])
+            self.assertEqual(auth_seq_ids, [1, 2])
 
     def test_normalize_mmcif_filtered_metadata_prunes_stale_chain_annotations(self) -> None:
         with TemporaryDirectory() as tmp_dir:

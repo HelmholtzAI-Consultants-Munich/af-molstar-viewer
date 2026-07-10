@@ -128,6 +128,7 @@ make dev-frontend-http
   - [x] persist pAE brush selection and coloring across artifact switching
   - [x] persist focus, even when there is a pAE brush selection
   - [x] hide pAE brushSelection when drawer closes
+  - [x] fix wrong pLDDTs coming up after reset of a cropped CIF 
   - [ ] show the generated binders
   - [ ] show the AF2-predicted structures of the binders
   - [ ] allow comparing the binders, maybe in separate connected views or with overlaying
