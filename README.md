@@ -98,6 +98,12 @@ make dev
 
 The root command starts the backend and the frontend in HTTP-proxy mode, which is equivalent to running `make dev-backend` plus `make dev-frontend-http`. It also stops both with one `Ctrl-C`.
 
+The backend listens on port 8000 and the Vite proxy forwards `/api` and `/fixture-files` there. If something else already holds that port, `make dev` refuses to start and names the process, rather than leaving a frontend that proxies to the wrong server (which shows up as "Project unavailable" in the app). Pick another port with `BACKEND_PORT`, which both servers read:
+
+```bash
+BACKEND_PORT=8010 make dev
+```
+
 If you want to run the servers separately while debugging:
 
 ```bash

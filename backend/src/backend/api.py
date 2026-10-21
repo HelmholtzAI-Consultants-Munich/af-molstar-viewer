@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -233,4 +234,5 @@ def main() -> None:
     except ModuleNotFoundError as error:  # pragma: no cover
         raise RuntimeError("uvicorn is not installed. Run `uv sync` in backend/ first.") from error
 
-    uvicorn.run("backend.api:create_app", factory=True, host="127.0.0.1", port=8000, reload=True)
+    port = int(os.environ.get("BACKEND_PORT", "8000"))
+    uvicorn.run("backend.api:create_app", factory=True, host="127.0.0.1", port=port, reload=True)

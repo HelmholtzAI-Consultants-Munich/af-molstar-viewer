@@ -11,6 +11,9 @@ function resolveDependencyFile(relativePath: string): string {
   return resolve(repoRoot, 'node_modules', relativePath);
 }
 
+const backendPort = process.env.BACKEND_PORT ?? '8000';
+const backendTarget = `http://127.0.0.1:${backendPort}`;
+
 const pdbeLightScss = resolveDependencyFile('pdbe-molstar/lib/styles/pdbe-molstar-light.scss');
 const molstarLightScss = resolveDependencyFile('molstar/lib/mol-plugin-ui/skin/light.scss');
 
@@ -40,8 +43,8 @@ export default defineConfig({
       ],
     },
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
-      '/fixture-files': 'http://127.0.0.1:8000',
+      '/api': backendTarget,
+      '/fixture-files': backendTarget,
     },
   },
 });
