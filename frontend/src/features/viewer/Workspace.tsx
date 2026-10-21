@@ -10,6 +10,7 @@ import { clamp, uniqueSortedNumbers } from '../../lib/utils';
 const DEFAULT_PAE_DRAWER_RATIO = 0.4;
 const MIN_PAE_DRAWER_WIDTH = 300;
 const MAX_PAE_DRAWER_WIDTH = 560;
+const NO_SELECTED_RESIDUES: number[] = [];
 
 interface WorkspaceProps {
   viewerConfiguration: ViewerConfiguration;
@@ -186,6 +187,7 @@ export function Workspace(props: WorkspaceProps) {
   const viewerBrushSelection = props.paeDrawerOpen ? props.brushSelection : null;
   const viewerPinnedResidues = props.paeDrawerOpen ? props.pinnedResidues : [];
   const viewerPinnedCell = props.paeDrawerOpen ? props.pinnedCell : null;
+  const heatmapSelectedResidues = props.selectionModeEnabled ? (props.selectedResidues ?? NO_SELECTED_RESIDUES) : NO_SELECTED_RESIDUES;
   const workspaceStyle = {
     '--pae-drawer-width': `${drawerWidth}px`,
   } as CSSProperties & Record<'--pae-drawer-width', string>;
@@ -258,6 +260,7 @@ export function Workspace(props: WorkspaceProps) {
                   hoveredCell={props.hoveredCell}
                   pinnedResidues={props.pinnedResidues}
                   pinnedCell={props.pinnedCell}
+                  selectedResidues={heatmapSelectedResidues}
                   brushSelection={props.brushSelection}
                   interactionPerformance={props.interactionPerformance}
                   hoverSyncEnabled={props.paeHoverSyncEnabled}

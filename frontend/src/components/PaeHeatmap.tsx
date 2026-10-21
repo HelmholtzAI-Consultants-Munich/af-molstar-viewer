@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { PaeInteractionPerformanceSettings } from '../lib/performance';
 import type { MatrixViewport } from '../lib/types';
-import { PAE_SELECTION_COLORS, PAE_PAIR_SELECTION_COLOR } from '../lib/constants';
-import { clamp } from '../lib/utils';
+import {
+  PAE_SELECTION_COLORS,
+  PAE_PAIR_SELECTION_COLOR,
+  PAE_MOLSTAR_SELECTION_STYLE,
+  PAE_SELECTION_MAX_CROSS_BLOCKS,
+} from '../lib/constants';
+import { clamp, contiguousRuns } from '../lib/utils';
 import { parsePaeJson } from '../lib/parsers/pae';
 
 interface PaeHeatmapProps {
@@ -12,6 +17,7 @@ interface PaeHeatmapProps {
   hoveredCell: { x: number; y: number } | null;
   pinnedResidues: number[];
   pinnedCell: { x: number; y: number } | null;
+  selectedResidues: number[];
   brushSelection: MatrixViewport | null;
   interactionPerformance: PaeInteractionPerformanceSettings;
   hoverSyncEnabled: boolean;
@@ -227,6 +233,101 @@ function drawBrushCornerGuides(
   if (typeof context.restore === 'function') context.restore();
 }
 
+type SelectionRun = { start: number; end: number };
+
+function drawSelectionBlockGuides(
+  context: CanvasRenderingContext2D,
+  runs: SelectionRun[],
+  cellWidth: number,
+  cellHeight: number,
+) {
+  if (runs.length < 2) return;
+
+  const style = PAE_MOLSTAR_SELECTION_STYLE.guide;
+  if (typeof context.save === 'function') context.save();
+  context.strokeStyle = style.stroke;
+  context.lineWidth = style.lineWidth;
+  if (typeof context.setLineDash === 'function') context.setLineDash([...style.dash]);
+  context.beginPath();
+
+  for (const yRun of runs) {
+    for (const xRun of runs) {
+      if (xRun === yRun) continue;
+      const left = xRun.start * cellWidth;
+      const right = (xRun.end + 1) * cellWidth;
+      const top = yRun.start * cellHeight;
+      const bottom = (yRun.end + 1) * cellHeight;
+      // Runs are sorted and disjoint, so one lies wholly after the other and the gap is never zero.
+      const after = xRun.start > yRun.end;
+
+      // Along the block's rows, back to the diagonal square that owns those rows.
+      const rowSquareEdge = after ? (yRun.end + 1) * cellWidth : yRun.start * cellWidth;
+      const blockRowEdge = after ? left : right;
+      context.moveTo(rowSquareEdge, top);
+      context.lineTo(blockRowEdge, top);
+      context.moveTo(rowSquareEdge, bottom);
+      context.lineTo(blockRowEdge, bottom);
+
+      // Along the block's columns, on to the diagonal square that owns those columns.
+      const columnSquareEdge = after ? xRun.start * cellHeight : (xRun.end + 1) * cellHeight;
+      const blockColumnEdge = after ? bottom : top;
+      context.moveTo(left, blockColumnEdge);
+      context.lineTo(left, columnSquareEdge);
+      context.moveTo(right, blockColumnEdge);
+      context.lineTo(right, columnSquareEdge);
+    }
+  }
+
+  context.stroke();
+  if (typeof context.restore === 'function') context.restore();
+}
+
+function drawMolstarSelection(
+  context: CanvasRenderingContext2D,
+  runs: SelectionRun[],
+  cellWidth: number,
+  cellHeight: number,
+) {
+  if (runs.length === 0) return;
+
+  const rectFor = (xRun: SelectionRun, yRun: SelectionRun) => ({
+    x: xRun.start * cellWidth,
+    y: yRun.start * cellHeight,
+    width: (xRun.end - xRun.start + 1) * cellWidth,
+    height: (yRun.end - yRun.start + 1) * cellHeight,
+  });
+
+  const paint = (
+    style: typeof PAE_MOLSTAR_SELECTION_STYLE.diagonal | typeof PAE_MOLSTAR_SELECTION_STYLE.crossBlock,
+    rect: { x: number; y: number; width: number; height: number },
+  ) => {
+    if (typeof context.save === 'function') context.save();
+    context.fillStyle = style.fill;
+    context.fillRect(rect.x, rect.y, rect.width, rect.height);
+    context.strokeStyle = style.stroke;
+    context.lineWidth = style.lineWidth;
+    if (typeof context.setLineDash === 'function') context.setLineDash([...style.dash]);
+    context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    if (typeof context.restore === 'function') context.restore();
+  };
+
+  if (runs.length * (runs.length - 1) < PAE_SELECTION_MAX_CROSS_BLOCKS) {
+    drawSelectionBlockGuides(context, runs, cellWidth, cellHeight);
+
+    // Cross blocks first, so a neighbouring block edge never overdraws a diagonal square.
+    for (const yRun of runs) {
+      for (const xRun of runs) {
+        if (xRun === yRun) continue;
+        paint(PAE_MOLSTAR_SELECTION_STYLE.crossBlock, rectFor(xRun, yRun));
+      }
+    }
+  }
+
+  for (const run of runs) {
+    paint(PAE_MOLSTAR_SELECTION_STYLE.diagonal, rectFor(run, run));
+  }
+}
+
 function drawPinnedPairMarker(
   context: CanvasRenderingContext2D,
   pinnedCell: { x: number; y: number },
@@ -318,6 +419,10 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
   const xAxisTicks = useMemo(() => buildRegularAxisTicks(size), [size]);
   const xAxisLabelTickValues = useMemo(() => new Set(filterXAxisTickLabels(xAxisTicks).map((tick) => tick.value)), [xAxisTicks]);
   const legendTicks = useMemo(() => buildLegendTicks(props.maxValue), [props.maxValue]);
+  const selectionRuns = useMemo(
+    () => contiguousRuns(props.selectedResidues.filter((index) => index >= 0 && index < size)),
+    [props.selectedResidues, size],
+  );
   const activeBrush =
     dragStart && dragCurrent
       ? {
@@ -497,6 +602,8 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     const cellWidth = width / Math.max(size, 1);
     const cellHeight = height / Math.max(size, 1);
 
+    drawMolstarSelection(context, selectionRuns, cellWidth, cellHeight);
+
     if (props.hoveredCell && !frameDrag) {
       if (typeof context.save === 'function') context.save();
       context.strokeStyle = '#111111';
@@ -545,6 +652,7 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     props.pairSelectionEnabled,
     props.pinnedCell,
     props.pinnedResidues.length,
+    selectionRuns,
     size,
   ]);
 

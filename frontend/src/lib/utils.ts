@@ -55,3 +55,17 @@ export function uniqueSortedNumbers(indices: number[]): number[] {
   // a new array with duplicates removed and values sorted from smallest to largest.
   return [...new Set(indices)].sort((a, b) => a - b);
 }
+
+export function contiguousRuns(indices: number[]): Array<{ start: number; end: number }> {
+  // consecutive values collapsed into inclusive [start, end] runs; a lone value becomes a one-wide run.
+  const runs: Array<{ start: number; end: number }> = [];
+  for (const index of uniqueSortedNumbers(indices)) {
+    const last = runs.at(-1);
+    if (last && index === last.end + 1) {
+      last.end = index;
+      continue;
+    }
+    runs.push({ start: index, end: index });
+  }
+  return runs;
+}
