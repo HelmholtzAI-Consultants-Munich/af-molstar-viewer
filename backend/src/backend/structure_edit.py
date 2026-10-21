@@ -137,6 +137,13 @@ def reset_auth_indexing(
     }
 
 
+_MMCIF_SECONDARY_STRUCTURE_PREFIXES = {
+    "_struct_conf",
+    "_struct_sheet_range",
+    "_pdbx_struct_sheet_hbond",
+}
+
+
 def _write_filtered_structure(
     structure_file: Path,
     output_path: Path,
@@ -332,6 +339,7 @@ def _normalize_mmcif_label_seq_ids(path: Path) -> None:
     next_label_seq_by_chain: dict[str, int] = {}
     label_seq_by_residue: dict[MmcifResidueKey, int] = {}
     label_seq_by_chain_seq: dict[tuple[str, str], int] = {}
+    residues_by_chain: dict[str, list[dict[str, str]]] = defaultdict(list)
     observed_chain_ids: set[str] = set()
 
     for row_index in atom_site_row_indices:
@@ -354,6 +362,17 @@ def _normalize_mmcif_label_seq_ids(path: Path) -> None:
             next_label_seq_by_chain[chain_id] = next_label_seq
             label_seq_by_residue[residue_key] = next_label_seq
             label_seq_by_chain_seq[(chain_id, label_seq)] = next_label_seq
+            residues_by_chain[chain_id].append(
+                {
+                    "label_seq": label_seq,
+                    "auth_seq": auth_seq,
+                    "new_label_seq": str(next_label_seq),
+                    "new_auth_seq": auth_seq,
+                    "label_comp": tokens[label_comp_idx] if label_comp_idx is not None else comp_id,
+                    "auth_comp": tokens[auth_comp_idx] if auth_comp_idx is not None else comp_id,
+                    "ins_code": normalized_ins_code,
+                }
+            )
 
         tokens[label_seq_idx] = str(label_seq_by_residue[residue_key])
         lines[row_index] = " ".join(tokens)
@@ -406,38 +425,19 @@ def _normalize_mmcif_label_seq_ids(path: Path) -> None:
                     residue_map_by_chain_seq=label_seq_by_chain_seq,
                     observed_chain_ids=observed_chain_ids,
                 )
-            elif prefix in {"_struct_conf", "_struct_sheet_range"}:
-                rewritten_rows = _rewrite_dual_residue_reference_rows(
-                    row_lines,
+            elif prefix in _MMCIF_SECONDARY_STRUCTURE_PREFIXES:
+                rewritten_rows = _rewrite_mmcif_secondary_structure_rows(
+                    prefix,
                     columns,
-                    first_chain_candidates=[f"{prefix}.beg_label_asym_id"],
-                    first_seq_candidates=[f"{prefix}.beg_label_seq_id"],
-                    first_comp_candidates=[f"{prefix}.beg_label_comp_id"],
-                    first_ins_candidates=[f"{prefix}.pdbx_beg_PDB_ins_code"],
-                    second_chain_candidates=[f"{prefix}.end_label_asym_id"],
-                    second_seq_candidates=[f"{prefix}.end_label_seq_id"],
-                    second_comp_candidates=[f"{prefix}.end_label_comp_id"],
-                    second_ins_candidates=[f"{prefix}.pdbx_end_PDB_ins_code"],
-                    residue_map_by_key=label_seq_by_residue,
-                    residue_map_by_chain_seq=label_seq_by_chain_seq,
-                    observed_chain_ids=observed_chain_ids,
-                )
-            elif prefix == "_pdbx_struct_sheet_hbond":
-                rewritten_rows = _rewrite_dual_residue_reference_rows(
                     row_lines,
-                    columns,
-                    first_chain_candidates=[f"{prefix}.range_1_label_asym_id"],
-                    first_seq_candidates=[f"{prefix}.range_1_label_seq_id"],
-                    first_comp_candidates=[f"{prefix}.range_1_label_comp_id"],
-                    first_ins_candidates=[f"{prefix}.range_1_PDB_ins_code"],
-                    second_chain_candidates=[f"{prefix}.range_2_label_asym_id"],
-                    second_seq_candidates=[f"{prefix}.range_2_label_seq_id"],
-                    second_comp_candidates=[f"{prefix}.range_2_label_comp_id"],
-                    second_ins_candidates=[f"{prefix}.range_2_PDB_ins_code"],
-                    residue_map_by_key=label_seq_by_residue,
-                    residue_map_by_chain_seq=label_seq_by_chain_seq,
-                    observed_chain_ids=observed_chain_ids,
+                    residues_by_chain,
                 )
+
+        if columns and row_lines and not rewritten_rows:
+            # An empty loop_ is invalid mmCIF, so drop the whole category.
+            if index < len(lines) and lines[index].strip() == "#":
+                index += 1
+            continue
 
         output_lines.append(lines[loop_start])
         output_lines.extend(lines[loop_start + 1 : loop_start + 1 + len(columns)])
@@ -468,6 +468,7 @@ def _write_filtered_mmcif_text(
         touched_chains=touched_chains,
         observed_residue_keys=observed_residue_keys,
         observed_chain_ids=observed_chain_ids,
+        auth_seq_by_label=_collect_mmcif_auth_seq_by_label(lines),
     )
 
 
@@ -846,6 +847,7 @@ def _write_mmcif_text_with_residue_filter(
     touched_chains: set[str],
     observed_residue_keys: set[tuple[str, int]],
     observed_chain_ids: set[str],
+    auth_seq_by_label: dict[tuple[str, str], int],
 ) -> tuple[int, list[str]]:
     output_lines: list[str] = []
     kept_residue_keys: set[tuple[str, int]] = set()
@@ -896,6 +898,7 @@ def _write_mmcif_text_with_residue_filter(
                     touched_chains=touched_chains,
                     observed_residue_keys=observed_residue_keys,
                     observed_chain_ids=observed_chain_ids,
+                    auth_seq_by_label=auth_seq_by_label,
                 )
                 kept_residue_keys.update(loop_kept_residue_keys)
                 kept_chain_ids.update(loop_kept_chain_ids)
@@ -936,6 +939,7 @@ def _filter_mmcif_loop_rows(
     touched_chains: set[str],
     observed_residue_keys: set[tuple[str, int]],
     observed_chain_ids: set[str],
+    auth_seq_by_label: dict[tuple[str, str], int],
 ) -> tuple[list[str], set[tuple[str, int]], set[str]]:
     filtered_rows: list[str] = []
     kept_residue_keys: set[tuple[str, int]] = set()
@@ -990,6 +994,8 @@ def _filter_mmcif_loop_rows(
     if chain_index is None or seq_index is None:
         return row_lines, kept_residue_keys, kept_chain_ids
 
+    seq_is_label = columns[seq_index].endswith(("label_seq_id", ".seq_id"))
+
     for row_line in row_lines:
         tokens = _tokenize_mmcif_row(row_line)
         if len(tokens) != len(columns):
@@ -1003,6 +1009,11 @@ def _filter_mmcif_loop_rows(
         except ValueError:
             filtered_rows.append(row_line)
             continue
+
+        if seq_is_label:
+            # The selection is in auth numbering; a label_seq_id only matches it
+            # by accident, and stops matching once the structure has been edited.
+            residue_number = auth_seq_by_label.get((chain_id, residue_number_token), residue_number)
 
         if chain_id not in observed_chain_ids and prefix != "_atom_site" and prefix != "_atom_site_anisotrop":
             continue
@@ -1020,6 +1031,61 @@ def _filter_mmcif_loop_rows(
                 kept_chain_ids.add(chain_id)
 
     return filtered_rows, kept_residue_keys, kept_chain_ids
+
+
+def _find_mmcif_loop(lines: list[str], prefix: str) -> tuple[list[str], list[str]]:
+    """Return the column names and row lines of the first loop_ for `prefix`."""
+    index = 0
+    while index < len(lines):
+        if lines[index].strip() != "loop_":
+            index += 1
+            continue
+
+        index += 1
+        columns: list[str] = []
+        while index < len(lines) and lines[index].strip().startswith("_"):
+            columns.append(lines[index].strip())
+            index += 1
+
+        row_lines: list[str] = []
+        while index < len(lines):
+            candidate = lines[index].strip()
+            if not candidate or candidate == "#" or candidate == "loop_" or candidate.startswith("_") or candidate.startswith("data_"):
+                break
+            row_lines.append(lines[index])
+            index += 1
+
+        if columns and columns[0].split(".")[0] == prefix:
+            return columns, row_lines
+
+    return [], []
+
+
+def _collect_mmcif_auth_seq_by_label(lines: list[str]) -> dict[tuple[str, str], int]:
+    """Map (label_asym_id, label_seq_id) onto auth_seq_id from `_atom_site`.
+
+    Categories such as `_ma_qa_metric_local` carry only label numbering, while a
+    residue selection is expressed in auth numbering. The two agree in a fresh
+    AlphaFold model but drift apart as soon as the structure has been edited
+    once, so a label_seq_id has to be translated before it can be selected on.
+    """
+    columns, row_lines = _find_mmcif_loop(lines, "_atom_site")
+    try:
+        label_asym_idx = columns.index("_atom_site.label_asym_id")
+        label_seq_idx = columns.index("_atom_site.label_seq_id")
+        auth_seq_idx = columns.index("_atom_site.auth_seq_id")
+    except ValueError:
+        return {}
+
+    auth_seq_by_label: dict[tuple[str, str], int] = {}
+    for row_line in row_lines:
+        tokens = _tokenize_mmcif_row(row_line)
+        if len(tokens) != len(columns):
+            continue
+        auth_seq = _optional_int(tokens[auth_seq_idx])
+        if auth_seq is not None:
+            auth_seq_by_label.setdefault((tokens[label_asym_idx], tokens[label_seq_idx]), auth_seq)
+    return auth_seq_by_label
 
 
 def _collect_mmcif_observed_residues(lines: list[str]) -> tuple[set[tuple[str, int]], set[str]]:
@@ -1078,28 +1144,28 @@ def _collect_mmcif_observed_residues(lines: list[str]) -> tuple[set[tuple[str, i
 
 
 def _rewrite_mmcif_auth_indexing(structure_file: Path, output_path: Path) -> tuple[int, list[str]]:
-    lines = structure_file.read_text().splitlines()
-    observed_residue_keys, observed_chain_ids = _collect_mmcif_observed_residues(lines)
-    return _rewrite_mmcif_auth_indexing_with_observed_filter(
-        lines,
-        output_path,
-        observed_residue_keys=observed_residue_keys,
-        observed_chain_ids=observed_chain_ids,
-    )
+    return _rewrite_mmcif_auth_indexing_lines(structure_file.read_text().splitlines(), output_path)
 
 
-def _rewrite_mmcif_auth_indexing_with_observed_filter(
+def _rewrite_mmcif_auth_indexing_lines(
     lines: list[str],
     output_path: Path,
-    *,
-    observed_residue_keys: set[tuple[str, int]],
-    observed_chain_ids: set[str],
 ) -> tuple[int, list[str]]:
     output_lines: list[str] = []
-    residue_count = 0
-    residue_map_by_key: dict[MmcifResidueKey, int] = {}
-    residue_map_by_chain_seq: dict[tuple[str, str], int] = {}
     atom_residues, _ = _collect_mmcif_atom_residues_and_entities(lines)
+
+    # `_atom_site` sits at the end of an mmCIF file, but the categories that
+    # reference it (notably `_struct_conf`) come first, so work out the new
+    # numbering up front instead of while walking the loops in file order.
+    atom_site_columns, atom_site_row_lines = _find_mmcif_loop(lines, "_atom_site")
+    (
+        rewritten_atom_site_rows,
+        residue_count,
+        observed_chain_ids,
+        residue_map_by_key,
+        residue_map_by_chain_seq,
+        residues_by_chain,
+    ) = _rewrite_mmcif_atom_site_rows(atom_site_columns, atom_site_row_lines)
 
     index = 0
     while index < len(lines):
@@ -1133,9 +1199,13 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
                     index += 1
                 continue
             if prefix == "_atom_site":
-                filtered_row_lines, residue_count, observed_chain_ids, residue_map_by_key, residue_map_by_chain_seq = _rewrite_mmcif_atom_site_rows(
+                filtered_row_lines = rewritten_atom_site_rows
+            elif prefix in _MMCIF_SECONDARY_STRUCTURE_PREFIXES:
+                filtered_row_lines = _rewrite_mmcif_secondary_structure_rows(
+                    prefix,
                     columns,
                     row_lines,
+                    residues_by_chain,
                 )
             elif prefix in {
                 "_atom_site_anisotrop",
@@ -1144,9 +1214,6 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
                 "_pdbx_unobs_or_zero_occ_residues",
                 "_pdbx_poly_seq_scheme",
                 "_struct_asym",
-                "_struct_conf",
-                "_struct_sheet_range",
-                "_pdbx_struct_sheet_hbond",
             }:
                 filtered_row_lines = _rewrite_mmcif_reset_associated_rows(
                     prefix,
@@ -1185,12 +1252,19 @@ def _rewrite_mmcif_auth_indexing_with_observed_filter(
 def _rewrite_mmcif_atom_site_rows(
     columns: list[str],
     row_lines: list[str],
-) -> tuple[list[str], int, set[str], dict[MmcifResidueKey, int], dict[tuple[str, str], int]]:
+) -> tuple[
+    list[str],
+    int,
+    set[str],
+    dict[MmcifResidueKey, int],
+    dict[tuple[str, str], int],
+    dict[str, list[dict[str, str]]],
+]:
     try:
         label_asym_idx = columns.index("_atom_site.label_asym_id")
         label_seq_idx = columns.index("_atom_site.label_seq_id")
     except ValueError:
-        return row_lines, 0, set(), {}, {}
+        return row_lines, 0, set(), {}, {}, {}
 
     auth_asym_idx = columns.index("_atom_site.auth_asym_id") if "_atom_site.auth_asym_id" in columns else None
     auth_seq_idx = columns.index("_atom_site.auth_seq_id") if "_atom_site.auth_seq_id" in columns else None
@@ -1204,6 +1278,7 @@ def _rewrite_mmcif_atom_site_rows(
     filtered_rows: list[str] = []
     residue_map_by_key: dict[MmcifResidueKey, int] = {}
     residue_map_by_chain_seq: dict[tuple[str, str], int] = {}
+    residues_by_chain: dict[str, list[dict[str, str]]] = defaultdict(list)
 
     for row_line in row_lines:
         tokens = _tokenize_mmcif_row(row_line)
@@ -1219,6 +1294,17 @@ def _rewrite_mmcif_atom_site_rows(
         if residue_key not in residue_map:
             next_label_seq_by_chain[chain_id] += 1
             residue_map[residue_key] = next_label_seq_by_chain[chain_id]
+            residues_by_chain[chain_id].append(
+                {
+                    "label_seq": label_seq,
+                    "auth_seq": original_seq,
+                    "new_label_seq": str(residue_map[residue_key]),
+                    "new_auth_seq": str(residue_map[residue_key]),
+                    "label_comp": comp_id,
+                    "auth_comp": comp_id,
+                    "ins_code": ins_code,
+                }
+            )
         normalized_seq = residue_map[residue_key]
         residue_map_by_key[residue_key] = normalized_seq
         residue_map_by_chain_seq[(chain_id, original_seq)] = normalized_seq
@@ -1234,7 +1320,14 @@ def _rewrite_mmcif_atom_site_rows(
         filtered_rows.append(" ".join([str(t) for t in tokens]))
         observed_chain_ids.add(chain_id)
 
-    return filtered_rows, len(residue_map), observed_chain_ids, residue_map_by_key, residue_map_by_chain_seq
+    return (
+        filtered_rows,
+        len(residue_map),
+        observed_chain_ids,
+        residue_map_by_key,
+        residue_map_by_chain_seq,
+        residues_by_chain,
+    )
 
 
 def _rewrite_mmcif_reset_associated_rows(
@@ -1286,38 +1379,6 @@ def _rewrite_mmcif_reset_associated_rows(
                 f"{prefix}.PDB_ins_code",
                 f"{prefix}.pdbx_PDB_ins_code",
             ],
-            residue_map_by_key=residue_map_by_key,
-            residue_map_by_chain_seq=residue_map_by_chain_seq,
-            observed_chain_ids=observed_chain_ids,
-        )
-    if prefix in {"_struct_conf", "_struct_sheet_range"}:
-        return _rewrite_dual_residue_reference_rows(
-            row_lines,
-            columns,
-            first_chain_candidates=[f"{prefix}.beg_label_asym_id", f"{prefix}.beg_auth_asym_id"],
-            first_seq_candidates=[f"{prefix}.beg_label_seq_id", f"{prefix}.beg_auth_seq_id"],
-            first_comp_candidates=[f"{prefix}.beg_label_comp_id", f"{prefix}.beg_auth_comp_id"],
-            first_ins_candidates=[f"{prefix}.pdbx_beg_PDB_ins_code"],
-            second_chain_candidates=[f"{prefix}.end_label_asym_id", f"{prefix}.end_auth_asym_id"],
-            second_seq_candidates=[f"{prefix}.end_label_seq_id", f"{prefix}.end_auth_seq_id"],
-            second_comp_candidates=[f"{prefix}.end_label_comp_id", f"{prefix}.end_auth_comp_id"],
-            second_ins_candidates=[f"{prefix}.pdbx_end_PDB_ins_code"],
-            residue_map_by_key=residue_map_by_key,
-            residue_map_by_chain_seq=residue_map_by_chain_seq,
-            observed_chain_ids=observed_chain_ids,
-        )
-    if prefix == "_pdbx_struct_sheet_hbond":
-        return _rewrite_dual_residue_reference_rows(
-            row_lines,
-            columns,
-            first_chain_candidates=[f"{prefix}.range_1_label_asym_id", f"{prefix}.range_1_auth_asym_id"],
-            first_seq_candidates=[f"{prefix}.range_1_label_seq_id", f"{prefix}.range_1_auth_seq_id"],
-            first_comp_candidates=[f"{prefix}.range_1_label_comp_id", f"{prefix}.range_1_auth_comp_id"],
-            first_ins_candidates=[f"{prefix}.range_1_PDB_ins_code"],
-            second_chain_candidates=[f"{prefix}.range_2_label_asym_id", f"{prefix}.range_2_auth_asym_id"],
-            second_seq_candidates=[f"{prefix}.range_2_label_seq_id", f"{prefix}.range_2_auth_seq_id"],
-            second_comp_candidates=[f"{prefix}.range_2_label_comp_id", f"{prefix}.range_2_auth_comp_id"],
-            second_ins_candidates=[f"{prefix}.range_2_PDB_ins_code"],
             residue_map_by_key=residue_map_by_key,
             residue_map_by_chain_seq=residue_map_by_chain_seq,
             observed_chain_ids=observed_chain_ids,
@@ -1390,6 +1451,7 @@ def _map_residue_reference(
     ins_candidates: list[str],
     residue_map_by_key: dict[MmcifResidueKey, int],
     residue_map_by_chain_seq: dict[tuple[str, str], int],
+    allow_comp_fallback: bool,
 ) -> tuple[str, str, str, str, int] | None:
     chain_id = _first_existing_value(tokens, columns, chain_candidates)
     seq_value = _first_existing_value(tokens, columns, seq_candidates)
@@ -1402,16 +1464,16 @@ def _map_residue_reference(
     normalized_seq = residue_map_by_key.get(residue_key)
     if normalized_seq is None:
         normalized_seq = residue_map_by_chain_seq.get((chain_id, seq_value))
-    if normalized_seq is None and comp_value:
-        normalized_seq = next(
-            (
-                mapped_seq
-                for (mapped_chain, _mapped_seq, mapped_comp, mapped_ins), mapped_seq in residue_map_by_key.items()
-                if mapped_chain == chain_id and mapped_comp == comp_value and mapped_ins == normalized_ins_value
-            ),
-            None,
-        )
+    if normalized_seq is None and allow_comp_fallback and comp_value:
+        matches = {
+            mapped_seq
+            for (mapped_chain, _mapped_seq, mapped_comp, mapped_ins), mapped_seq in residue_map_by_key.items()
+            if mapped_chain == chain_id and mapped_comp == comp_value and mapped_ins == normalized_ins_value
+        }
+        if len(matches) == 1:
+            normalized_seq = matches.pop()
     if normalized_seq is None:
+        # The residue this row annotates is gone, so the row goes with it.
         return None
     return chain_id, seq_value, comp_value or "?", ins_value or "?", normalized_seq
 
@@ -1428,6 +1490,49 @@ def _rewrite_single_residue_reference_rows(
     residue_map_by_chain_seq: dict[tuple[str, str], int],
     observed_chain_ids: set[str],
 ) -> list[str]:
+    rows = _map_single_residue_reference_rows(
+        row_lines,
+        columns,
+        chain_candidates=chain_candidates,
+        seq_candidates=seq_candidates,
+        comp_candidates=comp_candidates,
+        ins_candidates=ins_candidates,
+        residue_map_by_key=residue_map_by_key,
+        residue_map_by_chain_seq=residue_map_by_chain_seq,
+        observed_chain_ids=observed_chain_ids,
+        allow_comp_fallback=False,
+    )
+    if row_lines and not rows:
+        # Nothing matched on sequence numbers, so this category was never on the
+        # same numbering as atom_site. Residue names are all that is left.
+        rows = _map_single_residue_reference_rows(
+            row_lines,
+            columns,
+            chain_candidates=chain_candidates,
+            seq_candidates=seq_candidates,
+            comp_candidates=comp_candidates,
+            ins_candidates=ins_candidates,
+            residue_map_by_key=residue_map_by_key,
+            residue_map_by_chain_seq=residue_map_by_chain_seq,
+            observed_chain_ids=observed_chain_ids,
+            allow_comp_fallback=True,
+        )
+    return rows
+
+
+def _map_single_residue_reference_rows(
+    row_lines: list[str],
+    columns: list[str],
+    *,
+    chain_candidates: list[str],
+    seq_candidates: list[str],
+    comp_candidates: list[str],
+    ins_candidates: list[str],
+    residue_map_by_key: dict[MmcifResidueKey, int],
+    residue_map_by_chain_seq: dict[tuple[str, str], int],
+    observed_chain_ids: set[str],
+    allow_comp_fallback: bool,
+) -> list[str]:
     filtered_rows: list[str] = []
     for row_line in row_lines:
         tokens = _tokenize_mmcif_row(row_line)
@@ -1443,6 +1548,7 @@ def _rewrite_single_residue_reference_rows(
             ins_candidates=ins_candidates,
             residue_map_by_key=residue_map_by_key,
             residue_map_by_chain_seq=residue_map_by_chain_seq,
+            allow_comp_fallback=allow_comp_fallback,
         )
         if mapped is None:
             continue
@@ -1454,66 +1560,6 @@ def _rewrite_single_residue_reference_rows(
         if ins_candidates:
             _set_existing_value(tokens, columns, ins_candidates, ins_value)
         if chain_id in observed_chain_ids:
-            filtered_rows.append(" ".join([str(t) for t in tokens]))
-    return filtered_rows
-
-
-def _rewrite_dual_residue_reference_rows(
-    row_lines: list[str],
-    columns: list[str],
-    *,
-    first_chain_candidates: list[str],
-    first_seq_candidates: list[str],
-    first_comp_candidates: list[str],
-    first_ins_candidates: list[str],
-    second_chain_candidates: list[str],
-    second_seq_candidates: list[str],
-    second_comp_candidates: list[str],
-    second_ins_candidates: list[str],
-    residue_map_by_key: dict[MmcifResidueKey, int],
-    residue_map_by_chain_seq: dict[tuple[str, str], int],
-    observed_chain_ids: set[str],
-) -> list[str]:
-    filtered_rows: list[str] = []
-    for row_line in row_lines:
-        tokens = _tokenize_mmcif_row(row_line)
-        if len(tokens) != len(columns):
-            filtered_rows.append(row_line)
-            continue
-
-        first = _map_residue_reference(
-            tokens,
-            columns,
-            chain_candidates=first_chain_candidates,
-            seq_candidates=first_seq_candidates,
-            comp_candidates=first_comp_candidates,
-            ins_candidates=first_ins_candidates,
-            residue_map_by_key=residue_map_by_key,
-            residue_map_by_chain_seq=residue_map_by_chain_seq,
-        )
-        second = _map_residue_reference(
-            tokens,
-            columns,
-            chain_candidates=second_chain_candidates,
-            seq_candidates=second_seq_candidates,
-            comp_candidates=second_comp_candidates,
-            ins_candidates=second_ins_candidates,
-            residue_map_by_key=residue_map_by_key,
-            residue_map_by_chain_seq=residue_map_by_chain_seq,
-        )
-        if first is None or second is None:
-            continue
-        first_chain, _first_seq, first_comp, first_ins, first_normalized = first
-        second_chain, _second_seq, second_comp, second_ins, second_normalized = second
-        _set_existing_value(tokens, columns, first_chain_candidates, first_chain)
-        _set_existing_value(tokens, columns, first_seq_candidates, str(first_normalized))
-        _set_existing_value(tokens, columns, first_comp_candidates, first_comp)
-        _set_existing_value(tokens, columns, first_ins_candidates, first_ins)
-        _set_existing_value(tokens, columns, second_chain_candidates, second_chain)
-        _set_existing_value(tokens, columns, second_seq_candidates, str(second_normalized))
-        _set_existing_value(tokens, columns, second_comp_candidates, second_comp)
-        _set_existing_value(tokens, columns, second_ins_candidates, second_ins)
-        if first_chain in observed_chain_ids and second_chain in observed_chain_ids:
             filtered_rows.append(" ".join([str(t) for t in tokens]))
     return filtered_rows
 
@@ -1558,3 +1604,182 @@ def _rewrite_pdb_auth_indexing(structure_file: Path, output_path: Path) -> tuple
         output_lines.append("END")
     output_path.write_text("\n".join(output_lines) + "\n")
     return len(kept_residue_keys), sorted(kept_chain_ids)
+
+
+def _mmcif_endpoint_columns(prefix: str, stem: str) -> dict[str, list[str]]:
+    return {
+        "chain": [f"{prefix}.{stem}_label_asym_id", f"{prefix}.{stem}_auth_asym_id"],
+        "label_seq": [f"{prefix}.{stem}_label_seq_id"],
+        "auth_seq": [f"{prefix}.{stem}_auth_seq_id"],
+        "label_comp": [f"{prefix}.{stem}_label_comp_id"],
+        "auth_comp": [f"{prefix}.{stem}_auth_comp_id"],
+        "ins_code": [f"{prefix}.pdbx_{stem}_PDB_ins_code", f"{prefix}.{stem}_PDB_ins_code"],
+    }
+
+
+def _optional_int(value: str) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _locate_mmcif_residue(chain_residues: list[dict[str, str]], seq_value: str, field: str) -> int | None:
+    for position, residue in enumerate(chain_residues):
+        if residue[field] == seq_value:
+            return position
+    return None
+
+
+def _locate_mmcif_residue_by_comp(chain_residues: list[dict[str, str]], comp_value: str, field: str) -> int | None:
+    """Match on residue name, but only where that names exactly one residue."""
+    if not comp_value or comp_value in {".", "?"}:
+        return None
+    matches = [position for position, residue in enumerate(chain_residues) if residue[field] == comp_value]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _mmcif_residue_span(
+    chain_residues: list[dict[str, str]],
+    seq_field: str,
+    comp_field: str,
+    beg_value: str,
+    end_value: str,
+    beg_comp: str,
+    end_comp: str,
+    *,
+    allow_comp_fallback: bool,
+) -> tuple[int, int] | None:
+    beg_position = _locate_mmcif_residue(chain_residues, beg_value, seq_field)
+    end_position = _locate_mmcif_residue(chain_residues, end_value, seq_field)
+    if beg_position is not None and end_position is not None:
+        return (beg_position, end_position) if beg_position <= end_position else (end_position, beg_position)
+
+    # An endpoint was cut away: keep whatever part of the range survived.
+    beg_number = _optional_int(beg_value)
+    end_number = _optional_int(end_value)
+    if beg_number is not None and end_number is not None:
+        if end_number < beg_number:
+            beg_number, end_number = end_number, beg_number
+        inside = [
+            position
+            for position, residue in enumerate(chain_residues)
+            if (number := _optional_int(residue[seq_field])) is not None and beg_number <= number <= end_number
+        ]
+        if inside:
+            return inside[0], inside[-1]
+
+    # Numbering that never lined up with atom_site in the first place: fall back
+    # to residue names, and only where they pin down a single residue each.
+    if not allow_comp_fallback:
+        return None
+    beg_position = _locate_mmcif_residue_by_comp(chain_residues, beg_comp, comp_field)
+    end_position = _locate_mmcif_residue_by_comp(chain_residues, end_comp, comp_field)
+    if beg_position is None or end_position is None:
+        return None
+    return (beg_position, end_position) if beg_position <= end_position else (end_position, beg_position)
+
+
+def _rewrite_mmcif_secondary_structure_rows(
+    prefix: str,
+    columns: list[str],
+    row_lines: list[str],
+    residues_by_chain: dict[str, list[dict[str, str]]],
+) -> list[str]:
+    """Re-point helix/strand records at the rewritten residue numbering.
+
+    Mol* reads `_struct_conf` and `_struct_sheet_range` by label_seq_id, so a
+    record left on the original numbering lands on the wrong residues once the
+    kept atoms have been renumbered, which is what makes helices and sheets go
+    missing after an edit. Ranges that only partly survive are clamped to the
+    residues still present; records with nothing left are dropped.
+    """
+    if prefix == "_pdbx_struct_sheet_hbond":
+        endpoint_stems = [("range_1", "range_1"), ("range_2", "range_2")]
+    else:
+        endpoint_stems = [("beg", "end")]
+
+    rows = _map_mmcif_secondary_structure_rows(
+        columns,
+        row_lines,
+        prefix,
+        endpoint_stems,
+        residues_by_chain,
+        allow_comp_fallback=False,
+    )
+    if row_lines and not rows:
+        # Nothing matched on sequence numbers, so this category was never on the
+        # same numbering as atom_site. Residue names are all that is left.
+        rows = _map_mmcif_secondary_structure_rows(
+            columns,
+            row_lines,
+            prefix,
+            endpoint_stems,
+            residues_by_chain,
+            allow_comp_fallback=True,
+        )
+    return rows
+
+
+def _map_mmcif_secondary_structure_rows(
+    columns: list[str],
+    row_lines: list[str],
+    prefix: str,
+    endpoint_stems: list[tuple[str, str]],
+    residues_by_chain: dict[str, list[dict[str, str]]],
+    *,
+    allow_comp_fallback: bool,
+) -> list[str]:
+    filtered_rows: list[str] = []
+    for row_line in row_lines:
+        tokens = _tokenize_mmcif_row(row_line)
+        if len(tokens) != len(columns):
+            filtered_rows.append(row_line)
+            continue
+
+        mapped_tokens = list(tokens)
+        dropped = False
+        for beg_stem, end_stem in endpoint_stems:
+            beg_fields = _mmcif_endpoint_columns(prefix, beg_stem)
+            end_fields = _mmcif_endpoint_columns(prefix, end_stem)
+            chain_id = _first_existing_value(tokens, columns, beg_fields["chain"])
+            chain_residues = residues_by_chain.get(chain_id)
+            if not chain_residues:
+                dropped = True
+                break
+
+            kind = "label"
+            beg_value = _first_existing_value(tokens, columns, beg_fields["label_seq"])
+            end_value = _first_existing_value(tokens, columns, end_fields["label_seq"])
+            if beg_value in {"", ".", "?"} or end_value in {"", ".", "?"}:
+                kind = "auth"
+                beg_value = _first_existing_value(tokens, columns, beg_fields["auth_seq"])
+                end_value = _first_existing_value(tokens, columns, end_fields["auth_seq"])
+
+            span = _mmcif_residue_span(
+                chain_residues,
+                f"{kind}_seq",
+                f"{kind}_comp",
+                beg_value,
+                end_value,
+                _first_existing_value(tokens, columns, beg_fields[f"{kind}_comp"]),
+                _first_existing_value(tokens, columns, end_fields[f"{kind}_comp"]),
+                allow_comp_fallback=allow_comp_fallback,
+            )
+            if span is None:
+                dropped = True
+                break
+
+            for position, fields in ((span[0], beg_fields), (span[1], end_fields)):
+                residue = chain_residues[position]
+                _set_existing_value(mapped_tokens, columns, fields["label_seq"], residue["new_label_seq"])
+                _set_existing_value(mapped_tokens, columns, fields["auth_seq"], residue["new_auth_seq"])
+                _set_existing_value(mapped_tokens, columns, fields["label_comp"], residue["label_comp"])
+                _set_existing_value(mapped_tokens, columns, fields["auth_comp"], residue["auth_comp"])
+                _set_existing_value(mapped_tokens, columns, fields["ins_code"], residue["ins_code"])
+
+        if dropped:
+            continue
+        filtered_rows.append(" ".join(mapped_tokens))
+
+    return filtered_rows

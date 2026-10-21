@@ -281,6 +281,132 @@ def _write_mmcif_with_unobserved_prefix_and_helix(path: Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def _write_mmcif_with_sheet_records(path: Path) -> None:
+    atom_lines = []
+    atom_id = 0
+    for seq, comp in enumerate(["ALA", "GLY", "SER", "THR", "VAL", "LEU", "ILE", "PRO"], start=1):
+        for atom in ("N", "CA"):
+            atom_id += 1
+            atom_lines.append(
+                f"ATOM {atom_id} C {atom} . {comp} A 1 {seq} ? {seq}.0 0.0 0.0 1.00 10.00 {seq} {comp} A {atom} 1"
+            )
+    lines = [
+        "data_test",
+        "#",
+        "loop_",
+        "_atom_site.group_PDB",
+        "_atom_site.id",
+        "_atom_site.type_symbol",
+        "_atom_site.label_atom_id",
+        "_atom_site.label_alt_id",
+        "_atom_site.label_comp_id",
+        "_atom_site.label_asym_id",
+        "_atom_site.label_entity_id",
+        "_atom_site.label_seq_id",
+        "_atom_site.pdbx_PDB_ins_code",
+        "_atom_site.Cartn_x",
+        "_atom_site.Cartn_y",
+        "_atom_site.Cartn_z",
+        "_atom_site.occupancy",
+        "_atom_site.B_iso_or_equiv",
+        "_atom_site.auth_seq_id",
+        "_atom_site.auth_comp_id",
+        "_atom_site.auth_asym_id",
+        "_atom_site.auth_atom_id",
+        "_atom_site.pdbx_PDB_model_num",
+        *atom_lines,
+        "#",
+        "loop_",
+        "_struct_sheet_range.sheet_id",
+        "_struct_sheet_range.id",
+        "_struct_sheet_range.beg_label_comp_id",
+        "_struct_sheet_range.beg_label_asym_id",
+        "_struct_sheet_range.beg_label_seq_id",
+        "_struct_sheet_range.pdbx_beg_PDB_ins_code",
+        "_struct_sheet_range.end_label_comp_id",
+        "_struct_sheet_range.end_label_asym_id",
+        "_struct_sheet_range.end_label_seq_id",
+        "_struct_sheet_range.pdbx_end_PDB_ins_code",
+        "_struct_sheet_range.beg_auth_comp_id",
+        "_struct_sheet_range.beg_auth_asym_id",
+        "_struct_sheet_range.beg_auth_seq_id",
+        "_struct_sheet_range.end_auth_comp_id",
+        "_struct_sheet_range.end_auth_asym_id",
+        "_struct_sheet_range.end_auth_seq_id",
+        "AA1 1 ALA A 1 ? GLY A 2 ? ALA A 1 GLY A 2",
+        "AA1 2 THR A 4 ? LEU A 6 ? THR A 4 LEU A 6",
+        "#",
+        "loop_",
+        "_pdbx_struct_sheet_hbond.sheet_id",
+        "_pdbx_struct_sheet_hbond.range_id_1",
+        "_pdbx_struct_sheet_hbond.range_id_2",
+        "_pdbx_struct_sheet_hbond.range_1_label_atom_id",
+        "_pdbx_struct_sheet_hbond.range_1_label_comp_id",
+        "_pdbx_struct_sheet_hbond.range_1_label_asym_id",
+        "_pdbx_struct_sheet_hbond.range_1_label_seq_id",
+        "_pdbx_struct_sheet_hbond.range_1_PDB_ins_code",
+        "_pdbx_struct_sheet_hbond.range_2_label_atom_id",
+        "_pdbx_struct_sheet_hbond.range_2_label_comp_id",
+        "_pdbx_struct_sheet_hbond.range_2_label_asym_id",
+        "_pdbx_struct_sheet_hbond.range_2_label_seq_id",
+        "_pdbx_struct_sheet_hbond.range_2_PDB_ins_code",
+        "AA1 1 2 N GLY A 2 ? O THR A 4 ?",
+        "#",
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _write_mmcif_with_orphan_confidence_metric(path: Path) -> None:
+    lines = [
+        "data_test",
+        "#",
+        "loop_",
+        "_atom_site.group_PDB",
+        "_atom_site.id",
+        "_atom_site.type_symbol",
+        "_atom_site.label_atom_id",
+        "_atom_site.label_alt_id",
+        "_atom_site.label_comp_id",
+        "_atom_site.label_asym_id",
+        "_atom_site.label_entity_id",
+        "_atom_site.label_seq_id",
+        "_atom_site.pdbx_PDB_ins_code",
+        "_atom_site.Cartn_x",
+        "_atom_site.Cartn_y",
+        "_atom_site.Cartn_z",
+        "_atom_site.occupancy",
+        "_atom_site.B_iso_or_equiv",
+        "_atom_site.auth_seq_id",
+        "_atom_site.auth_comp_id",
+        "_atom_site.auth_asym_id",
+        "_atom_site.auth_atom_id",
+        "_atom_site.pdbx_PDB_model_num",
+        "ATOM 1 N N . ALA A 1 1 ? 0.0 0.0 0.0 1.00 90.00 10 ALA A N 1",
+        "ATOM 2 C CA . ALA A 1 1 ? 1.0 0.0 0.0 1.00 90.00 10 ALA A CA 1",
+        "ATOM 3 N N . GLY A 1 2 ? 2.0 0.0 0.0 1.00 95.00 11 GLY A N 1",
+        "ATOM 4 C CA . GLY A 1 2 ? 3.0 0.0 0.0 1.00 95.00 11 GLY A CA 1",
+        "ATOM 5 N N . SER A 1 3 ? 4.0 0.0 0.0 1.00 40.00 12 SER A N 1",
+        "ATOM 6 C CA . SER A 1 3 ? 5.0 0.0 0.0 1.00 40.00 12 SER A CA 1",
+        "#",
+        "loop_",
+        "_ma_qa_metric_local.label_asym_id",
+        "_ma_qa_metric_local.label_comp_id",
+        "_ma_qa_metric_local.label_seq_id",
+        "_ma_qa_metric_local.metric_id",
+        "_ma_qa_metric_local.metric_value",
+        "_ma_qa_metric_local.ordinal_id",
+        "A ALA 1 1 90.00 1",
+        "A GLY 2 1 95.00 2",
+        "A SER 3 1 40.00 3",
+        # An annotation whose label_seq_id matches no residue in atom_site. Its
+        # residue type is unique among the survivors, so a name-based match
+        # would park its low score on the GLY that is still there.
+        "A GLY 10 1 20.00 4",
+        "#",
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
 def _write_mmcif_with_stale_chain_metadata(path: Path) -> None:
     lines = [
         "data_test",
@@ -889,6 +1015,183 @@ class StructureEditTests(unittest.TestCase):
             self.assertEqual([row[0] for row in entity_poly_seq_rows[:3]], ["1", "1", "1"])
             self.assertEqual([row[2] for row in entity_poly_seq_rows[:3]], ["GLU", "GLY", "LEU"])
             self.assertEqual([row[3] for row in entity_poly_seq_rows[:3]], ["1", "2", "3"])
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_cut_after_crop_keeps_local_confidence_on_the_right_residues(self) -> None:
+        # _ma_qa_metric_local carries only label_seq_id, which stops matching the
+        # auth-numbered selection once a first edit has renumbered the structure.
+        from Bio.PDB.MMCIF2Dict import MMCIF2Dict
+
+        with TemporaryDirectory() as tmp_dir:
+            source = MMCIF2Dict(str(_fixture_q14694_cif_path()))
+            plddt_by_auth_seq = {}
+            for auth_seq, comp_id, b_iso in zip(
+                source["_atom_site.auth_seq_id"],
+                source["_atom_site.label_comp_id"],
+                source["_atom_site.B_iso_or_equiv"],
+            ):
+                plddt_by_auth_seq.setdefault(int(auth_seq), (comp_id, b_iso))
+
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="AF-Q14694",
+                structure_path=str(_fixture_q14694_cif_path()),
+                selection="A382-798",
+                residue_ranges=[ResidueRange(chain_id="A", start=382, end=798)],
+                output_dir=tmp_dir,
+            )
+            cut = cut_selection_off_target(
+                project_id="project-1",
+                target_id="target-2",
+                target_name="AF-Q14694",
+                structure_path=cropped["output_path"],
+                selection="A550-577",
+                residue_ranges=[ResidueRange(chain_id="A", start=550, end=577)],
+                output_dir=tmp_dir,
+            )
+
+            recropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-3",
+                target_name="AF-Q14694",
+                structure_path=cut["output_path"],
+                selection="A600-780",
+                residue_ranges=[ResidueRange(chain_id="A", start=600, end=780)],
+                output_dir=tmp_dir,
+            )
+
+            def assert_metrics_follow_residues(path: str, expected_residue_count: int) -> None:
+                edited = MMCIF2Dict(path)
+                metric_by_label_seq = dict(
+                    zip(edited["_ma_qa_metric_local.label_seq_id"], edited["_ma_qa_metric_local.metric_value"])
+                )
+                residues = {}
+                for label_seq, auth_seq, comp_id in zip(
+                    edited["_atom_site.label_seq_id"],
+                    edited["_atom_site.auth_seq_id"],
+                    edited["_atom_site.label_comp_id"],
+                ):
+                    residues.setdefault(label_seq, (auth_seq, comp_id))
+
+                self.assertEqual(len(residues), expected_residue_count)
+                # One metric row per remaining residue: nothing left behind for a
+                # removed residue, nothing moved onto a residue of the same type,
+                # and nothing dropped because the two numberings had drifted.
+                self.assertEqual(len(edited["_ma_qa_metric_local.label_seq_id"]), len(residues))
+                self.assertEqual(len(metric_by_label_seq), len(residues))
+                for label_seq, (auth_seq, comp_id) in residues.items():
+                    expected_comp, expected_plddt = plddt_by_auth_seq[int(auth_seq)]
+                    self.assertEqual(comp_id, expected_comp)
+                    self.assertEqual(metric_by_label_seq[label_seq], expected_plddt)
+
+            assert_metrics_follow_residues(cut["output_path"], 417 - 28)
+            assert_metrics_follow_residues(recropped["output_path"], 780 - 600 + 1)
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_crop_real_af_q14694_follows_struct_conf_onto_the_new_label_seq_ids(self) -> None:
+        # Mol* reads _struct_conf by label_seq_id, so a crop that renumbers
+        # atom_site has to move the helix/strand records with it or the
+        # secondary structure lands on the wrong residues.
+        with TemporaryDirectory() as tmp_dir:
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="AF-Q14694",
+                structure_path=str(_fixture_q14694_cif_path()),
+                selection="A40-120",
+                residue_ranges=[ResidueRange(chain_id="A", start=40, end=120)],
+                output_dir=tmp_dir,
+            )
+
+            cropped_path = Path(cropped["output_path"])
+            struct_conf_rows = _read_mmcif_loop_rows(cropped_path, "_struct_conf")
+
+            # Exactly the records that overlap A40-120 survive: none of the
+            # others may be relocated onto a residue that is still there.
+            self.assertEqual(
+                [row[13] for row in struct_conf_rows],
+                ["BEND2", "BEND3", "TURN_TY1_P1", "BEND4", "BEND5"],
+            )
+            for row in struct_conf_rows:
+                beg_auth, beg_label = int(row[2]), int(row[5])
+                end_auth, end_label = int(row[9]), int(row[12])
+                # auth numbering is kept, label numbering restarts at the crop.
+                self.assertEqual(beg_label, beg_auth - 39)
+                self.assertEqual(end_label, end_auth - 39)
+                self.assertLessEqual(1, beg_label)
+                self.assertLessEqual(end_label, 81)
+                self.assertLessEqual(beg_label, end_label)
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_crop_real_af_q14694_clamps_struct_conf_ranges_to_the_kept_residues(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="AF-Q14694",
+                structure_path=str(_fixture_q14694_cif_path()),
+                selection="A18-798",
+                residue_ranges=[ResidueRange(chain_id="A", start=18, end=798)],
+                output_dir=tmp_dir,
+            )
+
+            struct_conf_rows = _read_mmcif_loop_rows(Path(cropped["output_path"]), "_struct_conf")
+            by_id = {row[13]: row for row in struct_conf_rows}
+
+            # PRO 15 - PHE 22 straddles the cut and keeps only its tail.
+            self.assertIn("HELX_RH_AL_P1", by_id)
+            clamped = by_id["HELX_RH_AL_P1"]
+            self.assertEqual((clamped[1], clamped[2], clamped[5]), ("PHE", "18", "1"))
+            self.assertEqual((clamped[8], clamped[9], clamped[12]), ("PHE", "22", "5"))
+            # Records that fell entirely inside the removed tail are gone.
+            self.assertNotIn("HELX_LH_PP_P1", by_id)
+            self.assertNotIn("HELX_LH_PP_P2", by_id)
+
+    def test_crop_drops_confidence_metrics_for_missing_residues(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "orphan_metric.cif"
+            _write_mmcif_with_orphan_confidence_metric(source_path)
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="toy",
+                structure_path=str(source_path),
+                selection="A10-11",
+                residue_ranges=[ResidueRange(chain_id="A", start=10, end=11)],
+                output_dir=tmp_dir,
+            )
+
+            metric_rows = _read_mmcif_local_metric_rows(Path(cropped["output_path"]))
+
+            self.assertEqual([row[2] for row in metric_rows], ["1", "2"])
+            self.assertEqual([row[4] for row in metric_rows], ["90.00", "95.00"])
+
+    def test_crop_remaps_sheet_ranges_and_drops_broken_hbonds(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "sheets.cif"
+            _write_mmcif_with_sheet_records(source_path)
+            cropped = crop_to_selection(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="toy",
+                structure_path=str(source_path),
+                selection="A3-8",
+                residue_ranges=[ResidueRange(chain_id="A", start=3, end=8)],
+                output_dir=tmp_dir,
+            )
+
+            cropped_path = Path(cropped["output_path"])
+            sheet_rows = _read_mmcif_loop_rows(cropped_path, "_struct_sheet_range")
+            hbond_rows = _read_mmcif_loop_rows(cropped_path, "_pdbx_struct_sheet_hbond")
+
+            # ALA 1 - GLY 2 is gone; THR 4 - LEU 6 moves to label_seq 2 - 4.
+            self.assertEqual([row[1] for row in sheet_rows], ["2"])
+            self.assertEqual((sheet_rows[0][2], sheet_rows[0][4]), ("THR", "2"))
+            self.assertEqual((sheet_rows[0][6], sheet_rows[0][8]), ("LEU", "4"))
+            self.assertEqual((sheet_rows[0][12], sheet_rows[0][15]), ("4", "6"))
+            # The hbond partner GLY 2 was cut away, so the record cannot stand.
+            self.assertEqual(hbond_rows, [])
 
     def test_normalize_mmcif_filtered_metadata_prunes_stale_chain_annotations(self) -> None:
         with TemporaryDirectory() as tmp_dir:
