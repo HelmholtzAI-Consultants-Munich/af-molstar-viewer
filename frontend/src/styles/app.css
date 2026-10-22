@@ -1103,6 +1103,43 @@ hr {
   position: relative;
 }
 
+.heatmap-canvas.panning {
+  cursor: grabbing;
+}
+
+.heatmap-zoom-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.45rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.94);
+  color: #222;
+  font-size: 0.72rem;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.heatmap-zoom-badge button {
+  padding: 0.16rem 0.32rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 0.22rem;
+  background: #fff;
+  color: #222;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.heatmap-zoom-badge button:hover {
+  background: #f1f1f1;
+}
+
 .heatmap-overlay-notice {
   position: absolute;
   top: 0.75rem;

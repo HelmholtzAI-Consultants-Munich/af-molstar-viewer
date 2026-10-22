@@ -8,6 +8,15 @@ import {
   PAE_SELECTION_MAX_CROSS_BLOCKS,
 } from '../lib/constants';
 import { clamp, contiguousRuns } from '../lib/utils';
+import {
+  fullView,
+  isFullView,
+  panView,
+  viewCellAt,
+  viewFraction,
+  zoomViewAt,
+  type PaeView,
+} from '../lib/pae-viewport';
 import { parsePaeJson } from '../lib/parsers/pae';
 
 interface PaeHeatmapProps {
@@ -44,16 +53,25 @@ interface Tick {
   ratio: number;
 }
 
-function colorForPae(value: number, maxValue: number): string {
-  const ratio = Math.min(1, Math.max(0, value / Math.max(maxValue, 1)));
+function paeColorChannels(ratio: number): { r: number; g: number; b: number } {
   const upperIndex = PAE_COLOR_STOPS.findIndex((stop) => ratio <= stop.offset);
   const upper = upperIndex === -1 ? PAE_COLOR_STOPS[PAE_COLOR_STOPS.length - 1] : PAE_COLOR_STOPS[upperIndex];
   const lower = upperIndex <= 0 ? PAE_COLOR_STOPS[0] : PAE_COLOR_STOPS[upperIndex - 1];
   const span = Math.max(upper.offset - lower.offset, Number.EPSILON);
   const localRatio = (ratio - lower.offset) / span;
-  const r = Math.round(lower.color.r + (upper.color.r - lower.color.r) * localRatio);
-  const g = Math.round(lower.color.g + (upper.color.g - lower.color.g) * localRatio);
-  const b = Math.round(lower.color.b + (upper.color.b - lower.color.b) * localRatio);
+  return {
+    r: Math.round(lower.color.r + (upper.color.r - lower.color.r) * localRatio),
+    g: Math.round(lower.color.g + (upper.color.g - lower.color.g) * localRatio),
+    b: Math.round(lower.color.b + (upper.color.b - lower.color.b) * localRatio),
+  };
+}
+
+function paeRatio(value: number, maxValue: number): number {
+  return Math.min(1, Math.max(0, value / Math.max(maxValue, 1)));
+}
+
+function colorForPae(value: number, maxValue: number): string {
+  const { r, g, b } = paeColorChannels(paeRatio(value, maxValue));
   return `rgb(${r}, ${g}, ${b})`;
 }
 
@@ -66,32 +84,26 @@ function niceStep(maxValue: number, targetTickCount: number): number {
   );
 }
 
-function buildAxisTicks(size: number): Tick[] {
-  if (size <= 0) return [];
-  const maxValue = size;
-  const step = niceStep(maxValue, 6);
-  const ticks: number[] = [0];
-  for (let value = step; value < maxValue; value += step) {
-    ticks.push(value);
+/**
+ * Round tick values inside the visible range, positioned as a fraction of it. At the full
+ * view this reproduces what the axes showed before zoom existed.
+ *
+ * `forceTerminal` appends the far end when it is not already a round multiple, which the
+ * y axis has always done. It is dropped when zoomed, where a tick at an arbitrary residue
+ * next to round ones reads as noise.
+ */
+function buildRangeTicks(start: number, end: number, forceTerminal: boolean): Tick[] {
+  const span = end - start;
+  if (span <= 0) return [];
+  const step = niceStep(span, 6);
+  const values: number[] = [];
+  for (let value = Math.ceil(start / step) * step; value <= end + 1e-9; value += step) {
+    values.push(Math.round(value));
   }
-  if (ticks.at(-1) !== maxValue) ticks.push(maxValue);
-  return ticks.map((value) => ({
-    value,
-    ratio: maxValue === 0 ? 0 : value / maxValue,
-  }));
-}
-
-function buildRegularAxisTicks(size: number): Tick[] {
-  if (size <= 0) return [];
-  const step = niceStep(size, 6);
-  const ticks: number[] = [0];
-  for (let value = step; value <= size; value += step) {
-    ticks.push(value);
+  if (forceTerminal && values.at(-1) !== Math.round(end)) {
+    values.push(Math.round(end));
   }
-  return ticks.map((value) => ({
-    value,
-    ratio: size === 0 ? 0 : value / size,
-  }));
+  return values.map((value) => ({ value, ratio: (value - start) / span }));
 }
 
 function buildLegendTicks(maxValue: number): Tick[] {
@@ -368,20 +380,93 @@ function drawPinnedPairMarker(
   if (typeof context.restore === 'function') context.restore();
 }
 
+const MAX_BITMAP_CELLS = 4096;
+
+/**
+ * Rasterise the whole matrix at one pixel per cell, so the view can be drawn with a single
+ * `drawImage`. The bitmap is in cell units, so it is independent of layout and of
+ * devicePixelRatio: nothing but the matrix itself invalidates it.
+ *
+ * Returns null when the canvas API is too thin for it (the jsdom stub) or the matrix is
+ * too large to hold as a bitmap, and the caller falls back to filling cells one by one.
+ */
+function buildMatrixBitmap(matrix: number[][], maxValue: number): HTMLCanvasElement | null {
+  const size = matrix.length;
+  if (size <= 0 || size > MAX_BITMAP_CELLS) return null;
+
+  const bitmap = document.createElement('canvas');
+  bitmap.width = size;
+  bitmap.height = size;
+  const context = bitmap.getContext('2d');
+  if (
+    !context ||
+    typeof context.createImageData !== 'function' ||
+    typeof context.putImageData !== 'function'
+  ) {
+    return null;
+  }
+
+  // One lookup per distinct ratio rather than a colour computation per cell.
+  const lut = new Uint8Array(256 * 3);
+  for (let step = 0; step < 256; step += 1) {
+    const { r, g, b } = paeColorChannels(step / 255);
+    lut[step * 3] = r;
+    lut[step * 3 + 1] = g;
+    lut[step * 3 + 2] = b;
+  }
+
+  const image = context.createImageData(size, size);
+  const data = image.data;
+  for (let y = 0; y < size; y += 1) {
+    const row = matrix[y];
+    for (let x = 0; x < size; x += 1) {
+      const step = Math.round(paeRatio(row[x], maxValue) * 255) * 3;
+      const offset = (y * size + x) * 4;
+      data[offset] = lut[step];
+      data[offset + 1] = lut[step + 1];
+      data[offset + 2] = lut[step + 2];
+      data[offset + 3] = 255;
+    }
+  }
+  context.putImageData(image, 0, 0);
+  return bitmap;
+}
+
+const ZOOM_HINT = '⇧ scroll to zoom · ⇧ drag to pan';
+const WHEEL_ZOOM_RATE = 0.0015;
+const WHEEL_LINE_HEIGHT = 16;
+const WHEEL_PAGE_HEIGHT = 400;
+
+/**
+ * Chrome reports pixels, Firefox lines, some setups pages. Without this, zoom is inert on
+ * one and violent on another.
+ *
+ * Takes whichever axis moved further, because a shifted scroll is delivered horizontally:
+ * macOS turns shift + two-finger scroll into `deltaX` with `deltaY` at zero.
+ */
+function normalizeWheelDelta(event: WheelEvent): number {
+  const raw = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  if (event.deltaMode === 1) return raw * WHEEL_LINE_HEIGHT;
+  if (event.deltaMode === 2) return raw * WHEEL_PAGE_HEIGHT;
+  return raw;
+}
+
+/** Shift, or ctrl — which is how a trackpad pinch arrives. A bare wheel scrolls the drawer. */
+function isZoomGesture(event: WheelEvent): boolean {
+  return event.shiftKey || event.ctrlKey;
+}
+
 function mapClientToCell(
   canvas: HTMLCanvasElement,
   size: number,
+  view: PaeView,
   clientX: number,
   clientY: number,
 ) {
   const rect = canvas.getBoundingClientRect();
-  const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * size), 0, size - 1);
-  const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * size), 0, size - 1);
   return {
-    x,
-    y,
-    localX: x,
-    localY: y,
+    x: viewCellAt(view, size, view.x0, (clientX - rect.left) / rect.width),
+    y: viewCellAt(view, size, view.y0, (clientY - rect.top) / rect.height),
   };
 }
 
@@ -402,6 +487,13 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const hoverFrameRef = useRef<number | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const lastPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const wheelAccumRef = useRef<{ delta: number; clientX: number; clientY: number } | null>(null);
+  const wheelFrameRef = useRef<number | null>(null);
+  const bitmapRef = useRef<HTMLCanvasElement | null>(null);
+  const bitmapMatrixRef = useRef<number[][] | null>(null);
+  const bitmapMaxValueRef = useRef<number | null>(null);
   const pendingHoverCellRef = useRef<{ x: number; y: number } | null>(null);
   const lastHoverCellKeyRef = useRef('none');
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -411,12 +503,33 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     startClientY: number;
     selection: MatrixViewport;
   } | null>(null);
+  const [panDrag, setPanDrag] = useState<{ startClientX: number; startClientY: number; startView: PaeView } | null>(null);
   const [dropDepth, setDropDepth] = useState(0);
   const [dropError, setDropError] = useState<string | null>(null);
   const size = props.matrix.length;
-  const yAxisTicks = useMemo(() => buildAxisTicks(size), [size]);
+  const [view, setView] = useState<PaeView>(() => fullView(size));
+  const viewRef = useRef(view);
+
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  // Keyed on matrix identity, not size: a dropped-in pAE with the same residue count is
+  // still a different protein, and its old view would be meaningless. The ref skips the
+  // mount run, where the initial state is already the full view.
+  const viewMatrixRef = useRef(props.matrix);
+  useEffect(() => {
+    if (viewMatrixRef.current === props.matrix) return;
+    viewMatrixRef.current = props.matrix;
+    setView(fullView(props.matrix.length));
+  }, [props.matrix]);
+  const atFullView = isFullView(view, size);
+  const yAxisTicks = useMemo(
+    () => buildRangeTicks(view.y0, view.y0 + view.span, atFullView),
+    [view, atFullView],
+  );
   const yAxisLabelTicks = useMemo(() => filterAxisLabelTicks(yAxisTicks), [yAxisTicks]);
-  const xAxisTicks = useMemo(() => buildRegularAxisTicks(size), [size]);
+  const xAxisTicks = useMemo(() => buildRangeTicks(view.x0, view.x0 + view.span, false), [view]);
   const xAxisLabelTickValues = useMemo(() => new Set(filterXAxisTickLabels(xAxisTicks).map((tick) => tick.value)), [xAxisTicks]);
   const legendTicks = useMemo(() => buildLegendTicks(props.maxValue), [props.maxValue]);
   const selectionRuns = useMemo(
@@ -432,6 +545,37 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
           yEnd: Math.max(dragStart.y, dragCurrent.y),
         }
       : props.brushSelection;
+  // The wrap has no `overflow: hidden` (the brush clear button sits deliberately at
+  // left: 100%), so a zoomed-in brush box would otherwise stretch far outside the panel
+  // and, being interactive, swallow clicks over its neighbours. Clamp it to the view and
+  // drop it entirely once it no longer intersects.
+  const brushBox = (() => {
+    if (!props.brushSelection) return null;
+    const left = viewFraction(view, view.x0, props.brushSelection.xStart);
+    const right = viewFraction(view, view.x0, props.brushSelection.xEnd + 1);
+    const top = viewFraction(view, view.y0, props.brushSelection.yStart);
+    const bottom = viewFraction(view, view.y0, props.brushSelection.yEnd + 1);
+    if (right <= 0 || left >= 1 || bottom <= 0 || top >= 1) return null;
+    const clampedLeft = clamp(left, 0, 1);
+    const clampedTop = clamp(top, 0, 1);
+    return {
+      left: clampedLeft,
+      top: clampedTop,
+      width: clamp(right, 0, 1) - clampedLeft,
+      height: clamp(bottom, 0, 1) - clampedTop,
+      clearVisible: right >= 0 && right <= 1 && top >= 0 && top <= 1,
+      clearLeft: right,
+      clearTop: top,
+    };
+  })();
+
+  const pairCloseAnchor = (() => {
+    if (!props.pinnedCell) return null;
+    const x = viewFraction(view, view.x0, props.pinnedCell.x + 0.5);
+    const y = viewFraction(view, view.y0, props.pinnedCell.y + 0.5);
+    return x < 0 || x > 1 || y < 0 || y > 1 ? null : { x, y };
+  })();
+
   const pinnedPairBounds =
     props.pairSelectionEnabled && props.pinnedCell && props.pinnedResidues.length > 1
       ? {
@@ -490,16 +634,41 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
     context.clearRect(0, 0, width, height);
 
-    const cellWidth = width / Math.max(size, 1);
-    const cellHeight = height / Math.max(size, 1);
+    if (bitmapMatrixRef.current !== props.matrix || bitmapMaxValueRef.current !== props.maxValue) {
+      bitmapRef.current = buildMatrixBitmap(props.matrix, props.maxValue);
+      bitmapMatrixRef.current = props.matrix;
+      bitmapMaxValueRef.current = props.maxValue;
+    }
 
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
+    const bitmap = bitmapRef.current;
+    if (bitmap && typeof context.drawImage === 'function') {
+      // Smooth only when shrinking. Magnified cells want hard edges, but with more cells
+      // than device pixels nearest-neighbour would drop whole rows and columns.
+      context.imageSmoothingEnabled = width / view.span < 1;
+      context.drawImage(bitmap, view.x0, view.y0, view.span, view.span, 0, 0, width, height);
+      return;
+    }
+
+    const cellWidth = width / view.span;
+    const cellHeight = height / view.span;
+    const firstX = Math.max(0, Math.floor(view.x0));
+    const firstY = Math.max(0, Math.floor(view.y0));
+    const lastX = Math.min(size - 1, Math.ceil(view.x0 + view.span));
+    const lastY = Math.min(size - 1, Math.ceil(view.y0 + view.span));
+
+    for (let y = firstY; y <= lastY; y += 1) {
+      for (let x = firstX; x <= lastX; x += 1) {
         context.fillStyle = colorForPae(props.matrix[y][x], props.maxValue);
-        context.fillRect(x * cellWidth, y * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+        // Overpaint by half a pixel so fractional cell edges do not leave hairline seams.
+        context.fillRect(
+          (x - view.x0) * cellWidth,
+          (y - view.y0) * cellHeight,
+          cellWidth + 0.5,
+          cellHeight + 0.5,
+        );
       }
     }
-  }, [props.matrix, props.maxValue, size]);
+  }, [props.matrix, props.maxValue, size, view]);
 
   useEffect(() => {
     if (!frameDrag) return;
@@ -508,8 +677,8 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       const canvas = overlayCanvasRef.current;
       if (!canvas || size <= 0) return;
       const rect = canvas.getBoundingClientRect();
-      const cellWidth = rect.width / size;
-      const cellHeight = rect.height / size;
+      const cellWidth = rect.width / view.span;
+      const cellHeight = rect.height / view.span;
       const deltaX = Math.round((event.clientX - frameDrag.startClientX) / Math.max(cellWidth, 1));
       const deltaY = Math.round((event.clientY - frameDrag.startClientY) / Math.max(cellHeight, 1));
       const width = frameDrag.selection.xEnd - frameDrag.selection.xStart;
@@ -543,24 +712,24 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     const handleMove = (event: MouseEvent) => {
       const canvas = overlayCanvasRef.current;
       if (!canvas) return;
-      const cell = mapClientToCell(canvas, size, event.clientX, event.clientY);
-      setDragCurrent({ x: cell.localX, y: cell.localY });
+      const cell = mapClientToCell(canvas, size, view, event.clientX, event.clientY);
+      setDragCurrent({ x: cell.x, y: cell.y });
       props.onBrushSelectionChange({
-        xStart: Math.min(dragStart.x, cell.localX),
-        xEnd: Math.max(dragStart.x, cell.localX),
-        yStart: Math.min(dragStart.y, cell.localY),
-        yEnd: Math.max(dragStart.y, cell.localY),
+        xStart: Math.min(dragStart.x, cell.x),
+        xEnd: Math.max(dragStart.x, cell.x),
+        yStart: Math.min(dragStart.y, cell.y),
+        yEnd: Math.max(dragStart.y, cell.y),
       });
     };
 
     const handleUp = (event: MouseEvent) => {
       const canvas = overlayCanvasRef.current;
       if (!canvas) return;
-      const cell = mapClientToCell(canvas, size, event.clientX, event.clientY);
-      const minX = Math.min(dragStart.x, cell.localX);
-      const maxX = Math.max(dragStart.x, cell.localX);
-      const minY = Math.min(dragStart.y, cell.localY);
-      const maxY = Math.max(dragStart.y, cell.localY);
+      const cell = mapClientToCell(canvas, size, view, event.clientX, event.clientY);
+      const minX = Math.min(dragStart.x, cell.x);
+      const maxX = Math.max(dragStart.x, cell.x);
+      const minY = Math.min(dragStart.y, cell.y);
+      const maxY = Math.max(dragStart.y, cell.y);
       if (maxX === minX && maxY === minY) {
         if (props.pairSelectionEnabled) {
           props.onClickCell({ x: cell.x, y: cell.y });
@@ -587,6 +756,104 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
   }, [dragStart, props, size]);
 
   useEffect(() => {
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+
+    const applyPendingWheel = () => {
+      wheelFrameRef.current = null;
+      const pending = wheelAccumRef.current;
+      wheelAccumRef.current = null;
+      const canvas = overlayCanvasRef.current;
+      if (!pending || !canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const fx = clamp((pending.clientX - rect.left) / rect.width, 0, 1);
+      const fy = clamp((pending.clientY - rect.top) / rect.height, 0, 1);
+      setView((current) => zoomViewAt(current, size, Math.exp(pending.delta * WHEEL_ZOOM_RATE), fx, fy));
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!isZoomGesture(event)) return;
+      const delta = normalizeWheelDelta(event);
+      if (delta === 0) return;
+
+      // Always consume it, including at the zoom limits: the modifier says the gesture was
+      // meant for the matrix, and a bare wheel already scrolls the drawer.
+      event.preventDefault();
+      lastPointerRef.current = { clientX: event.clientX, clientY: event.clientY };
+      wheelAccumRef.current = {
+        delta: (wheelAccumRef.current?.delta ?? 0) + delta,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      if (wheelFrameRef.current === null) {
+        wheelFrameRef.current = requestAnimationFrame(applyPendingWheel);
+      }
+    };
+
+    // Native and non-passive: React 18 registers wheel passively, so a JSX onWheel could
+    // not preventDefault. On the wrap rather than the canvas, because the brush handle and
+    // the clear buttons stack above the canvas and would otherwise be dead zones.
+    wrap.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      wrap.removeEventListener('wheel', handleWheel);
+      if (wheelFrameRef.current !== null) {
+        cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = null;
+      }
+    };
+  }, [size]);
+
+  useEffect(() => {
+    if (!panDrag) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const canvas = overlayCanvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const cell = rect.width / panDrag.startView.span;
+      setView(
+        panView(
+          panDrag.startView,
+          size,
+          -(event.clientX - panDrag.startClientX) / cell,
+          -(event.clientY - panDrag.startClientY) / cell,
+        ),
+      );
+    };
+
+    const handleUp = () => setPanDrag(null);
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [panDrag, size]);
+
+  // A wheel event fires no mousemove, so without this the crosshair stays on a cell that is
+  // no longer under the cursor and Mol* highlights the wrong residue.
+  useEffect(() => {
+    const pointer = lastPointerRef.current;
+    const canvas = overlayCanvasRef.current;
+    if (!pointer || !canvas) return;
+    const cell = mapClientToCell(canvas, size, view, pointer.clientX, pointer.clientY);
+    scheduleHoverCell({ x: cell.x, y: cell.y });
+    if (dragStart) {
+      setDragCurrent({ x: cell.x, y: cell.y });
+      props.onBrushSelectionChange({
+        xStart: Math.min(dragStart.x, cell.x),
+        xEnd: Math.max(dragStart.x, cell.x),
+        yStart: Math.min(dragStart.y, cell.y),
+        yEnd: Math.max(dragStart.y, cell.y),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  useEffect(() => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext('2d');
@@ -596,11 +863,14 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     if (!width || !height) return;
     canvas.width = width * window.devicePixelRatio;
     canvas.height = height * window.devicePixelRatio;
-    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
-    context.clearRect(0, 0, width, height);
-
-    const cellWidth = width / Math.max(size, 1);
-    const cellHeight = height / Math.max(size, 1);
+    const dpr = window.devicePixelRatio;
+    const cellWidth = width / view.span;
+    const cellHeight = height / view.span;
+    // Translate by the view origin, never scale: stroke widths, dashes and button offsets
+    // are in CSS pixels and must not grow with the zoom. Every module-level draw* helper
+    // multiplies matrix indices by cellWidth, so this is the only place that knows the origin.
+    context.setTransform(dpr, 0, 0, dpr, -view.x0 * cellWidth * dpr, -view.y0 * cellHeight * dpr);
+    context.clearRect(view.x0 * cellWidth, view.y0 * cellHeight, width, height);
 
     drawMolstarSelection(context, selectionRuns, cellWidth, cellHeight);
 
@@ -612,10 +882,12 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
       const x = props.hoveredCell.x * cellWidth;
       const y = props.hoveredCell.y * cellHeight;
       context.beginPath();
-      context.moveTo(0, y + cellHeight / 2);
-      context.lineTo(width, y + cellHeight / 2);
-      context.moveTo(x + cellWidth / 2, 0);
-      context.lineTo(x + cellWidth / 2, height);
+      const viewLeft = view.x0 * cellWidth;
+      const viewTop = view.y0 * cellHeight;
+      context.moveTo(viewLeft, y + cellHeight / 2);
+      context.lineTo(viewLeft + width, y + cellHeight / 2);
+      context.moveTo(x + cellWidth / 2, viewTop);
+      context.lineTo(x + cellWidth / 2, viewTop + height);
       context.stroke();
       context.strokeRect(x, y, cellWidth, cellHeight);
       if (typeof context.restore === 'function') context.restore();
@@ -654,12 +926,17 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     props.pinnedResidues.length,
     selectionRuns,
     size,
+    view,
   ]);
+
+  const beginPan = (clientX: number, clientY: number) => {
+    setPanDrag({ startClientX: clientX, startClientY: clientY, startView: viewRef.current });
+  };
 
   const mapPointer = (clientX: number, clientY: number) => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return null;
-    return mapClientToCell(canvas, size, clientX, clientY);
+    return mapClientToCell(canvas, size, viewRef.current, clientX, clientY);
   };
 
   const handleFileDrop = async (event: DragEvent<HTMLElement>) => {
@@ -717,7 +994,19 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                 );
               })}
             </div>
-            <div className="heatmap-canvas-wrap">
+            <div className="heatmap-canvas-wrap" ref={canvasWrapRef}>
+              {!atFullView && (
+                <div className="heatmap-zoom-badge">
+                  {/* The axes already label the visible range on each side, and after a
+                      diagonal pan those two ranges differ, so report the span instead. */}
+                  <span>
+                    {Math.round(view.span)}&times;{Math.round(view.span)} residues
+                  </span>
+                  <button type="button" onClick={() => setView(fullView(size))}>
+                    Reset
+                  </button>
+                </div>
+              )}
               {props.syntheticPae && (
                 <div className="heatmap-overlay-notice" aria-live="polite">
                   <strong>Empty pAE</strong>
@@ -737,43 +1026,60 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
               />
               <canvas
                 ref={overlayCanvasRef}
-                className="heatmap-canvas"
+                className={`heatmap-canvas${panDrag ? ' panning' : ''}`}
+                // Native tooltip, as elsewhere in the app: it waits for the pointer to settle
+                // and gets out of the way the moment it moves again.
+                title={atFullView ? ZOOM_HINT : undefined}
                 onMouseMove={(event) => {
                   if (props.interactionPerformance.suppressHoverWhileInteracting && (dragStart || frameDrag)) {
                     return;
                   }
+                  lastPointerRef.current = { clientX: event.clientX, clientY: event.clientY };
                   const cell = mapPointer(event.clientX, event.clientY);
                   if (!cell) return;
                   scheduleHoverCell({ x: cell.x, y: cell.y });
                 }}
                 onMouseLeave={() => {
+                  lastPointerRef.current = null;
                   scheduleHoverCell(null);
                 }}
                 onMouseDown={(event) => {
+                  if (event.shiftKey) {
+                    event.preventDefault();
+                    scheduleHoverCell(null);
+                    beginPan(event.clientX, event.clientY);
+                    return;
+                  }
                   const cell = mapPointer(event.clientX, event.clientY);
                   if (!cell) return;
                   if (props.interactionPerformance.suppressHoverWhileInteracting) {
                     scheduleHoverCell(null);
                   }
-                  setDragStart({ x: cell.localX, y: cell.localY });
-                  setDragCurrent({ x: cell.localX, y: cell.localY });
+                  setDragStart({ x: cell.x, y: cell.y });
+                  setDragCurrent({ x: cell.x, y: cell.y });
                 }}
               />
-              {props.brushSelection && size > 0 && (
+              {props.brushSelection && brushBox && size > 0 && (
                 <>
                   <div
                     className={`heatmap-frame-drag-handle${frameDrag ? ' dragging' : ''}`}
                     style={{
-                      left: `${(props.brushSelection.xStart / size) * 100}%`,
-                      top: `${(props.brushSelection.yStart / size) * 100}%`,
-                      width: `${((props.brushSelection.xEnd - props.brushSelection.xStart + 1) / size) * 100}%`,
-                      height: `${((props.brushSelection.yEnd - props.brushSelection.yStart + 1) / size) * 100}%`,
+                      left: `${brushBox.left * 100}%`,
+                      top: `${brushBox.top * 100}%`,
+                      width: `${brushBox.width * 100}%`,
+                      height: `${brushBox.height * 100}%`,
                     }}
                     onMouseDown={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
                       if (props.interactionPerformance.suppressHoverWhileInteracting) {
                         scheduleHoverCell(null);
+                      }
+                      // This handle sits above the canvas and swallows the event, so a
+                      // shift-drag started over your own brush has to pan from here.
+                      if (event.shiftKey) {
+                        beginPan(event.clientX, event.clientY);
+                        return;
                       }
                       setFrameDrag({
                         startClientX: event.clientX,
@@ -782,13 +1088,13 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                       });
                     }}
                   />
-                  {!frameDrag && (
+                  {!frameDrag && brushBox.clearVisible && (
                     <button
                       type="button"
                       className="heatmap-close-button"
                       style={{
-                        left: `${((props.brushSelection.xEnd + 1) / size) * 100}%`,
-                        top: `${(props.brushSelection.yStart / size) * 100}%`,
+                        left: `${brushBox.clearLeft * 100}%`,
+                        top: `${brushBox.clearTop * 100}%`,
                       }}
                       aria-label="Clear selection"
                       onClick={(event) => {
@@ -801,13 +1107,13 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   )}
                 </>
               )}
-              {pinnedPairBounds && !activeBrush && !frameDrag && (
+              {pinnedPairBounds && pairCloseAnchor && !activeBrush && !frameDrag && (
                 <button
                   type="button"
                   className="heatmap-close-button heatmap-pair-close-button"
                   style={{
-                    left: `calc(${((props.pinnedCell!.x + 0.5) / size) * 100}% + 20px)`,
-                    top: `calc(${((props.pinnedCell!.y + 0.5) / size) * 100}% - 20px)`,
+                    left: `calc(${pairCloseAnchor.x * 100}% + 20px)`,
+                    top: `calc(${pairCloseAnchor.y * 100}% - 20px)`,
                   }}
                   aria-label="Clear pair"
                   onClick={(event) => {
@@ -838,7 +1144,7 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
                   </span>
                 );
               })}
-              <span className="heatmap-axis-end-label">{size}</span>
+              <span className="heatmap-axis-end-label">{Math.round(view.x0 + view.span)}</span>
             </div>
           </div>
           <div className="heatmap-x-label">Scored residue</div>
