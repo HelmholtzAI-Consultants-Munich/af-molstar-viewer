@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 import re
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from .selection import ResidueRange
 
@@ -230,6 +230,7 @@ def _write_filtered_pdb_text(
     keep_residue = _make_keep_residue_predicate(residue_ranges, keep_selected=keep_selected)
     kept_residue_keys: set[tuple[str, int, str]] = set()
     kept_chain_ids: set[str] = set()
+    residues_by_chain: dict[str, list[dict[str, str]]] = defaultdict(list)
     filtered_lines: list[str] = []
 
     for line in structure_file.read_text().splitlines():
@@ -242,6 +243,16 @@ def _write_filtered_pdb_text(
                 # Copy the original coordinate record verbatim so residue numbers
                 # remain unchanged in the output structure.
                 filtered_lines.append(line)
+                if (chain_id, residue_number, insertion_code) not in kept_residue_keys:
+                    residues_by_chain[chain_id].append(
+                        {
+                            "seq": line[22:26].strip(),
+                            "ins": insertion_code,
+                            "chain": chain_id,
+                            "comp": line[17:20].strip(),
+                            "new_seq": line[22:26].strip(),
+                        }
+                    )
                 kept_residue_keys.add((chain_id, residue_number, insertion_code))
                 kept_chain_ids.add(chain_id)
             continue
@@ -251,6 +262,8 @@ def _write_filtered_pdb_text(
 
     if not kept_residue_keys:
         raise ValueError("The requested edit would remove every residue from the structure.")
+
+    filtered_lines = _rewrite_pdb_secondary_structure_lines(filtered_lines, residues_by_chain)
 
     if not any(line.startswith("END") for line in filtered_lines):
         filtered_lines.append("END")
@@ -1577,6 +1590,7 @@ def _rewrite_pdb_auth_indexing(structure_file: Path, output_path: Path) -> tuple
     next_seq_by_chain: dict[str, int] = defaultdict(int)
     kept_chain_ids: set[str] = set()
     kept_residue_keys: set[tuple[str, str, str]] = set()
+    residues_by_chain: dict[str, list[dict[str, str]]] = defaultdict(list)
     output_lines: list[str] = []
 
     for line in lines:
@@ -1589,6 +1603,15 @@ def _rewrite_pdb_auth_indexing(structure_file: Path, output_path: Path) -> tuple
             if residue_key not in residue_map:
                 next_seq_by_chain[chain_id] += 1
                 residue_map[residue_key] = next_seq_by_chain[chain_id]
+                residues_by_chain[chain_id].append(
+                    {
+                        "seq": residue_number,
+                        "ins": insertion_code,
+                        "chain": chain_id,
+                        "comp": line[17:20].strip(),
+                        "new_seq": str(residue_map[residue_key]),
+                    }
+                )
             normalized_seq = residue_map[residue_key]
             rewritten = f"{line[:22]}{normalized_seq:>4}{line[26:]}"
             output_lines.append(rewritten)
@@ -1599,6 +1622,10 @@ def _rewrite_pdb_auth_indexing(structure_file: Path, output_path: Path) -> tuple
 
     if not kept_residue_keys:
         raise ValueError("The requested edit would remove every residue from the structure.")
+
+    # HELIX/SHEET records sit ahead of the coordinates, so they are remapped
+    # once the whole chain has been seen.
+    output_lines = _rewrite_pdb_secondary_structure_lines(output_lines, residues_by_chain)
 
     if not any(line.startswith("END") for line in output_lines):
         output_lines.append("END")
@@ -1624,19 +1651,60 @@ def _optional_int(value: str) -> int | None:
         return None
 
 
-def _locate_mmcif_residue(chain_residues: list[dict[str, str]], seq_value: str, field: str) -> int | None:
-    for position, residue in enumerate(chain_residues):
-        if residue[field] == seq_value:
-            return position
-    return None
-
-
 def _locate_mmcif_residue_by_comp(chain_residues: list[dict[str, str]], comp_value: str, field: str) -> int | None:
     """Match on residue name, but only where that names exactly one residue."""
     if not comp_value or comp_value in {".", "?"}:
         return None
     matches = [position for position, residue in enumerate(chain_residues) if residue[field] == comp_value]
     return matches[0] if len(matches) == 1 else None
+
+
+def _normalized_ins_code(value: str) -> str:
+    return "" if value.strip() in {"", ".", "?"} else value.strip()
+
+
+def _residue_span_positions(
+    residues: list[dict[str, str]],
+    beg_seq: str,
+    beg_ins: str,
+    end_seq: str,
+    end_ins: str,
+) -> tuple[int, int] | None:
+    """Locate [beg, end] among the residues that are actually present.
+
+    `residues` is in file order, so positions are what the rewritten numbering
+    is built from; this never does arithmetic on the original numbers, which is
+    what makes it safe across gaps such as a chain running 6-42 then 52-138.
+    """
+    beg_position = _locate_residue(residues, beg_seq, beg_ins)
+    end_position = _locate_residue(residues, end_seq, end_ins)
+    if beg_position is not None and end_position is not None:
+        return (beg_position, end_position) if beg_position <= end_position else (end_position, beg_position)
+
+    # An endpoint is missing, either cut away or never observed: keep whatever
+    # part of the range is still there.
+    beg_number = _optional_int(beg_seq)
+    end_number = _optional_int(end_seq)
+    if beg_number is None or end_number is None:
+        return None
+    if end_number < beg_number:
+        beg_number, end_number = end_number, beg_number
+    inside = [
+        position
+        for position, residue in enumerate(residues)
+        if (number := _optional_int(residue["seq"])) is not None and beg_number <= number <= end_number
+    ]
+    if not inside:
+        return None
+    return inside[0], inside[-1]
+
+
+def _locate_residue(residues: list[dict[str, str]], seq_value: str, ins_value: str) -> int | None:
+    ins_value = _normalized_ins_code(ins_value)
+    for position, residue in enumerate(residues):
+        if residue["seq"] == seq_value and _normalized_ins_code(residue["ins"]) == ins_value:
+            return position
+    return None
 
 
 def _mmcif_residue_span(
@@ -1647,27 +1715,15 @@ def _mmcif_residue_span(
     end_value: str,
     beg_comp: str,
     end_comp: str,
+    beg_ins: str,
+    end_ins: str,
     *,
     allow_comp_fallback: bool,
 ) -> tuple[int, int] | None:
-    beg_position = _locate_mmcif_residue(chain_residues, beg_value, seq_field)
-    end_position = _locate_mmcif_residue(chain_residues, end_value, seq_field)
-    if beg_position is not None and end_position is not None:
-        return (beg_position, end_position) if beg_position <= end_position else (end_position, beg_position)
-
-    # An endpoint was cut away: keep whatever part of the range survived.
-    beg_number = _optional_int(beg_value)
-    end_number = _optional_int(end_value)
-    if beg_number is not None and end_number is not None:
-        if end_number < beg_number:
-            beg_number, end_number = end_number, beg_number
-        inside = [
-            position
-            for position, residue in enumerate(chain_residues)
-            if (number := _optional_int(residue[seq_field])) is not None and beg_number <= number <= end_number
-        ]
-        if inside:
-            return inside[0], inside[-1]
+    view = [{"seq": residue[seq_field], "ins": residue["ins_code"]} for residue in chain_residues]
+    span = _residue_span_positions(view, beg_value, beg_ins, end_value, end_ins)
+    if span is not None:
+        return span
 
     # Numbering that never lined up with atom_site in the first place: fall back
     # to residue names, and only where they pin down a single residue each.
@@ -1764,6 +1820,8 @@ def _map_mmcif_secondary_structure_rows(
                 end_value,
                 _first_existing_value(tokens, columns, beg_fields[f"{kind}_comp"]),
                 _first_existing_value(tokens, columns, end_fields[f"{kind}_comp"]),
+                _first_existing_value(tokens, columns, beg_fields["ins_code"]),
+                _first_existing_value(tokens, columns, end_fields["ins_code"]),
                 allow_comp_fallback=allow_comp_fallback,
             )
             if span is None:
@@ -1783,3 +1841,160 @@ def _map_mmcif_secondary_structure_rows(
         filtered_rows.append(" ".join(mapped_tokens))
 
     return filtered_rows
+
+
+class _PdbResidueField(NamedTuple):
+    """Column spans of one residue reference in a PDB HELIX/SHEET record."""
+
+    comp: slice
+    chain: int
+    seq: slice
+    ins: int
+
+
+# Column numbers are from the PDB format spec, converted to 0-based slices.
+_PDB_HELIX_BEG = _PdbResidueField(slice(15, 18), 19, slice(21, 25), 25)
+_PDB_HELIX_END = _PdbResidueField(slice(27, 30), 31, slice(33, 37), 37)
+_PDB_HELIX_LENGTH = slice(71, 76)
+_PDB_SHEET_BEG = _PdbResidueField(slice(17, 20), 21, slice(22, 26), 26)
+_PDB_SHEET_END = _PdbResidueField(slice(28, 31), 32, slice(33, 37), 37)
+_PDB_SHEET_CUR = _PdbResidueField(slice(45, 48), 49, slice(50, 54), 54)
+_PDB_SHEET_PREV = _PdbResidueField(slice(60, 63), 64, slice(65, 69), 69)
+_PDB_SHEET_CUR_ATOM = slice(41, 45)
+_PDB_SHEET_PREV_ATOM = slice(56, 60)
+_PDB_SHEET_ID = slice(11, 14)
+_PDB_SHEET_STRAND_COUNT = slice(14, 16)
+_PDB_RECORD_WIDTH = 80
+
+
+def _read_pdb_field(line: str, where: slice) -> str:
+    return line[where].strip()
+
+
+def _write_pdb_field(chars: list[str], where: slice, value: str) -> None:
+    width = where.stop - where.start
+    chars[where] = list(value.rjust(width)[:width])
+
+
+def _rewrite_pdb_secondary_structure_lines(
+    lines: list[str],
+    residues_by_chain: dict[str, list[dict[str, str]]],
+) -> list[str]:
+    """Move HELIX/SHEET records onto the rewritten residue numbering.
+
+    Mol* turns these records into struct_conf/struct_sheet_range and resolves
+    them on auth numbering, so a record left behind by a renumbering draws the
+    wrong part of the chain. Ranges are mapped by position among the residues
+    that are present, so gaps in the original numbering do not shift anything.
+    """
+    rewritten: list[str] = []
+    for line in lines:
+        record = line[:6].strip()
+        if record == "HELIX":
+            mapped = _rewrite_pdb_helix_line(line, residues_by_chain)
+        elif record == "SHEET":
+            mapped = _rewrite_pdb_sheet_line(line, residues_by_chain)
+        else:
+            rewritten.append(line)
+            continue
+        if mapped is not None:
+            rewritten.append(mapped)
+    return _renumber_pdb_sheet_strand_counts(rewritten)
+
+
+def _map_pdb_residue_range(
+    line: str,
+    beg_field: _PdbResidueField,
+    end_field: _PdbResidueField,
+    residues_by_chain: dict[str, list[dict[str, str]]],
+) -> tuple[dict[str, str], dict[str, str]] | None:
+    chain_id = line[beg_field.chain] if len(line) > beg_field.chain else ""
+    chain_residues = residues_by_chain.get(chain_id)
+    if not chain_residues:
+        return None
+    span = _residue_span_positions(
+        chain_residues,
+        _read_pdb_field(line, beg_field.seq),
+        line[beg_field.ins] if len(line) > beg_field.ins else "",
+        _read_pdb_field(line, end_field.seq),
+        line[end_field.ins] if len(line) > end_field.ins else "",
+    )
+    if span is None:
+        return None
+    return chain_residues[span[0]], chain_residues[span[1]]
+
+
+def _apply_pdb_residue(chars: list[str], field: _PdbResidueField, residue: dict[str, str]) -> None:
+    _write_pdb_field(chars, field.comp, residue["comp"])
+    chars[field.chain] = residue["chain"]
+    _write_pdb_field(chars, field.seq, residue["new_seq"])
+    chars[field.ins] = residue["ins"] or " "
+
+
+def _rewrite_pdb_helix_line(line: str, residues_by_chain: dict[str, list[dict[str, str]]]) -> str | None:
+    mapped = _map_pdb_residue_range(line, _PDB_HELIX_BEG, _PDB_HELIX_END, residues_by_chain)
+    if mapped is None:
+        return None
+    beg_residue, end_residue = mapped
+    chars = list(line.ljust(_PDB_RECORD_WIDTH))
+    _apply_pdb_residue(chars, _PDB_HELIX_BEG, beg_residue)
+    _apply_pdb_residue(chars, _PDB_HELIX_END, end_residue)
+    if _read_pdb_field(line, _PDB_HELIX_LENGTH):
+        length = int(end_residue["new_seq"]) - int(beg_residue["new_seq"]) + 1
+        _write_pdb_field(chars, _PDB_HELIX_LENGTH, str(length))
+    return "".join(chars).rstrip()
+
+
+def _rewrite_pdb_sheet_line(line: str, residues_by_chain: dict[str, list[dict[str, str]]]) -> str | None:
+    mapped = _map_pdb_residue_range(line, _PDB_SHEET_BEG, _PDB_SHEET_END, residues_by_chain)
+    if mapped is None:
+        return None
+    beg_residue, end_residue = mapped
+    chars = list(line.ljust(_PDB_RECORD_WIDTH))
+    _apply_pdb_residue(chars, _PDB_SHEET_BEG, beg_residue)
+    _apply_pdb_residue(chars, _PDB_SHEET_END, end_residue)
+
+    # The strand registration names one residue in this strand and one in the
+    # previous strand. It is optional, so blank the pair out rather than drop
+    # the strand when either residue no longer exists.
+    registration = []
+    for field in (_PDB_SHEET_CUR, _PDB_SHEET_PREV):
+        chain_residues = residues_by_chain.get(line[field.chain] if len(line) > field.chain else "")
+        seq_value = _read_pdb_field(line, field.seq)
+        position = (
+            _locate_residue(chain_residues, seq_value, line[field.ins] if len(line) > field.ins else "")
+            if chain_residues and seq_value
+            else None
+        )
+        registration.append(None if position is None else chain_residues[position])
+    if all(residue is not None for residue in registration):
+        _apply_pdb_residue(chars, _PDB_SHEET_CUR, registration[0])
+        _apply_pdb_residue(chars, _PDB_SHEET_PREV, registration[1])
+    else:
+        for where in (_PDB_SHEET_CUR_ATOM, _PDB_SHEET_PREV_ATOM):
+            _write_pdb_field(chars, where, "")
+        for field in (_PDB_SHEET_CUR, _PDB_SHEET_PREV):
+            _write_pdb_field(chars, field.comp, "")
+            chars[field.chain] = " "
+            _write_pdb_field(chars, field.seq, "")
+            chars[field.ins] = " "
+    return "".join(chars).rstrip()
+
+
+def _renumber_pdb_sheet_strand_counts(lines: list[str]) -> list[str]:
+    strands_by_sheet: dict[str, int] = defaultdict(int)
+    for line in lines:
+        if line.startswith("SHEET"):
+            strands_by_sheet[_read_pdb_field(line, _PDB_SHEET_ID)] += 1
+    if not strands_by_sheet:
+        return lines
+
+    renumbered: list[str] = []
+    for line in lines:
+        if not line.startswith("SHEET"):
+            renumbered.append(line)
+            continue
+        chars = list(line.ljust(_PDB_RECORD_WIDTH))
+        _write_pdb_field(chars, _PDB_SHEET_STRAND_COUNT, str(strands_by_sheet[_read_pdb_field(line, _PDB_SHEET_ID)]))
+        renumbered.append("".join(chars).rstrip())
+    return renumbered

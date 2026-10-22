@@ -281,6 +281,45 @@ def _write_mmcif_with_unobserved_prefix_and_helix(path: Path) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def _pdb_range_fields(line: str) -> tuple[str, ...]:
+    """(beg comp, chain, seq, ins code, end comp, chain, seq, ins code)."""
+    if line.startswith("HELIX"):
+        spans = (slice(15, 18), 19, slice(21, 25), 25, slice(27, 30), 31, slice(33, 37), 37)
+    else:
+        spans = (slice(17, 20), 21, slice(22, 26), 26, slice(28, 31), 32, slice(33, 37), 37)
+    return tuple(line[where].strip() for where in spans)
+
+
+def _pdb_sheet_registration(line: str) -> tuple[str, ...]:
+    """(cur atom, comp, chain, seq, prev atom, comp, chain, seq)."""
+    spans = (slice(41, 45), slice(45, 48), 49, slice(50, 54), slice(56, 60), slice(60, 63), 64, slice(65, 69))
+    return tuple(line[where].strip() for where in spans)
+
+
+def _write_pdb_with_gap_and_insertion_codes(path: Path) -> None:
+    # Chain A is observed at 1, 2, 2A, 3, then nothing until 10, 11, 12.
+    residues = [(1, " ", "ALA"), (2, " ", "GLY"), (2, "A", "SER"), (3, " ", "THR"),
+                (10, " ", "VAL"), (11, " ", "LEU"), (12, " ", "ILE")]
+    atoms = []
+    for index, (seq, insertion_code, comp) in enumerate(residues, start=1):
+        for serial_offset, (name, element) in enumerate(((" N  ", "N"), (" CA ", "C"))):
+            serial = index * 2 - 1 + serial_offset
+            atoms.append(
+                f"ATOM  {serial:>5} {name:<4} {comp:>3} A{seq:>4}{insertion_code:1}   "
+                f"{0.0:>8.3f}{0.0:>8.3f}{0.0:>8.3f}{1.0:>6.2f}{20.0:>6.2f}          {element:>2}"
+            )
+    secondary_structure = [
+        "HELIX    1 AA1 GLY A    2  LEU A   11  1                                  10",
+        "HELIX    2 AA2 XXX A    5  XXX A    7  1                                   3",
+        "HELIX    3 AA3 XXX A    5  LEU A   11  1                                   7",
+        "HELIX    4 AA4 SER A    2A VAL A   10  1                                   4",
+        "SHEET    1 AB1 2 ALA A   1  THR A   3  0",
+        "SHEET    2 AB1 2 VAL A  10  ILE A  12 -1  N  VAL A  10   O  XXX A   7",
+        "SHEET    3 AB1 2 VAL A  10  ILE A  12 -1  N  LEU A  11   O  GLY A   2",
+    ]
+    path.write_text("\n".join(secondary_structure + atoms) + "\nEND\n")
+
+
 def _write_mmcif_with_sheet_records(path: Path) -> None:
     atom_lines = []
     atom_id = 0
@@ -1015,6 +1054,91 @@ class StructureEditTests(unittest.TestCase):
             self.assertEqual([row[0] for row in entity_poly_seq_rows[:3]], ["1", "1", "1"])
             self.assertEqual([row[2] for row in entity_poly_seq_rows[:3]], ["GLU", "GLY", "LEU"])
             self.assertEqual([row[3] for row in entity_poly_seq_rows[:3]], ["1", "2", "3"])
+
+    @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
+    def test_reset_auth_indexing_moves_pdb_helix_and_sheet_records(self) -> None:
+        # Mol* turns PDB HELIX/SHEET into struct_conf and resolves them on auth
+        # numbering, so renumbering the chain has to carry them along. 7xhf
+        # chain A is observed 6-42 then 52-138, so a flat offset is not enough.
+        with TemporaryDirectory() as tmp_dir:
+            result = reset_auth_indexing(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="7xhf",
+                structure_path=str(Path(__file__).resolve().parents[2] / "fixtures" / "examples" / "7xhf.pdb"),
+                output_dir=tmp_dir,
+            )
+
+            records = [
+                line.rstrip("\n")
+                for line in Path(result["output_path"]).read_text().splitlines()
+                if line.startswith(("HELIX", "SHEET"))
+            ]
+            by_id = {line[11:14].strip(): line for line in records if line.startswith("HELIX")}
+
+            self.assertEqual(len(records), 28)
+            # Before the gap: 7-26 shifts by 5.
+            self.assertEqual(
+                _pdb_range_fields(by_id["AA1"]), ("SER", "A", "2", "", "ALA", "A", "21", "")
+            )
+            # After the gap: 57-68 shifts by 14, not by 5.
+            self.assertEqual(
+                _pdb_range_fields(by_id["AA3"]), ("GLY", "A", "43", "", "GLN", "A", "54", "")
+            )
+
+            sheets = [line for line in records if line.startswith("SHEET")]
+            # Strand endpoints and the registration residues move together.
+            self.assertEqual(
+                _pdb_range_fields(sheets[1]), ("TYR", "A", "29", "", "VAL", "A", "36", "")
+            )
+            self.assertEqual(
+                _pdb_sheet_registration(sheets[1]), ("N", "TYR", "A", "35", "O", "VAL", "A", "41")
+            )
+
+    def test_reset_auth_indexing_pdb_secondary_structure_spans_gaps(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            source_path = Path(tmp_dir) / "gappy.pdb"
+            _write_pdb_with_gap_and_insertion_codes(source_path)
+            result = reset_auth_indexing(
+                project_id="project-1",
+                target_id="target-1",
+                target_name="gappy",
+                structure_path=str(source_path),
+                output_dir=tmp_dir,
+            )
+
+            lines = Path(result["output_path"]).read_text().splitlines()
+            helices = {line[11:14].strip(): line for line in lines if line.startswith("HELIX")}
+            sheets = [line for line in lines if line.startswith("SHEET")]
+
+            # 1, 2, 2A, 3, 10, 11, 12 renumber to 1..7.
+            self.assertEqual(
+                _pdb_range_fields(helices["AA1"]), ("GLY", "A", "2", "", "LEU", "A", "6", "")
+            )
+            # Entirely inside the gap, so there is nothing left to annotate.
+            self.assertNotIn("AA2", helices)
+            # Begins inside the gap: clamped to the first residue that is there.
+            self.assertEqual(
+                _pdb_range_fields(helices["AA3"]), ("VAL", "A", "5", "", "LEU", "A", "6", "")
+            )
+            # Insertion codes identify a residue and are carried over.
+            self.assertEqual(
+                _pdb_range_fields(helices["AA4"]), ("SER", "A", "3", "A", "VAL", "A", "5", "")
+            )
+            # The helix length field follows the clamped range.
+            self.assertEqual(helices["AA3"][71:76].strip(), "2")
+
+            # A registration pointing at a residue that is not there is blanked
+            # out rather than taking the whole strand with it.
+            self.assertEqual(
+                _pdb_range_fields(sheets[1]), ("VAL", "A", "5", "", "ILE", "A", "7", "")
+            )
+            self.assertEqual(sheets[1][41:].strip(), "")
+            self.assertEqual(
+                _pdb_sheet_registration(sheets[2]), ("N", "LEU", "A", "6", "O", "GLY", "A", "2")
+            )
+            # The strand count is recomputed from the records that survive.
+            self.assertEqual({line[14:16].strip() for line in sheets}, {"3"})
 
     @unittest.skipUnless(HAS_BIOPYTHON, "Biopython is required for mmCIF edit tests.")
     def test_cut_after_crop_keeps_local_confidence_on_the_right_residues(self) -> None:
