@@ -542,6 +542,7 @@ export function MolstarPanel(props: MolstarPanelProps) {
   const selectionModeCallbacksReadyRef = useRef(false);
   const pendingSelectionModeRef = useRef<boolean | null>(null);
   const lastAppliedSelectionRef = useRef<number[] | null>(null);
+  const lastPinSyncRef = useRef<{ residues: PredictionBundle['residues']; signature: string } | null>(null);
   const restoringViewerStateRef = useRef(false);
   const persistTimeoutRef = useRef<number | null>(null);
   const [viewerReadyRevision, setViewerReadyRevision] = useState(0);
@@ -872,6 +873,21 @@ export function MolstarPanel(props: MolstarPanelProps) {
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
+
+    // Compare by value: callers hand us a fresh [] / null on every render, and re-running
+    // this effect would clear the focus the user just set in the viewer.
+    const signature = JSON.stringify([
+      props.brushSelection,
+      props.pinnedCell,
+      props.pinnedResidues,
+      props.colorByPLDDTToggleStatus,
+      props.colorByPLDDTEnabled,
+      viewerReadyRevision,
+    ]);
+    if (lastPinSyncRef.current?.residues === props.bundle.residues && lastPinSyncRef.current.signature === signature) {
+      return;
+    }
+    lastPinSyncRef.current = { residues: props.bundle.residues, signature };
 
     const brushSelection = props.brushSelection;
     if (brushSelection) {

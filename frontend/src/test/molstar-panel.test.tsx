@@ -801,4 +801,51 @@ describe('MolstarPanel', () => {
       expect(lastCall?.data).toHaveLength(0);
     });
   });
+  it('keeps the viewer focus when a re-render hands it an equal but new pinned residue array', async () => {
+    const bundle = createToyBundle();
+
+    const renderPanel = (hoveredResidues: number[]) => (
+      <MolstarPanel
+        viewerConfiguration="target"
+        viewerStatePayload={null}
+        selectionDraft=""
+        bundle={bundle}
+        structureText="ATOM"
+        selectedResidues={null}
+        draftFocused={false}
+        selectionModeEnabled={false}
+        selectionSyncNonce={0}
+        focusedResidues={[1, 2]}
+        hoveredResidues={hoveredResidues}
+        pinnedResidues={[]}
+        pinnedCell={null}
+        brushSelection={null}
+        onHoverResidue={vi.fn()}
+        onClickResidue={vi.fn()}
+        onSelectionResiduesChange={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onFocusResiduesChange={vi.fn()}
+        onViewerStateChange={vi.fn()}
+        onNativeViewerStateDownloadReady={vi.fn()}
+        colorByPLDDTToggleStatus={true}
+        colorByPLDDTEnabled={true}
+      />
+    );
+
+    const { rerender } = render(renderPanel([]));
+
+    await waitFor(() => {
+      expect(viewerInstances.at(-1)?.plugin.managers.structure.focus.setFromLoci).toHaveBeenCalled();
+    });
+
+    const focusClearsBefore = viewerInstances.at(-1)?.plugin.managers.structure.focus.clear.mock.calls.length ?? 0;
+
+    rerender(renderPanel([0]));
+    rerender(renderPanel([2]));
+
+    await waitFor(() => {
+      expect(viewerInstances.at(-1)?.visual.highlight).toHaveBeenCalled();
+    });
+    expect(viewerInstances.at(-1)?.plugin.managers.structure.focus.clear.mock.calls.length ?? 0).toBe(focusClearsBefore);
+  });
 });
