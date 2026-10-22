@@ -23,13 +23,14 @@ export const PAE_SELECTION_COLORS = {
 
 export const PAE_PAIR_SELECTION_COLOR = '#ff6699';
 
-// Edges and guides are Mol*'s own selection green, so the panel reads as the same selection as the
-// 3D and sequence viewers. The fills share that hue (~113 deg) at about half the saturation, which
-// lets them carry enough alpha to show against the green pAE colormap without going neon: the edge
-// carries the identity, the fill is only a wash. Alpha marks the hierarchy, from the diagonal
-// squares down through the inter-run blocks to the guides between them.
+// The selected residues are marked by a bright line along the matrix diagonal, in Mol*'s own
+// selection green, so the panel reads as the same selection as the 3D and sequence viewers.
+// Everything else is support: the blocks are washes showing which regions the selection spans,
+// sharing that hue (~113 deg) at about half the saturation so they can carry enough alpha to
+// show against the green pAE colormap without competing with the line.
 export const PAE_MOLSTAR_SELECTION_STYLE = {
-  diagonal: { fill: 'rgba(165, 222, 158, 0.45)', stroke: 'rgba(51, 255, 25, 0.9)', lineWidth: 1.5, dash: [] },
+  diagonalLine: { stroke: 'rgb(51, 255, 25)', lineWidth: 2.75 },
+  diagonal: { fill: 'rgba(165, 222, 158, 0.45)' },
   crossBlock: { fill: 'rgba(165, 222, 158, 0.34)', stroke: 'rgba(51, 255, 25, 0.42)', lineWidth: 1, dash: [5, 4] },
   guide: { stroke: 'rgba(51, 255, 25, 0.45)', lineWidth: 1, dash: [4, 4] },
 } as const;

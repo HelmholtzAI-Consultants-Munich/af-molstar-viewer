@@ -158,11 +158,12 @@ function drawDiagonalSegment(
   cellWidth: number,
   cellHeight: number,
   color: string,
+  lineWidth = 2.25,
 ) {
   if (end < start) return;
   if (typeof context.save === 'function') context.save();
   context.strokeStyle = color;
-  context.lineWidth = 2.25;
+  context.lineWidth = lineWidth;
   // Corner to corner: cell i's own diagonal runs from (i, i) to (i + 1, i + 1), so a run of
   // cells covers start -> end + 1. Butt caps let neighbouring runs of different colours meet
   // exactly at the shared corner rather than overlapping by half a stroke.
@@ -313,16 +314,18 @@ function drawMolstarSelection(
   });
 
   const paint = (
-    style: typeof PAE_MOLSTAR_SELECTION_STYLE.diagonal | typeof PAE_MOLSTAR_SELECTION_STYLE.crossBlock,
+    style: { fill: string; stroke?: string; lineWidth?: number; dash?: readonly number[] },
     rect: { x: number; y: number; width: number; height: number },
   ) => {
     if (typeof context.save === 'function') context.save();
     context.fillStyle = style.fill;
     context.fillRect(rect.x, rect.y, rect.width, rect.height);
-    context.strokeStyle = style.stroke;
-    context.lineWidth = style.lineWidth;
-    if (typeof context.setLineDash === 'function') context.setLineDash([...style.dash]);
-    context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    if (style.stroke) {
+      context.strokeStyle = style.stroke;
+      context.lineWidth = style.lineWidth ?? 1;
+      if (typeof context.setLineDash === 'function') context.setLineDash([...(style.dash ?? [])]);
+      context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    }
     if (typeof context.restore === 'function') context.restore();
   };
 
@@ -340,6 +343,20 @@ function drawMolstarSelection(
 
   for (const run of runs) {
     paint(PAE_MOLSTAR_SELECTION_STYLE.diagonal, rectFor(run, run));
+  }
+
+  // The selection itself: a bright line along the matrix diagonal over the selected residues,
+  // drawn last so nothing washes over it.
+  for (const run of runs) {
+    drawDiagonalSegment(
+      context,
+      run.start,
+      run.end,
+      cellWidth,
+      cellHeight,
+      PAE_MOLSTAR_SELECTION_STYLE.diagonalLine.stroke,
+      PAE_MOLSTAR_SELECTION_STYLE.diagonalLine.lineWidth,
+    );
   }
 }
 

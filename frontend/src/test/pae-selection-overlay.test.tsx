@@ -17,6 +17,14 @@ interface StrokedRect {
   height: number;
 }
 
+interface FilledRect {
+  fillStyle: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface StrokedSegment {
   strokeStyle: string;
   from: { x: number; y: number };
@@ -25,7 +33,7 @@ interface StrokedSegment {
 
 // The overlay effect bails out when the canvas has no layout size, which jsdom never gives it,
 // so the canvas is stubbed with a real size and a context that records what gets stroked.
-function stubCanvas(strokedRects: StrokedRect[], strokedSegments: StrokedSegment[]) {
+function stubCanvas(strokedRects: StrokedRect[], strokedSegments: StrokedSegment[], filledRects: FilledRect[]) {
   let penPosition = { x: 0, y: 0 };
   const context = {
     strokeStyle: '',
@@ -37,7 +45,9 @@ function stubCanvas(strokedRects: StrokedRect[], strokedSegments: StrokedSegment
     createLinearGradient: () => ({ addColorStop: () => undefined }),
     scale: () => undefined,
     clearRect: () => undefined,
-    fillRect: () => undefined,
+    fillRect: (x: number, y: number, width: number, height: number) => {
+      filledRects.push({ fillStyle: context.fillStyle, x, y, width, height });
+    },
     strokeRect: (x: number, y: number, width: number, height: number) => {
       strokedRects.push({ strokeStyle: context.strokeStyle, x, y, width, height });
     },
@@ -89,19 +99,23 @@ function renderHeatmap(selectedResidues: number[], overrides: Record<string, unk
 describe('pAE Mol* selection overlay', () => {
   let strokedRects: StrokedRect[];
   let strokedSegments: StrokedSegment[];
+  let filledRects: FilledRect[];
   const originalGetContext = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'getContext')!;
 
   beforeEach(() => {
     strokedRects = [];
     strokedSegments = [];
-    stubCanvas(strokedRects, strokedSegments);
+    filledRects = [];
+    stubCanvas(strokedRects, strokedSegments, filledRects);
   });
 
   afterEach(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', originalGetContext);
   });
 
-  const diagonals = () => strokedRects.filter((rect) => rect.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.diagonal.stroke);
+  const diagonals = () => filledRects.filter((rect) => rect.fillStyle === PAE_MOLSTAR_SELECTION_STYLE.diagonal.fill);
+  const diagonalLines = () =>
+    strokedSegments.filter((segment) => segment.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.diagonalLine.stroke);
   const crossBlocks = () => strokedRects.filter((rect) => rect.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.crossBlock.stroke);
   const guides = () => strokedSegments.filter((segment) => segment.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.guide.stroke);
 
@@ -124,6 +138,7 @@ describe('pAE Mol* selection overlay', () => {
 
     expect(diagonals()).toEqual([]);
     expect(crossBlocks()).toEqual([]);
+    expect(diagonalLines()).toEqual([]);
   });
 
   it('draws one square on the diagonal for a single stretch, with no blocks or guides', () => {
@@ -132,6 +147,10 @@ describe('pAE Mol* selection overlay', () => {
     expect(diagonals()).toMatchObject([{ x: 1 * CELL, y: 1 * CELL, width: 3 * CELL, height: 3 * CELL }]);
     expect(crossBlocks()).toEqual([]);
     expect(guides()).toEqual([]);
+    // The selection itself: a bright line down the square's own diagonal, corner to corner.
+    expect(diagonalLines()).toMatchObject([
+      { from: { x: 1 * CELL, y: 1 * CELL }, to: { x: 4 * CELL, y: 4 * CELL } },
+    ]);
   });
 
   it('adds the off-diagonal blocks between two disjoint stretches', () => {
@@ -144,6 +163,10 @@ describe('pAE Mol* selection overlay', () => {
     expect(crossBlocks()).toMatchObject([
       { x: 6 * CELL, y: 1 * CELL, width: 2 * CELL, height: 3 * CELL },
       { x: 1 * CELL, y: 6 * CELL, width: 3 * CELL, height: 2 * CELL },
+    ]);
+    expect(diagonalLines()).toMatchObject([
+      { from: { x: 1 * CELL, y: 1 * CELL }, to: { x: 4 * CELL, y: 4 * CELL } },
+      { from: { x: 6 * CELL, y: 6 * CELL }, to: { x: 8 * CELL, y: 8 * CELL } },
     ]);
   });
 
