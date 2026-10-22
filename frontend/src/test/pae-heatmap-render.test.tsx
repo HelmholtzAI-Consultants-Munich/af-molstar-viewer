@@ -145,6 +145,23 @@ describe('pAE matrix rendering', () => {
     expect(recorder.blits[0].smoothing).toBe(true);
   });
 
+  it('counts device pixels, not CSS pixels, when deciding to smooth', () => {
+    const original = window.devicePixelRatio;
+    Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+    try {
+      // 300 cells over 200 CSS px is 400 device px: still magnifying, so no blur yet.
+      renderHeatmap(300);
+      expect(recorder.blits[0].smoothing).toBe(false);
+
+      cleanup();
+      recorder.blits.length = 0;
+      renderHeatmap(600);
+      expect(recorder.blits[0].smoothing).toBe(true);
+    } finally {
+      Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true });
+    }
+  });
+
   const wrap = () => document.querySelector('.heatmap-canvas-wrap') as HTMLElement;
   const canvas = () => document.querySelector('.heatmap-canvas') as HTMLCanvasElement;
   const lastBlit = () => recorder.blits[recorder.blits.length - 1];

@@ -644,7 +644,9 @@ export function PaeHeatmap(props: PaeHeatmapProps) {
     if (bitmap && typeof context.drawImage === 'function') {
       // Smooth only when shrinking. Magnified cells want hard edges, but with more cells
       // than device pixels nearest-neighbour would drop whole rows and columns.
-      context.imageSmoothingEnabled = width / view.span < 1;
+      // Measured in device pixels, not CSS pixels: the destination is drawn under the
+      // devicePixelRatio transform, so on a 2x display downsampling starts twice as late.
+      context.imageSmoothingEnabled = (width * window.devicePixelRatio) / view.span < 1;
       context.drawImage(bitmap, view.x0, view.y0, view.span, view.span, 0, 0, width, height);
       return;
     }
