@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PaeHeatmap } from '../components/PaeHeatmap';
-import { PAE_MOLSTAR_SELECTION_STYLE } from '../lib/constants';
+import { PAE_MOLSTAR_SELECTION_STYLE, PAE_SELECTION_COLORS } from '../lib/constants';
 import { SYNC_PAE_INTERACTION_PERFORMANCE } from '../lib/performance';
 
 const SIZE = 10;
@@ -59,7 +59,7 @@ function stubCanvas(strokedRects: StrokedRect[], strokedSegments: StrokedSegment
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', { value: CANVAS_SIZE, configurable: true });
 }
 
-function renderHeatmap(selectedResidues: number[]) {
+function renderHeatmap(selectedResidues: number[], overrides: Record<string, unknown> = {}) {
   const matrix = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 5));
   return render(
     <PaeHeatmap
@@ -81,6 +81,7 @@ function renderHeatmap(selectedResidues: number[]) {
       onTogglePairSelection={() => undefined}
       onClearPairSelection={() => undefined}
       onImportPaeData={() => undefined}
+      {...overrides}
     />,
   );
 }
@@ -103,6 +104,20 @@ describe('pAE Mol* selection overlay', () => {
   const diagonals = () => strokedRects.filter((rect) => rect.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.diagonal.stroke);
   const crossBlocks = () => strokedRects.filter((rect) => rect.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.crossBlock.stroke);
   const guides = () => strokedSegments.filter((segment) => segment.strokeStyle === PAE_MOLSTAR_SELECTION_STYLE.guide.stroke);
+
+  it('runs the brush diagonal markers corner to corner across their cells', () => {
+    // x covers cells 1-4 and y covers 6-8, so the diagonal carries two runs of different kinds.
+    renderHeatmap([], { brushSelection: { xStart: 1, xEnd: 4, yStart: 6, yEnd: 8 } });
+
+    const diagonal = (stroke: string) => strokedSegments.filter((segment) => segment.strokeStyle === stroke);
+
+    expect(diagonal(PAE_SELECTION_COLORS.yRange)).toMatchObject([
+      { from: { x: 1 * CELL, y: 1 * CELL }, to: { x: 5 * CELL, y: 5 * CELL } },
+    ]);
+    expect(diagonal(PAE_SELECTION_COLORS.overlap)).toMatchObject([
+      { from: { x: 6 * CELL, y: 6 * CELL }, to: { x: 9 * CELL, y: 9 * CELL } },
+    ]);
+  });
 
   it('draws nothing when no residues are selected', () => {
     renderHeatmap([]);

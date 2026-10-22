@@ -163,10 +163,13 @@ function drawDiagonalSegment(
   if (typeof context.save === 'function') context.save();
   context.strokeStyle = color;
   context.lineWidth = 2.25;
-  context.lineCap = 'round';
+  // Corner to corner: cell i's own diagonal runs from (i, i) to (i + 1, i + 1), so a run of
+  // cells covers start -> end + 1. Butt caps let neighbouring runs of different colours meet
+  // exactly at the shared corner rather than overlapping by half a stroke.
+  context.lineCap = 'butt';
   context.beginPath();
-  context.moveTo((start + 0.5) * cellWidth, (start + 0.5) * cellHeight);
-  context.lineTo((end + 0.5) * cellWidth, (end + 0.5) * cellHeight);
+  context.moveTo(start * cellWidth, start * cellHeight);
+  context.lineTo((end + 1) * cellWidth, (end + 1) * cellHeight);
   context.stroke();
   if (typeof context.restore === 'function') context.restore();
 }
